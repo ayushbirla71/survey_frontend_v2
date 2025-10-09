@@ -1,6 +1,5 @@
 // API configuration and base functions
-const API_BASE_URL = "https://1ad5f39a-7c6d-4d67-a9cc-7923fd07b12a-00-owc4pivv8zuc.spock.replit.dev"
-// const API_BASE_URL = "http://localhost:5000"
+const API_BASE_URL = "http://localhost:5000"
 
 // Get JWT token from localStorage or your auth system
 const getAuthToken = (): string | null => {
@@ -10,24 +9,107 @@ const getAuthToken = (): string | null => {
   return null
 }
 
-// API response types matching backend documentation
+// Updated API response types matching new backend documentation
+// Note: New API returns data directly or error message, no 'success' wrapper
 export interface ApiResponse<T> {
-  success: boolean
   data?: T
   message?: string
   error?: string
-  code?: string
 }
 
 export interface PaginatedResponse<T> {
-  success: boolean
   data: T[]
   pagination: {
     page: number
     limit: number
     total: number
     totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
   }
+}
+
+// User model from new API
+export interface User {
+  id: string
+  name: string
+  email: string
+  mobile_no?: string
+  role: "USER" | "SYSTEM_ADMIN"
+  theme: "LIGHT" | "DARK"
+  created_at: string
+  updated_at: string
+}
+
+// Survey model from new API
+export interface Survey {
+  id: string
+  title: string
+  description?: string
+  no_of_questions: number
+  userId: string
+  survey_send_by: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+  flow_type: "STATIC" | "INTERACTIVE" | "GAME"
+  settings: {
+    isAnonymous?: boolean
+    showProgressBar?: boolean
+    shuffleQuestions?: boolean
+  }
+  status: "DRAFT" | "SCHEDULED" | "PUBLISHED"
+  scheduled_date?: string
+  scheduled_type: "IMMEDIATE" | "SCHEDULED"
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Question model from new API
+export interface Question {
+  id: string
+  surveyId: string
+  question_type: "TEXT" | "MCQ" | "RATING" | "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "MATRIX"
+  question_text: string
+  options: any[]
+  media?: Array<{
+    type: string
+    url: string
+    thumbnail_url?: string
+  }>
+  order_index: number
+  required: boolean
+  categoryId?: string
+  subCategoryId?: string
+  created_at: string
+  updated_at: string
+}
+
+// Response model from new API
+export interface SurveyResponse {
+  id: string
+  surveyId: string
+  user_metadata?: any
+  created_at: string
+  response_answers: Array<{
+    id: string
+    questionId: string
+    answer_type: string
+    answer_value?: string
+    media?: any[]
+    submitted_at: string
+    created_at: string
+  }>
+}
+
+// ShareToken model from new API
+export interface ShareToken {
+  id: string
+  surveyId: string
+  recipient_email?: string
+  recipient_mobile?: string
+  token_hash: string
+  expires_at?: string
+  used: boolean
+  created_at: string
 }
 
 // Base API function with error handling and authentication
@@ -49,21 +131,104 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
       ...options,
     })
 
-    const data = await response.json()
-
     if (!response.ok) {
-      throw new Error(data.error || data.message || "API request failed")
+      // Handle error responses
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        const errorData = await response.json()
+        return { error: errorData.message || "API request failed" }
+      } else {
+        return { error: `HTTP ${response.status}: ${response.statusText}` }
+      }
     }
 
-    return data
+    // Handle successful responses
+    if (response.headers.get("content-type")?.includes("application/json")) {
+      const data = await response.json()
+      return { data }
+    } else {
+      // For non-JSON responses (like file downloads)
+      return { data: response as any }
+    }
   } catch (error) {
     console.error("API Error:", error)
     return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-      code: "NETWORK_ERROR",
+      error: error instanceof Error ? error.message : "Network error occurred",
     }
   }
+}
+
+// Utility function for backward compatibility with existing code
+export async function apiWithFallback<T>(
+  apiCall: () => Promise<ApiResponse<T>>,
+  fallbackData: T,
+): Promise<ApiResponse<T>> {
+  try {
+    const result = await apiCall()
+    if (result.data !== undefined) {
+      return result
+    } else {
+      console.warn("API call failed, using demo data:", result.error)
+      return { data: fallbackData }
+    }
+  } catch (error) {
+    console.warn("API call failed, using demo data:", error)
+    return { data: fallbackData }
+  }
+}
+
+// Authentication APIs
+export const authApi = {
+  // POST /api/auth/signup
+  signup: async (userData: {
+    name: string
+    email: string
+    mobile_no?: string
+    password: string
+    role?: "USER" | "SYSTEM_ADMIN"
+    theme?: "LIGHT" | "DARK"
+  }): Promise<ApiResponse<{ user: User; token: string }>> => {
+    return apiRequest("/api/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    })
+  },
+
+  // POST /api/auth/login
+  login: async (credentials: {
+    email: string
+    password: string
+  }): Promise<ApiResponse<{ user: User; token: string }>> => {
+    return apiRequest("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    })
+  },
+
+  // Store JWT token
+  setAuthToken: (token: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("auth_token", token)
+    }
+  },
+
+  // Remove JWT token
+  removeAuthToken: () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("auth_token")
+    }
+  },
+
+  // Check if user is authenticated
+  isAuthenticated: (): boolean => {
+    return getAuthToken() !== null
+  },
+
+  // Get current user info from token (you might want to decode JWT or call an endpoint)
+  getCurrentUser: (): User | null => {
+    // This would typically decode the JWT token or call a /me endpoint
+    // For now, return null - implement based on your auth strategy
+    return null
+  },
 }
 
 // Public Survey APIs (No Authentication Required)
@@ -278,105 +443,235 @@ export const dashboardApi = {
   },
 }
 
-// Survey APIs
+// Survey Management APIs
 export const surveyApi = {
   // GET /api/surveys
-  getAllSurveys: async (params?: {
-    page?: number
-    limit?: number
-    search?: string
-    status?: string
-    category?: string
-  }): Promise<
-    PaginatedResponse<{
-      id: string
-      title: string
-      category: string
-      status: "active" | "completed" | "draft"
-      responses: number
-      target: number
-      completionRate: number
-      createdAt: string
-      updatedAt: string
-    }>
-  > => {
-    const queryParams = new URLSearchParams()
-    if (params?.page) queryParams.append("page", params.page.toString())
-    if (params?.limit) queryParams.append("limit", params.limit.toString())
-    if (params?.search) queryParams.append("search", params.search)
-    if (params?.status) queryParams.append("status", params.status)
-    if (params?.category) queryParams.append("category", params.category)
-
-    const endpoint = `/api/surveys${queryParams.toString() ? `?${queryParams.toString()}` : ""}`
-    return apiRequest(endpoint)
+  getAllSurveys: async (): Promise<ApiResponse<Survey[]>> => {
+    return apiRequest("/api/surveys")
   },
 
-  // GET /api/surveys/:id
-  getSurvey: async (
-    id: string,
-  ): Promise<
-    ApiResponse<{
-      id: string
-      title: string
-      description: string
-      category: string
-      status: "active" | "completed" | "draft"
-      questions: Array<{
-        id: string
-        type: "single_choice" | "checkbox" | "text" | "rating"
-        question: string
-        options?: string[]
-        required: boolean
-      }>
-      audience: {
-        ageGroups: string[]
-        genders: string[]
-        locations: string[]
-        industries: string[]
-        targetCount: number
-        dataSource: string
-      }
-      responses: number
-      target: number
-      completionRate: number
-      createdAt: string
-      updatedAt: string
-    }>
-  > => {
-    return apiRequest(`/api/surveys/${id}`)
+  // GET /api/surveys/{surveyId}
+  getSurvey: async (surveyId: string): Promise<ApiResponse<Survey>> => {
+    return apiRequest(`/api/surveys/${surveyId}`)
   },
 
   // POST /api/surveys
   createSurvey: async (surveyData: {
     title: string
-    description: string
-    category: string
-    questions: Array<{
-      type: "single_choice" | "checkbox" | "text" | "rating"
-      question: string
-      options?: string[]
-      required: boolean
-    }>
-    audience: {
-      ageGroups: string[]
-      genders: string[]
-      locations: string[]
-      industries: string[]
-      targetCount: number
-      dataSource: string
+    description?: string
+    flow_type?: "STATIC" | "INTERACTIVE" | "GAME"
+    survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+    settings?: {
+      isAnonymous?: boolean
+      showProgressBar?: boolean
+      shuffleQuestions?: boolean
     }
-  }): Promise<
-    ApiResponse<{
-      id: string
-      title: string
-      status: string
-      createdAt: string
-    }>
-  > => {
+    status?: "DRAFT" | "SCHEDULED" | "PUBLISHED"
+    scheduled_date?: string
+    scheduled_type?: "IMMEDIATE" | "SCHEDULED"
+  }): Promise<ApiResponse<Survey>> => {
     return apiRequest("/api/surveys", {
       method: "POST",
       body: JSON.stringify(surveyData),
     })
+  },
+
+  // PUT /api/surveys/{surveyId}
+  updateSurvey: async (
+    surveyId: string,
+    surveyData: {
+      title?: string
+      description?: string
+      flow_type?: "STATIC" | "INTERACTIVE" | "GAME"
+      survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+      settings?: {
+        isAnonymous?: boolean
+        showProgressBar?: boolean
+        shuffleQuestions?: boolean
+      }
+      status?: "DRAFT" | "SCHEDULED" | "PUBLISHED"
+      scheduled_date?: string
+      scheduled_type?: "IMMEDIATE" | "SCHEDULED"
+    }
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/surveys/${surveyId}`, {
+      method: "PUT",
+      body: JSON.stringify(surveyData),
+    })
+  },
+
+  // DELETE /api/surveys/{surveyId}
+  deleteSurvey: async (surveyId: string): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/surveys/${surveyId}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+// Question Management APIs
+export const questionApi = {
+  // POST /api/questions
+  createQuestion: async (questionData: {
+    surveyId: string
+    question_type: "TEXT" | "MCQ" | "RATING" | "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "MATRIX"
+    question_text: string
+    options: any[]
+    media?: Array<{
+      type: string
+      url: string
+      thumbnail_url?: string
+    }>
+    categoryId: string
+    subCategoryId: string
+    order_index?: number
+    required?: boolean
+  }): Promise<ApiResponse<Question>> => {
+    return apiRequest("/api/questions", {
+      method: "POST",
+      body: JSON.stringify(questionData),
+    })
+  },
+
+  // GET /api/questions/survey/{surveyId}
+  getQuestionsBySurvey: async (surveyId: string): Promise<ApiResponse<Question[]>> => {
+    return apiRequest(`/api/questions/survey/${surveyId}`)
+  },
+
+  // PUT /api/questions/{questionId}
+  updateQuestion: async (
+    questionId: string,
+    questionData: {
+      question_text?: string
+      options?: any[]
+      media?: Array<{
+        type: string
+        url: string
+        thumbnail_url?: string
+      }>
+      categoryId?: string
+      subCategoryId?: string
+      order_index?: number
+      required?: boolean
+    }
+  ): Promise<ApiResponse<Question>> => {
+    return apiRequest(`/api/questions/${questionId}`, {
+      method: "PUT",
+      body: JSON.stringify(questionData),
+    })
+  },
+
+  // DELETE /api/questions/{questionId}
+  deleteQuestion: async (questionId: string): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/questions/${questionId}`, {
+      method: "DELETE",
+    })
+  },
+}
+
+// Response Management APIs
+export const responseApi = {
+  // POST /api/responses
+  submitResponse: async (responseData: {
+    surveyId: string
+    user_metadata?: any
+    answers: Array<{
+      questionId: string
+      answer_type: string
+      answer_value?: string
+      media?: any[]
+    }>
+  }): Promise<ApiResponse<SurveyResponse>> => {
+    return apiRequest("/api/responses", {
+      method: "POST",
+      body: JSON.stringify(responseData),
+    })
+  },
+
+  // POST /api/responses/submit-token
+  submitResponseWithToken: async (responseData: {
+    token: string
+    user_metadata?: any
+    answers: Array<{
+      questionId: string
+      answer_type: string
+      answer_value?: string
+      media?: any[]
+    }>
+  }): Promise<ApiResponse<SurveyResponse>> => {
+    return apiRequest("/api/responses/submit-token", {
+      method: "POST",
+      body: JSON.stringify(responseData),
+    })
+  },
+
+  // GET /api/responses/survey/{surveyId}
+  getResponsesBySurvey: async (surveyId: string): Promise<ApiResponse<SurveyResponse[]>> => {
+    return apiRequest(`/api/responses/survey/${surveyId}`)
+  },
+}
+
+// Sharing APIs
+export const shareApi = {
+  // POST /api/share
+  shareSurvey: async (shareData: {
+    surveyId: string
+    type: "PUBLIC" | "PERSONALIZED"
+    recipients?: Array<{
+      email?: string
+      mobile_no?: string
+    }>
+  }): Promise<ApiResponse<{ shareLink?: string; tokens?: ShareToken[] }>> => {
+    return apiRequest("/api/share", {
+      method: "POST",
+      body: JSON.stringify(shareData),
+    })
+  },
+
+  // GET /api/share/validate/{token}
+  validateShareToken: async (token: string): Promise<ApiResponse<Survey>> => {
+    return apiRequest(`/api/share/validate/${token}`)
+  },
+}
+
+// Analytics APIs
+export const analyticsApi = {
+  // GET /api/analytics/survey/{surveyId}
+  getSurveyAnalytics: async (surveyId: string): Promise<ApiResponse<{
+    surveyId: string
+    totalResponses: number
+    totalQuestions: number
+    avgCompletionRate: number
+  }>> => {
+    return apiRequest(`/api/analytics/survey/${surveyId}`)
+  },
+
+  // GET /api/analytics/survey/{surveyId}/questions/{questionId?}
+  getQuestionAnalytics: async (
+    surveyId: string,
+    questionId?: string
+  ): Promise<ApiResponse<{
+    surveyId: string
+    analytics: Array<{
+      questionId: string
+      question_text: string
+      totalAnswers: number
+      answerDistribution: any
+    }>
+  }>> => {
+    const endpoint = questionId
+      ? `/api/analytics/survey/${surveyId}/questions/${questionId}`
+      : `/api/analytics/survey/${surveyId}/questions`
+    return apiRequest(endpoint)
+  },
+
+  // GET /api/analytics/survey/{surveyId}/audience
+  getAudienceAnalytics: async (surveyId: string): Promise<ApiResponse<{
+    surveyId: string
+    totalAudience: number
+    respondedAudience: number
+    responseRate: number
+  }>> => {
+    return apiRequest(`/api/analytics/survey/${surveyId}/audience`)
   },
 
 
@@ -867,43 +1162,12 @@ export const demoData = {
   },
 }
 
-// Utility function to use demo data when API fails
-export async function apiWithFallback<T>(
-  apiCall: () => Promise<ApiResponse<T>>,
-  fallbackData: T,
-): Promise<ApiResponse<T>> {
-  try {
-    const result = await apiCall()
-    if (result.success) {
-      return result
-    } else {
-      console.warn("API call failed, using demo data:", result.error)
-      return { success: true, data: fallbackData }
-    }
-  } catch (error) {
-    console.warn("API call failed, using demo data:", error)
-    return { success: true, data: fallbackData }
-  }
-}
-
-// Authentication helper functions
-export const authApi = {
-  // Store JWT token
-  setAuthToken: (token: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("auth_token", token)
-    }
-  },
-
-  // Remove JWT token
-  removeAuthToken: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token")
-    }
-  },
-
-  // Check if user is authenticated
-  isAuthenticated: (): boolean => {
-    return getAuthToken() !== null
-  },
+// Missing APIs that need backend implementation
+export const missingApis = {
+  // These APIs are referenced in the frontend but not yet implemented in the new backend
+  categories: "GET /api/categories - needs implementation",
+  dashboard: "Dashboard APIs - need implementation",
+  audience: "Audience management APIs - need implementation",
+  questionGeneration: "AI question generation - needs implementation",
+  surveyResults: "Survey results and analytics - partially covered by analytics APIs",
 }

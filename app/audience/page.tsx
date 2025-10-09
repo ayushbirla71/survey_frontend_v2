@@ -1,29 +1,50 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Users, MapPin, Briefcase, Download, Plus, RefreshCw } from "lucide-react"
-import { BarChart, PieChart } from "@/components/ui/chart"
-import ImportDialog from "@/components/import-dialog"
-import { audienceApi, apiWithFallback } from "@/lib/api"
-import { usePaginatedApi, useApi, useMutation } from "@/hooks/useApi"
-import { audienceData, audienceStats } from "@/lib/assist-data"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Search,
+  Users,
+  MapPin,
+  Briefcase,
+  Download,
+  Plus,
+  RefreshCw,
+} from "lucide-react";
+import { BarChart, PieChart } from "@/components/ui/chart";
+import ImportDialog from "@/components/import-dialog";
+import { audienceApi, apiWithFallback } from "@/lib/api";
+import { usePaginatedApi, useApi, useMutation } from "@/hooks/useApi";
+import { audienceData, audienceStats } from "@/lib/assist-data";
 
 export default function AudiencePage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [ageFilter, setAgeFilter] = useState("all")
-  const [genderFilter, setGenderFilter] = useState("all")
-  const [countryFilter, setCountryFilter] = useState("all")
-  const [industryFilter, setIndustryFilter] = useState("all")
-  const [selectedAudience, setSelectedAudience] = useState<string[]>([])
-  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [ageFilter, setAgeFilter] = useState("all");
+  const [genderFilter, setGenderFilter] = useState("all");
+  const [countryFilter, setCountryFilter] = useState("all");
+  const [industryFilter, setIndustryFilter] = useState("all");
+  const [selectedAudience, setSelectedAudience] = useState<string[]>([]);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // API calls
   const {
@@ -41,20 +62,30 @@ export default function AudiencePage() {
     gender: genderFilter === "all" ? undefined : genderFilter,
     country: countryFilter === "all" ? undefined : countryFilter,
     industry: industryFilter === "all" ? undefined : industryFilter,
-  })
+  });
 
   const {
     data: stats,
     loading: statsLoading,
     error: statsError,
     refetch: refetchStats,
-  } = useApi(() => apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats))
+  } = useApi(() =>
+    apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats)
+  );
 
-  const { data: segments, loading: segmentsLoading, refetch: refetchSegments } = useApi(() => audienceApi.getSegments())
+  const {
+    data: segments,
+    loading: segmentsLoading,
+    refetch: refetchSegments,
+  } = useApi(() => audienceApi.getSegments());
 
   // Mutations
-  const { mutate: importAudience, loading: importLoading } = useMutation(audienceApi.importAudience)
-  const { mutate: createSegment, loading: createSegmentLoading } = useMutation(audienceApi.createSegment)
+  const { mutate: importAudience, loading: importLoading } = useMutation(
+    audienceApi.importAudience
+  );
+  const { mutate: createSegment, loading: createSegmentLoading } = useMutation(
+    audienceApi.createSegment
+  );
 
   // Fallback to local data if API fails
   const displayAudience =
@@ -65,18 +96,28 @@ export default function AudiencePage() {
           person.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           person.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           person.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          person.city.toLowerCase().includes(searchQuery.toLowerCase())
+          person.city.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesAge = ageFilter === "all" || person.ageGroup === ageFilter
-        const matchesGender = genderFilter === "all" || person.gender === genderFilter
-        const matchesCountry = countryFilter === "all" || person.country === countryFilter
-        const matchesIndustry = industryFilter === "all" || person.industry === industryFilter
+        const matchesAge = ageFilter === "all" || person.ageGroup === ageFilter;
+        const matchesGender =
+          genderFilter === "all" || person.gender === genderFilter;
+        const matchesCountry =
+          countryFilter === "all" || person.country === countryFilter;
+        const matchesIndustry =
+          industryFilter === "all" || person.industry === industryFilter;
 
-        return matchesSearch && matchesAge && matchesGender && matchesCountry && matchesIndustry && person.isActive
+        return (
+          matchesSearch &&
+          matchesAge &&
+          matchesGender &&
+          matchesCountry &&
+          matchesIndustry &&
+          person.isActive
+        );
       })
-      .slice(0, 50)
+      .slice(0, 50);
 
-  const displayStats = stats || audienceStats
+  const displayStats = stats || audienceStats;
   const displaySegments = segments || [
     {
       id: "seg-1",
@@ -92,7 +133,7 @@ export default function AudiencePage() {
       memberCount: 1923,
       createdAt: "2023-06-05",
     },
-  ]
+  ];
 
   // Update API params when filters change
   useState(() => {
@@ -104,60 +145,66 @@ export default function AudiencePage() {
         gender: genderFilter === "all" ? undefined : genderFilter,
         country: countryFilter === "all" ? undefined : countryFilter,
         industry: industryFilter === "all" ? undefined : industryFilter,
-      })
-    }, 500)
+      });
+    }, 500);
 
-    return () => clearTimeout(timeoutId)
-  }, [searchQuery, ageFilter, genderFilter, countryFilter, industryFilter])
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, ageFilter, genderFilter, countryFilter, industryFilter]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedAudience(displayAudience.map((person) => person.id))
+      setSelectedAudience(displayAudience.map((person) => person.id));
     } else {
-      setSelectedAudience([])
+      setSelectedAudience([]);
     }
-  }
+  };
 
   const handleSelectPerson = (personId: string, checked: boolean) => {
     if (checked) {
-      setSelectedAudience([...selectedAudience, personId])
+      setSelectedAudience([...selectedAudience, personId]);
     } else {
-      setSelectedAudience(selectedAudience.filter((id) => id !== personId))
+      setSelectedAudience(selectedAudience.filter((id) => id !== personId));
     }
-  }
+  };
 
   // Chart data for demographics
-  const ageChartData = Object.entries(displayStats.byAgeGroup || {}).map(([age, count]) => ({
-    ageGroup: age,
-    count: count as number,
-  }))
+  const ageChartData = Object.entries(displayStats.byAgeGroup || {}).map(
+    ([age, count]) => ({
+      ageGroup: age,
+      count: count as number,
+    })
+  );
 
-  const genderChartData = Object.entries(displayStats.byGender || {}).map(([gender, count]) => ({
-    gender,
-    count: count as number,
-  }))
+  const genderChartData = Object.entries(displayStats.byGender || {}).map(
+    ([gender, count]) => ({
+      gender,
+      count: count as number,
+    })
+  );
 
-  const countryChartData = Object.entries(displayStats.byCountry || {}).map(([country, count]) => ({
-    country,
-    count: count as number,
-  }))
+  const countryChartData = Object.entries(displayStats.byCountry || {}).map(
+    ([country, count]) => ({
+      country,
+      count: count as number,
+    })
+  );
 
   const industryChartData = Object.entries(displayStats.byIndustry || {})
     .map(([industry, count]) => ({
       industry,
       count: count as number,
     }))
-    .slice(0, 10) // Top 10 industries
+    .slice(0, 10); // Top 10 industries
 
   const handleImportComplete = async (file: File) => {
-    const result = await importAudience(file)
+    const result = await importAudience(file);
     if (result) {
-      setShowImportDialog(false)
-      refetchAudience()
-      refetchStats()
-      alert(`Successfully imported ${result.imported} audience members!`)
+      setShowImportDialog(false);
+      refetchAudience();
+      refetchStats();
+      alert(`Successfully imported ${result.imported} audience members!`);
     }
-  }
+  };
 
   const handleExport = async () => {
     try {
@@ -169,20 +216,30 @@ export default function AudiencePage() {
           country: countryFilter === "all" ? undefined : countryFilter,
           industry: industryFilter === "all" ? undefined : industryFilter,
         },
-      })
+      });
 
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `audience_export_${new Date().toISOString().split("T")[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audience_export_${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       // Fallback to local export
       const csvContent = [
-        ["Name", "Email", "Age Group", "Gender", "Location", "Industry", "Job Title"].join(","),
+        [
+          "Name",
+          "Email",
+          "Age Group",
+          "Gender",
+          "Location",
+          "Industry",
+          "Job Title",
+        ].join(","),
         ...displayAudience
           .slice(0, 1000)
           .map((person) =>
@@ -194,39 +251,53 @@ export default function AudiencePage() {
               `"${person.city}, ${person.country}"`,
               person.industry,
               person.jobTitle,
-            ].join(","),
+            ].join(",")
           ),
-      ].join("\n")
+      ].join("\n");
 
-      const blob = new Blob([csvContent], { type: "text/csv" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `audience_export_${new Date().toISOString().split("T")[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audience_export_${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
-  }
+  };
 
   const handleRefresh = () => {
-    refetchAudience()
-    refetchStats()
-    refetchSegments()
-  }
+    refetchAudience();
+    refetchStats();
+    refetchSegments();
+  };
 
   return (
     <div className="p-6">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">Audience Management</h1>
-            <p className="text-slate-500">Manage your survey audience database</p>
+            <h1 className="text-3xl font-bold text-slate-800">
+              Audience Management
+            </h1>
+            <p className="text-slate-500">
+              Manage your survey audience database
+            </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleRefresh} disabled={audienceLoading || statsLoading}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${audienceLoading || statsLoading ? "animate-spin" : ""}`} />
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={audienceLoading || statsLoading}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${
+                  audienceLoading || statsLoading ? "animate-spin" : ""
+                }`}
+              />
               Refresh
             </Button>
             <Button variant="outline" onClick={handleExport}>
@@ -244,7 +315,8 @@ export default function AudiencePage() {
         {(audienceError || statsError) && (
           <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-yellow-800 text-sm">
-              ⚠️ Using local data - API connection failed: {audienceError || statsError}
+              ⚠️ Using local data - API connection failed:{" "}
+              {audienceError || statsError}
             </p>
           </div>
         )}
@@ -256,7 +328,9 @@ export default function AudiencePage() {
               <Users className="mr-3 h-8 w-8 text-blue-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {statsLoading ? "..." : displayStats.total?.toLocaleString() || "0"}
+                  {statsLoading
+                    ? "..."
+                    : displayStats.total?.toLocaleString() || "0"}
                 </p>
                 <p className="text-sm text-slate-500">Total Audience</p>
               </div>
@@ -268,7 +342,9 @@ export default function AudiencePage() {
               <Users className="mr-3 h-8 w-8 text-green-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {statsLoading ? "..." : displayStats.active?.toLocaleString() || "0"}
+                  {statsLoading
+                    ? "..."
+                    : displayStats.active?.toLocaleString() || "0"}
                 </p>
                 <p className="text-sm text-slate-500">Active Members</p>
               </div>
@@ -280,7 +356,9 @@ export default function AudiencePage() {
               <MapPin className="mr-3 h-8 w-8 text-orange-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {statsLoading ? "..." : Object.keys(displayStats.byCountry || {}).length}
+                  {statsLoading
+                    ? "..."
+                    : Object.keys(displayStats.byCountry || {}).length}
                 </p>
                 <p className="text-sm text-slate-500">Countries</p>
               </div>
@@ -292,7 +370,9 @@ export default function AudiencePage() {
               <Briefcase className="mr-3 h-8 w-8 text-purple-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {statsLoading ? "..." : Object.keys(displayStats.byIndustry || {}).length}
+                  {statsLoading
+                    ? "..."
+                    : Object.keys(displayStats.byIndustry || {}).length}
                 </p>
                 <p className="text-sm text-slate-500">Industries</p>
               </div>
@@ -349,7 +429,9 @@ export default function AudiencePage() {
                     <SelectItem value="Male">Male</SelectItem>
                     <SelectItem value="Female">Female</SelectItem>
                     <SelectItem value="Non-binary">Non-binary</SelectItem>
-                    <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                    <SelectItem value="Prefer not to say">
+                      Prefer not to say
+                    </SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -361,13 +443,18 @@ export default function AudiencePage() {
                     <SelectItem value="all">All Countries</SelectItem>
                     <SelectItem value="United States">United States</SelectItem>
                     <SelectItem value="Canada">Canada</SelectItem>
-                    <SelectItem value="United Kingdom">United Kingdom</SelectItem>
+                    <SelectItem value="United Kingdom">
+                      United Kingdom
+                    </SelectItem>
                     <SelectItem value="Germany">Germany</SelectItem>
                     <SelectItem value="Australia">Australia</SelectItem>
                   </SelectContent>
                 </Select>
 
-                <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                <Select
+                  value={industryFilter}
+                  onValueChange={setIndustryFilter}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Industry" />
                   </SelectTrigger>
@@ -384,9 +471,14 @@ export default function AudiencePage() {
 
               <div className="mt-4 flex items-center justify-between">
                 <p className="text-sm text-slate-500">
-                  Showing {displayAudience.length} of {pagination?.total || displayAudience.length} results
+                  Showing {displayAudience.length} of{" "}
+                  {pagination?.total || displayAudience.length} results
                 </p>
-                {selectedAudience.length > 0 && <Badge variant="secondary">{selectedAudience.length} selected</Badge>}
+                {selectedAudience.length > 0 && (
+                  <Badge variant="secondary">
+                    {selectedAudience.length} selected
+                  </Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -407,7 +499,11 @@ export default function AudiencePage() {
                     <TableRow>
                       <TableHead className="w-12">
                         <Checkbox
-                          checked={selectedAudience.length === displayAudience.length && displayAudience.length > 0}
+                          checked={
+                            selectedAudience.length ===
+                              displayAudience.length &&
+                            displayAudience.length > 0
+                          }
                           onCheckedChange={handleSelectAll}
                         />
                       </TableHead>
@@ -427,7 +523,9 @@ export default function AudiencePage() {
                         <TableCell>
                           <Checkbox
                             checked={selectedAudience.includes(person.id)}
-                            onCheckedChange={(checked) => handleSelectPerson(person.id, checked as boolean)}
+                            onCheckedChange={(checked) =>
+                              handleSelectPerson(person.id, checked as boolean)
+                            }
                           />
                         </TableCell>
                         <TableCell className="font-medium">
@@ -445,7 +543,9 @@ export default function AudiencePage() {
                           <Badge variant="secondary">{person.industry}</Badge>
                         </TableCell>
                         <TableCell>{person.jobTitle}</TableCell>
-                        <TableCell className="text-sm text-slate-500">{person.lastActivity}</TableCell>
+                        <TableCell className="text-sm text-slate-500">
+                          {person.lastActivity}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -459,7 +559,9 @@ export default function AudiencePage() {
             <div className="flex items-center justify-between">
               <Button
                 variant="outline"
-                onClick={() => updateParams({ page: Math.max(1, pagination.page - 1) })}
+                onClick={() =>
+                  updateParams({ page: Math.max(1, pagination.page - 1) })
+                }
                 disabled={pagination.page === 1 || audienceLoading}
               >
                 Previous
@@ -469,8 +571,14 @@ export default function AudiencePage() {
               </span>
               <Button
                 variant="outline"
-                onClick={() => updateParams({ page: Math.min(pagination.totalPages, pagination.page + 1) })}
-                disabled={pagination.page === pagination.totalPages || audienceLoading}
+                onClick={() =>
+                  updateParams({
+                    page: Math.min(pagination.totalPages, pagination.page + 1),
+                  })
+                }
+                disabled={
+                  pagination.page === pagination.totalPages || audienceLoading
+                }
               >
                 Next
               </Button>
@@ -555,7 +663,9 @@ export default function AudiencePage() {
           <Card>
             <CardHeader>
               <CardTitle>Audience Segments</CardTitle>
-              <p className="text-slate-500">Create and manage audience segments for targeted surveys</p>
+              <p className="text-slate-500">
+                Create and manage audience segments for targeted surveys
+              </p>
             </CardHeader>
             <CardContent>
               {segmentsLoading ? (
@@ -567,9 +677,13 @@ export default function AudiencePage() {
                   {displaySegments.map((segment) => (
                     <div key={segment.id} className="rounded-lg border p-4">
                       <h3 className="font-medium">{segment.name}</h3>
-                      <p className="text-sm text-slate-500">{segment.description}</p>
+                      <p className="text-sm text-slate-500">
+                        {segment.description}
+                      </p>
                       <div className="mt-2 flex items-center gap-2">
-                        <Badge>{segment.memberCount.toLocaleString()} members</Badge>
+                        <Badge>
+                          {segment.memberCount.toLocaleString()} members
+                        </Badge>
                         <Button variant="outline" size="sm">
                           Edit
                         </Button>
@@ -577,7 +691,11 @@ export default function AudiencePage() {
                     </div>
                   ))}
 
-                  <Button variant="outline" className="w-full bg-transparent" disabled={createSegmentLoading}>
+                  <Button
+                    variant="outline"
+                    className="w-full bg-transparent"
+                    disabled={createSegmentLoading}
+                  >
                     <Plus className="mr-2 h-4 w-4" />
                     Create New Segment
                   </Button>
@@ -596,5 +714,5 @@ export default function AudiencePage() {
         />
       )}
     </div>
-  )
+  );
 }

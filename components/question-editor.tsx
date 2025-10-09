@@ -19,16 +19,46 @@ import { Badge } from "@/components/ui/badge";
 
 interface Question {
   id: string;
-  type: string;
+  type:
+    | "TEXT"
+    | "MCQ"
+    | "RATING"
+    | "IMAGE"
+    | "VIDEO"
+    | "AUDIO"
+    | "FILE"
+    | "MATRIX";
   question: string;
   options?: string[];
   required: boolean;
+  media?: {
+    url: string;
+    thumbnail?: string;
+    type: "image" | "video" | "audio";
+  };
+  categoryId?: string;
+  subCategoryId?: string;
+  order_index?: number;
 }
 
 interface QuestionEditorProps {
   questions: Question[];
   onQuestionsUpdate: (questions: Question[]) => void;
 }
+
+const getQuestionTypeLabel = (type: string) => {
+  const labels: Record<string, string> = {
+    TEXT: "Text",
+    MCQ: "Multiple Choice",
+    RATING: "Rating",
+    IMAGE: "Image",
+    VIDEO: "Video",
+    AUDIO: "Audio",
+    FILE: "File Upload",
+    MATRIX: "Matrix",
+  };
+  return labels[type] || type;
+};
 
 export default function QuestionEditor({
   questions,
@@ -90,10 +120,11 @@ export default function QuestionEditor({
   const addQuestion = () => {
     const newQuestion = {
       id: `q${Date.now()}`,
-      type: "single_choice",
+      type: "TEXT" as const,
       question: "New Question",
-      options: ["Option 1", "Option 2"],
+      options: [],
       required: false,
+      order_index: questions.length,
     };
     const updatedQuestions = [...questions, newQuestion];
     onQuestionsUpdate(updatedQuestions);
@@ -171,7 +202,7 @@ export default function QuestionEditor({
                               </p>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
-                                  {question.type.replace("_", " ")}
+                                  {getQuestionTypeLabel(question.type)}
                                 </Badge>
                                 {question.required && (
                                   <Badge
@@ -253,12 +284,14 @@ export default function QuestionEditor({
                             <SelectValue placeholder="Select question type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="single_choice">
-                              Single Choice
-                            </SelectItem>
-                            <SelectItem value="checkbox">Checkbox</SelectItem>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="rating">Rating</SelectItem>
+                            <SelectItem value="TEXT">Text</SelectItem>
+                            <SelectItem value="MCQ">Multiple Choice</SelectItem>
+                            <SelectItem value="RATING">Rating</SelectItem>
+                            <SelectItem value="IMAGE">Image</SelectItem>
+                            <SelectItem value="VIDEO">Video</SelectItem>
+                            <SelectItem value="AUDIO">Audio</SelectItem>
+                            <SelectItem value="FILE">File Upload</SelectItem>
+                            <SelectItem value="MATRIX">Matrix</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -283,8 +316,37 @@ export default function QuestionEditor({
                         </Label>
                       </div>
 
-                      {(question.type === "single_choice" ||
-                        question.type === "checkbox") && (
+                      {/* Media Upload for IMAGE, VIDEO, AUDIO questions */}
+                      {(question.type === "IMAGE" ||
+                        question.type === "VIDEO" ||
+                        question.type === "AUDIO") && (
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">
+                            Media Content
+                          </Label>
+                          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
+                            <div className="space-y-2">
+                              <div className="text-slate-500">
+                                Upload {question.type.toLowerCase()} content
+                              </div>
+                              <Button variant="outline" size="sm">
+                                Choose File
+                              </Button>
+                            </div>
+                          </div>
+                          {question.media && (
+                            <div className="p-3 bg-slate-50 rounded-lg">
+                              <div className="text-sm text-slate-600">
+                                Media: {question.media.url}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Options for MCQ and MATRIX questions */}
+                      {(question.type === "MCQ" ||
+                        question.type === "MATRIX") && (
                         <div className="space-y-3">
                           <Label className="text-sm font-medium">
                             Answer Options
@@ -329,6 +391,67 @@ export default function QuestionEditor({
                             <Plus className="mr-2 h-4 w-4" />
                             Add Option
                           </Button>
+                        </div>
+                      )}
+
+                      {/* Rating Scale for RATING questions */}
+                      {question.type === "RATING" && (
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">
+                            Rating Scale
+                          </Label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-xs text-slate-500">
+                                Min Value
+                              </Label>
+                              <Input
+                                type="number"
+                                defaultValue="1"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-slate-500">
+                                Max Value
+                              </Label>
+                              <Input
+                                type="number"
+                                defaultValue="5"
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* File Upload Settings for FILE questions */}
+                      {question.type === "FILE" && (
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">
+                            File Upload Settings
+                          </Label>
+                          <div className="space-y-2">
+                            <div>
+                              <Label className="text-xs text-slate-500">
+                                Allowed File Types
+                              </Label>
+                              <Input
+                                placeholder="e.g., .pdf, .doc, .jpg"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-slate-500">
+                                Max File Size (MB)
+                              </Label>
+                              <Input
+                                type="number"
+                                defaultValue="10"
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>

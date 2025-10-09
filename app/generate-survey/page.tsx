@@ -8,6 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   ArrowLeft,
   ArrowRight,
   Search,
@@ -26,6 +34,7 @@ import { generateSurveyHtml } from "@/lib/survey-generator";
 import {
   categoriesApi,
   surveyApi,
+  questionApi,
   questionGenerationApi,
   apiWithFallback,
   demoData,
@@ -37,11 +46,19 @@ export default function GenerateSurvey() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState<any[]>([]);
   const [questionsGenerated, setQuestionsGenerated] = useState(false);
   const [generationMethod, setGenerationMethod] = useState<
     "openai" | "static" | null
   >(null);
+  const [surveySettings, setSurveySettings] = useState({
+    flow_type: "STATIC" as const,
+    survey_send_by: "EMAIL" as const,
+    isAnonymous: false,
+    showProgressBar: true,
+    shuffleQuestions: false,
+    allowMultipleSubmissions: false,
+  });
   const [audience, setAudience] = useState({
     ageGroups: [],
     genders: ["Male"],
@@ -53,6 +70,7 @@ export default function GenerateSurvey() {
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
+  const [createdSurvey, setCreatedSurvey] = useState<any>(null);
 
   // API calls
   const {
@@ -144,7 +162,7 @@ export default function GenerateSurvey() {
   };
 
   const nextStep = () => {
-    if (step === 3) {
+    if (step === 4) {
       // Generate HTML when moving to the preview step
       const html = generateSurveyHtml({
         title: `${category} Survey - (${title})`,
@@ -166,6 +184,36 @@ export default function GenerateSurvey() {
     setAudience(updatedAudience);
   };
 
+  const createQuestionsForSurvey = async (surveyId: string) => {
+    try {
+      const questionPromises = questions.map(async (q: any, index: number) => {
+        const questionData = {
+          surveyId,
+          question_type: mapQuestionType(q.type),
+          question_text: q.question,
+          options: q.options || [],
+          categoryId: "default-category", // Will be updated when categories API is available
+          subCategoryId: "default-subcategory",
+          order_index: index,
+          required: q.required || false,
+        };
+
+        return await questionApi.createQuestion(questionData);
+      });
+
+      const results = await Promise.all(questionPromises);
+      const createdQuestions = results
+        .filter((r) => r.data)
+        .map((r) => r.data!);
+
+      console.log(`Created ${createdQuestions.length} questions for survey`);
+      return createdQuestions;
+    } catch (error) {
+      console.error("Failed to create questions:", error);
+      return [];
+    }
+  };
+
   const handleHTMLCreateApi = async (id: string) => {
     // /api/surveys/:id/create-html
 
@@ -183,42 +231,57 @@ export default function GenerateSurvey() {
     } catch (error) {}
   };
 
-  const handlePublishSurvey = async () => {
-    // Create survey data object
-    const surveyData = {
-      title: `${category} Survey - (${title})`,
-      description: prompt,
-      category: category,
-      questions: questions,
-      audience: audience,
+  // Map old question types to new API types
+  const mapQuestionType = (oldType: string) => {
+    const typeMap: Record<string, string> = {
+      single_choice: "MCQ",
+      checkbox: "MCQ",
+      text: "TEXT",
+      rating: "RATING",
+      yes_no: "MCQ",
     };
+    return typeMap[oldType] || "TEXT";
+  };
 
+  const handlePublishSurvey = async () => {
     try {
-      // Try to create survey via API
+      // Step 1: Create the survey with new API structure
+      const surveyData = {
+        title: `${category} Survey - (${title})`,
+        description: prompt,
+        flow_type: surveySettings.flow_type,
+        survey_send_by: surveySettings.survey_send_by,
+        settings: {
+          isAnonymous: surveySettings.isAnonymous,
+          showProgressBar: surveySettings.showProgressBar,
+          shuffleQuestions: surveySettings.shuffleQuestions,
+          allowMultipleSubmissions: surveySettings.allowMultipleSubmissions,
+        },
+        status: "PUBLISHED" as const,
+        scheduled_type: "IMMEDIATE" as const,
+      };
+
       const result = await createSurvey(surveyData);
 
       if (result && result.id) {
-        // API success - use the actual survey ID from backend
+        setCreatedSurvey(result);
 
-        let res = await handleHTMLCreateApi(result.id);
+        // Step 2: Create questions for the survey
+        if (questions.length > 0) {
+          await createQuestionsForSurvey(result.id);
+        }
 
-        console.log("dasssss...", res);
+        // Step 3: Generate HTML for preview
         const html = generateSurveyHtml({
-          id: result.id, // Use actual backend survey ID
+          id: result.id,
           title: `${category} Survey - (${title})`,
           description: prompt,
           questions,
         });
-        if (res?.survey.htmlContent) {
-          setSurveyHtml(res?.survey?.htmlContent);
-          localStorage.setItem("lastSurveyHtml", res?.survey?.htmlContent);
-          localStorage.setItem("surveyUrl", res?.survey?.publicUrl);
-        } else {
-          setSurveyHtml(html);
-          localStorage.setItem("lastSurveyHtml", html);
-          localStorage.setItem("surveyUrl", "");
-        }
+        setSurveyHtml(html);
 
+        // Store survey data for later use
+        localStorage.setItem("lastSurveyHtml", html);
         localStorage.setItem(
           "lastSurveyTitle",
           `${category.toLowerCase().replace(/\s+/g, "-")}_survey`
@@ -236,7 +299,13 @@ export default function GenerateSurvey() {
         window.location.href = "/thank-you";
       } else {
         // API failed, fall back to localStorage method
-        handleLocalSurveyCreation(surveyData);
+        handleLocalSurveyCreation({
+          title: `${category} Survey - (${title})`,
+          description: prompt,
+          category: category,
+          questions: questions,
+          audience: audience,
+        });
       }
     } catch (error) {
       console.error("Failed to create survey via API:", error);
@@ -619,8 +688,146 @@ export default function GenerateSurvey() {
             </div>
           )}
 
-          {/* Step 3: Target Audience */}
+          {/* Step 3: Survey Settings */}
           {step === 3 && (
+            <div className="p-8">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-slate-800 mb-2">
+                  Survey Settings
+                </h2>
+                <p className="text-slate-500">
+                  Configure how your survey will work
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="flow_type">Survey Flow Type</Label>
+                    <Select
+                      value={surveySettings.flow_type}
+                      onValueChange={(
+                        value: "STATIC" | "INTERACTIVE" | "GAME"
+                      ) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          flow_type: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STATIC">Static</SelectItem>
+                        <SelectItem value="INTERACTIVE">Interactive</SelectItem>
+                        <SelectItem value="GAME">Game</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="survey_send_by">Distribution Method</Label>
+                    <Select
+                      value={surveySettings.survey_send_by}
+                      onValueChange={(
+                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+                      ) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          survey_send_by: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="EMAIL">Email</SelectItem>
+                        <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                        <SelectItem value="BOTH">Both</SelectItem>
+                        <SelectItem value="NONE">None (Link Only)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="isAnonymous"
+                      checked={surveySettings.isAnonymous}
+                      onCheckedChange={(checked) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          isAnonymous: !!checked,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="isAnonymous">Anonymous responses</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="showProgressBar"
+                      checked={surveySettings.showProgressBar}
+                      onCheckedChange={(checked) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          showProgressBar: !!checked,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="showProgressBar">Show progress bar</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="shuffleQuestions"
+                      checked={surveySettings.shuffleQuestions}
+                      onCheckedChange={(checked) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          shuffleQuestions: !!checked,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="shuffleQuestions">Shuffle questions</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="allowMultipleSubmissions"
+                      checked={surveySettings.allowMultipleSubmissions}
+                      onCheckedChange={(checked) =>
+                        setSurveySettings((prev) => ({
+                          ...prev,
+                          allowMultipleSubmissions: !!checked,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="allowMultipleSubmissions">
+                      Allow multiple submissions
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
+                <Button variant="outline" onClick={prevStep}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+                <Button onClick={nextStep}>
+                  Continue to Audience
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Target Audience */}
+          {step === 4 && (
             <div className="p-8">
               <AudienceSelector
                 audience={audience}
@@ -633,15 +840,15 @@ export default function GenerateSurvey() {
                   Back
                 </Button>
                 <Button onClick={nextStep}>
-                  Continue
+                  Continue to Preview
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Step 4: Preview & Publish */}
-          {step === 4 && (
+          {/* Step 5: Preview & Publish */}
+          {step === 5 && (
             <div className="p-8">
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-slate-800 mb-2">

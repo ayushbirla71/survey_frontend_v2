@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import type { ApiResponse, PaginatedResponse } from "@/lib/api"
 
-// Generic hook for API calls
+// Generic hook for API calls - Updated for new API structure
 export function useApi<T>(apiCall: () => Promise<ApiResponse<T>>, dependencies: any[] = []) {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
@@ -17,7 +17,7 @@ export function useApi<T>(apiCall: () => Promise<ApiResponse<T>>, dependencies: 
 
       const response = await apiCall()
 
-      if (response.success && response.data !== undefined) {
+      if (response.data !== undefined) {
         setData(response.data)
       } else {
         setError(response.error || "Failed to fetch data")
@@ -36,7 +36,7 @@ export function useApi<T>(apiCall: () => Promise<ApiResponse<T>>, dependencies: 
   return { data, loading, error, refetch: fetchData }
 }
 
-// Hook for paginated API calls
+// Hook for paginated API calls - Updated for new API structure
 export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedResponse<T>>, initialParams: any = {}) {
   const [data, setData] = useState<T[]>([])
   const [pagination, setPagination] = useState({
@@ -44,6 +44,8 @@ export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedRe
     limit: 10,
     total: 0,
     totalPages: 0,
+    hasNext: false,
+    hasPrev: false,
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +58,7 @@ export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedRe
 
       const response = await apiCall(newParams)
 
-      if (response.success) {
+      if (response.data !== undefined && response.pagination) {
         setData(response.data)
         setPagination(response.pagination)
       } else {
@@ -89,19 +91,19 @@ export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedRe
   }
 }
 
-// Hook for mutations (POST, PUT, DELETE)
+// Hook for mutations (POST, PUT, DELETE) - Updated for new API structure
 export function useMutation<T, P = any>(mutationFn: (params: P) => Promise<ApiResponse<T>>) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const mutate = async (params: P, htmlData: { audience: string[]; campaignName: string }): Promise<T | null> => {
+  const mutate = async (params: P): Promise<T | null> => {
     try {
       setLoading(true)
       setError(null)
 
       const response = await mutationFn(params)
 
-      if (response.success && response.data !== undefined) {
+      if (response.data !== undefined) {
         return response.data
       } else {
         setError(response.error || "Mutation failed")
