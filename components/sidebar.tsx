@@ -34,7 +34,7 @@ export default function Sidebar() {
       href: "/generate-survey",
       icon: FileSpreadsheet,
     },
-    { name: "Audience", href: "/audience", icon: Users },
+    // { name: "Audience", href: "/audience", icon: Users },
     { name: "Sent Surveys", href: "/sent-surveys", icon: Send },
   ];
 

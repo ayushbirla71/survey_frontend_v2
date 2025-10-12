@@ -211,7 +211,7 @@ export default function Dashboard() {
         )}
 
         {/* Charts */}
-        <div className="mt-6">
+        {/* <div className="mt-6">
           <Tabs defaultValue="bar">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-800">
@@ -296,7 +296,7 @@ export default function Dashboard() {
               </Card>
             </TabsContent>
           </Tabs>
-        </div>
+        </div> */}
 
         {/* Recent Surveys */}
         <div className="mt-6">
