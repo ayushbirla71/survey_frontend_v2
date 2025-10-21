@@ -487,8 +487,32 @@ export const surveyApi = {
   },
 
   // GET /api/surveys/{surveyId}
-  getSurvey: async (surveyId: string): Promise<ApiResponse<Survey>> => {
-    return apiRequest(`/api/surveys/${surveyId}`);
+  getSurvey: async (surveyId: string): Promise<{ survey: Survey }> => {
+    try {
+      const token = getAuthToken();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/surveys/${surveyId}`, {
+        method: "GET",
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error fetching survey:", error);
+      throw error;
+    }
   },
 
   // POST /api/surveys
@@ -1123,7 +1147,7 @@ export const categoriesApi = {
   getQuestionCategories: async (): Promise<
     ApiResponse<Array<{ id: string; type_name: string }>>
   > => {
-    const result = await apiRequest("/api/categories/getQuestionCategorys");
+    const result = await apiRequest("/api/categories/getQuestionCategory");
     // Handle the new API response format: { categories: [{ id: "uuid", type_name: "string" }] }
     if (result.data && (result.data as any).categories) {
       return { data: (result.data as any).categories };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,9 +43,15 @@ import {
 import { useApi, useMutation } from "@/hooks/useApi";
 
 export default function GenerateSurvey() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const editSurveyId = searchParams.get("edit");
+  const isEditMode = !!editSurveyId;
+
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
   const [surveyCategoryId, setSurveyCategoryId] = useState("");
+  console.log("surveyCategoryId is", surveyCategoryId);
   const [description, setDescription] = useState("");
   const [autoGenerateQuestions, setAutoGenerateQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -72,6 +79,8 @@ export default function GenerateSurvey() {
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
   const [createdSurvey, setCreatedSurvey] = useState<any>(null);
+  const [loadingSurvey, setLoadingSurvey] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // API calls
   const {
@@ -109,6 +118,14 @@ export default function GenerateSurvey() {
     error: createError,
   } = useMutation(surveyApi.createSurvey);
 
+  const {
+    mutate: updateSurvey,
+    loading: updateLoading,
+    error: updateError,
+  } = useMutation((updateData: any) =>
+    surveyApi.updateSurvey(editSurveyId!, updateData)
+  );
+
   // const {
   //   mutate: htmlCreate,
   //   loading: htmlCreateLoading,
@@ -133,6 +150,59 @@ export default function GenerateSurvey() {
     );
     return category ? category.name : categoryId;
   };
+
+  // Load existing survey data when in edit mode
+  useEffect(() => {
+    const loadSurveyData = async () => {
+      if (!isEditMode || !editSurveyId) return;
+
+      setLoadingSurvey(true);
+      setLoadError(null);
+
+      try {
+        const response = await surveyApi.getSurvey(editSurveyId);
+        const survey = response.survey;
+
+        // Populate form fields with existing survey data
+        setTitle(survey.title || "");
+        setDescription(survey.description || "");
+        setSurveyCategoryId((survey as any).surveyCategoryId || "");
+
+        // Update survey settings
+        setSurveySettings({
+          flow_type: (survey.flow_type as any) || "STATIC",
+          survey_send_by: (survey.survey_send_by as any) || "NONE",
+          isAnonymous: false,
+          showProgressBar: true,
+          shuffleQuestions: false,
+          allowMultipleSubmissions: false,
+        });
+
+        // Load questions for the survey
+        try {
+          const questionsResponse = await questionApi.getQuestionsBySurvey(
+            editSurveyId
+          );
+          if (questionsResponse.data && questionsResponse.data.length > 0) {
+            setQuestions(questionsResponse.data);
+            setQuestionsGenerated(true);
+          }
+        } catch (questionError) {
+          console.warn("Could not load questions:", questionError);
+          // Continue without questions - user can add them manually
+        }
+
+        setCreatedSurvey(survey);
+      } catch (error) {
+        console.error("Error loading survey:", error);
+        setLoadError("Failed to load survey data. Please try again.");
+      } finally {
+        setLoadingSurvey(false);
+      }
+    };
+
+    loadSurveyData();
+  }, [isEditMode, editSurveyId]);
 
   // Generate questions when category and description are set
   // useEffect(() => {
@@ -382,9 +452,41 @@ export default function GenerateSurvey() {
       autoGenerateQuestions: autoGenerateQuestions,
     };
 
-    const result = await createSurvey(surveyData);
-    console.log("result is", result);
-    if (result && result?.survey && result?.survey?.id) nextStep();
+    try {
+      if (isEditMode && editSurveyId) {
+        // Update existing survey
+        const updateData = {
+          title: title,
+          description: description,
+          flow_type: surveySettings.flow_type,
+          survey_send_by: surveySettings.survey_send_by,
+        };
+
+        const result = await updateSurvey(updateData);
+        console.log("Update result:", result);
+        if (result) {
+          // Keep the existing survey data but update the fields
+          setCreatedSurvey({
+            ...createdSurvey,
+            title: title,
+            description: description,
+            flow_type: surveySettings.flow_type,
+            survey_send_by: surveySettings.survey_send_by,
+          });
+          nextStep();
+        }
+      } else {
+        // Create new survey
+        const result = await createSurvey(surveyData);
+        console.log("Create result:", result);
+        if (result && (result as any)?.survey && (result as any)?.survey?.id) {
+          setCreatedSurvey((result as any).survey);
+          nextStep();
+        }
+      }
+    } catch (error) {
+      console.error("Error saving survey:", error);
+    }
   };
 
   return (
@@ -399,10 +501,12 @@ export default function GenerateSurvey() {
             </Button>
             <div>
               <h1 className="text-3xl font-bold text-slate-800">
-                Generate Survey
+                {isEditMode ? "Edit Survey" : "Generate Survey"}
               </h1>
               <p className="text-slate-500 mt-1">
-                Create and customize your survey with AI-powered questions
+                {isEditMode
+                  ? "Update your survey details and questions"
+                  : "Create and customize your survey with AI-powered questions"}
               </p>
             </div>
           </div>
@@ -486,6 +590,34 @@ export default function GenerateSurvey() {
             </div>
           </div>
         </div>
+
+        {/* Loading State for Edit Mode */}
+        {loadingSurvey && (
+          <div className="mb-6 p-6 bg-white rounded-lg shadow-sm">
+            <div className="flex items-center justify-center">
+              <RefreshCw className="h-5 w-5 animate-spin text-violet-600 mr-2" />
+              <span className="text-slate-600">Loading survey data...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Error State for Edit Mode */}
+        {loadError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <p className="text-red-800 text-sm">{loadError}</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => router.push("/")}
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        )}
 
         {/* Error Display */}
         {(categoriesError || createError || generationError) && (

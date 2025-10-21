@@ -13,6 +13,7 @@ import {
   ExternalLink,
   RefreshCw,
   Edit,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { surveyApi, demoData, Survey } from "@/lib/api";
@@ -55,6 +56,15 @@ export default function Dashboard() {
         `${window.location.origin}/survey/${survey.id}`
       );
       alert("Survey link copied to clipboard!");
+    }
+  };
+
+  const deleteSurveyFunction = async (survey: any) => {
+    if (confirm("Are you sure you want to delete this survey?")) {
+      const result = await surveyApi.deleteSurvey(survey.id);
+      if (result) {
+        refetchSurveys();
+      }
     }
   };
 
@@ -343,11 +353,28 @@ export default function Dashboard() {
                       {(survey.status === "DRAFT" ||
                         survey.status === "SCHEDULED") && (
                         <Button asChild variant="outline" size="sm">
-                          <Link href={`/edit-survey/${survey.id}`}>
+                          <Link href={`/generate-survey?edit=${survey.id}`}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </Link>
                         </Button>
+                      )}
+                      {(survey.status === "DRAFT" ||
+                        survey.status === "SCHEDULED") && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteSurveyFunction(survey)}
+                          className="h-8"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        // <Button asChild variant="outline" size="sm">
+                        //   <Link href={`/generate-survey?edit=${survey.id}`}>
+                        //     <Edit className="mr-2 h-4 w-4" />
+                        //     Edit
+                        //   </Link>
+                        // </Button>
                       )}
 
                       {/* Show View Results for PUBLISHED surveys */}
