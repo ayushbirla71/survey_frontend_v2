@@ -44,7 +44,7 @@ import { useApi, useMutation } from "@/hooks/useApi";
 export default function GenerateSurvey() {
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
-  const [categoryOfSurvey, setCategoryOfSurvey] = useState("");
+  const [surveyCategoryId, setSurveyCategoryId] = useState("");
   const [description, setDescription] = useState("");
   const [autoGenerateQuestions, setAutoGenerateQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -82,26 +82,26 @@ export default function GenerateSurvey() {
     apiWithFallback(() => categoriesApi.getCategories(), demoData.categories)
   );
 
-  const {
-    data: questionConfig,
-    loading: configLoading,
-    error: configError,
-  } = useApi(() =>
-    apiWithFallback(() => questionGenerationApi.getConfig(), {
-      mode: "static" as const,
-      openaiConnected: false,
-      availableCategories: demoData.categories.map((cat) => cat.name),
-      settings: {
-        openai: {
-          model: "gpt-4o",
-          maxQuestions: 10,
-          temperature: 0.7,
-          questionTypes: [],
-        },
-        static: { defaultQuestionsPerCategory: 5 },
-      },
-    })
-  );
+  // const {
+  //   data: questionConfig,
+  //   loading: configLoading,
+  //   error: configError,
+  // } = useApi(() =>
+  //   apiWithFallback(() => questionGenerationApi.getConfig(), {
+  //     mode: "static" as const,
+  //     openaiConnected: false,
+  //     availableCategories: demoData.categories.map((cat) => cat.name),
+  //     settings: {
+  //       openai: {
+  //         model: "gpt-4o",
+  //         maxQuestions: 10,
+  //         temperature: 0.7,
+  //         questionTypes: [],
+  //       },
+  //       static: { defaultQuestionsPerCategory: 5 },
+  //     },
+  //   })
+  // );
 
   const {
     mutate: createSurvey,
@@ -136,17 +136,17 @@ export default function GenerateSurvey() {
 
   // Generate questions when category and description are set
   // useEffect(() => {
-  //   if (categoryOfSurvey && description && !questionsGenerated) {
+  //   if (surveyCategoryId && description && !questionsGenerated) {
   //     handleGenerateQuestions();
   //   }
-  // }, [categoryOfSurvey, description]);
+  // }, [surveyCategoryId, description]);
 
   const handleGenerateQuestions = async () => {
-    if (!categoryOfSurvey || !description) return;
+    if (!surveyCategoryId || !description) return;
 
     try {
       const result = await generateQuestions({
-        category: getCategoryName(categoryOfSurvey),
+        category: getCategoryName(surveyCategoryId),
         description: description,
         questionCount: 5,
       });
@@ -174,7 +174,7 @@ export default function GenerateSurvey() {
     if (step === 4) {
       // Generate HTML when moving to the preview step
       const html = generateSurveyHtml({
-        title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+        title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
         description: description,
         questions,
       });
@@ -228,7 +228,7 @@ export default function GenerateSurvey() {
 
   //   let htmlData = {
   //     selectedAudience: ["ayushbirla71@gmail.com", "birlaaaaaa706@gmail.com"],
-  //     campaignName: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+  //     campaignName: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
   //   };
 
   //   try {
@@ -256,7 +256,7 @@ export default function GenerateSurvey() {
     try {
       // Step 1: Create the survey with new API structure
       const surveyData = {
-        title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+        title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
         description: description,
         flow_type: surveySettings.flow_type,
         survey_send_by: surveySettings.survey_send_by,
@@ -268,7 +268,7 @@ export default function GenerateSurvey() {
         },
         status: "PUBLISHED" as const,
         scheduled_type: "IMMEDIATE" as const,
-        categoryOfSurvey,
+        surveyCategoryId,
         autoGenerateQuestions,
       };
 
@@ -285,7 +285,7 @@ export default function GenerateSurvey() {
         // Step 3: Generate HTML for preview
         const html = generateSurveyHtml({
           id: result.id,
-          title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
           description: description,
           questions,
         });
@@ -295,7 +295,7 @@ export default function GenerateSurvey() {
         localStorage.setItem("lastSurveyHtml", html);
         localStorage.setItem(
           "lastSurveyTitle",
-          `${getCategoryName(categoryOfSurvey)
+          `${getCategoryName(surveyCategoryId)
             .toLowerCase()
             .replace(/\s+/g, "-")}_survey`
         );
@@ -313,9 +313,9 @@ export default function GenerateSurvey() {
       } else {
         // API failed, fall back to localStorage method
         handleLocalSurveyCreation({
-          title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
           description: description,
-          category: categoryOfSurvey,
+          category: surveyCategoryId,
           questions: questions,
           audience: audience,
         });
@@ -332,7 +332,7 @@ export default function GenerateSurvey() {
     const surveyId = `survey-${Date.now()}`;
     const html = generateSurveyHtml({
       id: surveyId,
-      title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
+      title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
       description: description,
       questions,
     });
@@ -340,7 +340,7 @@ export default function GenerateSurvey() {
     localStorage.setItem("lastSurveyHtml", html);
     localStorage.setItem(
       "lastSurveyTitle",
-      `${getCategoryName(categoryOfSurvey)
+      `${getCategoryName(surveyCategoryId)
         .toLowerCase()
         .replace(/\s+/g, "-")}_survey`
     );
@@ -350,8 +350,8 @@ export default function GenerateSurvey() {
     // Add to sent surveys (localStorage fallback)
     const newSurvey = {
       id: surveyId,
-      title: `${getCategoryName(categoryOfSurvey)} Survey - (${title})`,
-      category: getCategoryName(categoryOfSurvey),
+      title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
+      category: getCategoryName(surveyCategoryId),
       status: "active" as const,
       responses: 0,
       target: audience.targetCount,
@@ -371,14 +371,14 @@ export default function GenerateSurvey() {
   };
 
   const handleStep1Continue = async () => {
-    if (!categoryOfSurvey || !description || !title) return;
+    if (!surveyCategoryId || !description || !title) return;
 
     const surveyData = {
       title: title,
       description: description,
       flow_type: surveySettings.flow_type,
       survey_send_by: surveySettings.survey_send_by,
-      categoryOfSurvey: categoryOfSurvey,
+      surveyCategoryId: surveyCategoryId,
       autoGenerateQuestions: autoGenerateQuestions,
     };
 
@@ -488,7 +488,8 @@ export default function GenerateSurvey() {
         </div>
 
         {/* Error Display */}
-        {(categoriesError || createError || generationError || configError) && (
+        {(categoriesError || createError || generationError) && (
+          //  || configError
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
@@ -499,7 +500,7 @@ export default function GenerateSurvey() {
                 {createError && `Survey creation failed: ${createError}. `}
                 {generationError &&
                   `Question generation failed: ${generationError}. `}
-                {configError && `Configuration failed: ${configError}. `}
+                {/* {configError && `Configuration failed: ${configError}. `} */}
                 Using fallback data where needed.
               </p>
             </div>
@@ -507,7 +508,7 @@ export default function GenerateSurvey() {
         )}
 
         {/* Question Generation Status */}
-        {questionConfig && (
+        {/* {questionConfig && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-blue-600" />
@@ -522,7 +523,7 @@ export default function GenerateSurvey() {
               </p>
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Step Content */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -543,7 +544,7 @@ export default function GenerateSurvey() {
               <div className="space-y-8">
                 <div>
                   <Label
-                    htmlFor="categoryOfSurvey"
+                    htmlFor="surveyCategoryId"
                     className="text-sm font-medium mb-3 block"
                   >
                     Select Category Of Survey
@@ -567,11 +568,11 @@ export default function GenerateSurvey() {
                       <Button
                         key={cat.id}
                         variant={
-                          categoryOfSurvey === cat.id ? "default" : "outline"
+                          surveyCategoryId === cat.id ? "default" : "outline"
                         }
                         className="justify-start h-auto p-3 text-left text-sm"
                         onClick={() => {
-                          setCategoryOfSurvey(cat.id);
+                          setSurveyCategoryId(cat.id);
                           setQuestionsGenerated(false); // Reset questions when category changes
                         }}
                         disabled={categoriesLoading}
@@ -675,7 +676,7 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handleStep1Continue}
                   disabled={
-                    !categoryOfSurvey ||
+                    !surveyCategoryId ||
                     !description ||
                     categoriesLoading ||
                     !title
@@ -706,7 +707,7 @@ export default function GenerateSurvey() {
                 </h2>
                 <p className="text-slate-500">
                   Edit, reorder, and customize the questions generated for your{" "}
-                  {getCategoryName(categoryOfSurvey)} survey
+                  {getCategoryName(surveyCategoryId)} survey
                   {generationMethod && (
                     <span className="ml-2 text-xs bg-violet-100 text-violet-700 px-2 py-1 rounded">
                       Generated with{" "}
@@ -924,7 +925,7 @@ export default function GenerateSurvey() {
                 <TabsContent value="preview" className="space-y-4">
                   <SurveyPreview
                     title={`${getCategoryName(
-                      categoryOfSurvey
+                      surveyCategoryId
                     )} Survey - (${title})`}
                     description={description}
                     questions={questions}
@@ -953,7 +954,7 @@ export default function GenerateSurvey() {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
                         a.href = url;
-                        a.download = `${categoryOfSurvey
+                        a.download = `${surveyCategoryId
                           .toLowerCase()
                           .replace(/\s+/g, "-")}_survey.html`;
                         document.body.appendChild(a);

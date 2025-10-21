@@ -16,6 +16,8 @@ import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, GripVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Badge } from "@/components/ui/badge";
+import { useApi } from "@/hooks/useApi";
+import { apiWithFallback, categoriesApi, demoData } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -68,7 +70,34 @@ export default function QuestionEditor({
     questions.length > 0 ? questions[0].id : null
   );
 
+  // API calls
+  const {
+    data: questionCategories,
+    loading: questionCategoriesLoading,
+    error: questionCategoriesError,
+  } = useApi(() =>
+    apiWithFallback(
+      () => categoriesApi.getQuestionCategories(),
+      demoData.question_categories
+    )
+  );
+
+  const categories = questionCategories || demoData.question_categories;
+  console.log("categories is", categories);
+
+  const questionCategoryOptions = categories?.map((cat: any) => ({
+    value: cat.id,
+    label: cat.type_name,
+  }));
+  console.log("questionCategoryOptions is", questionCategoryOptions);
+
   const handleQuestionChange = (id: string, field: string, value: any) => {
+    console.log(
+      ">>>> the value of field is",
+      field,
+      " and the value is : ",
+      value
+    );
     const updatedQuestions = questions.map((q) => {
       if (q.id === id) {
         return { ...q, [field]: value };
@@ -275,7 +304,7 @@ export default function QuestionEditor({
                           Question Type
                         </Label>
                         <Select
-                          value={question.type}
+                          defaultValue={question.type || undefined}
                           onValueChange={(value) =>
                             handleQuestionChange(question.id, "type", value)
                           }
@@ -284,14 +313,16 @@ export default function QuestionEditor({
                             <SelectValue placeholder="Select question type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="TEXT">Text</SelectItem>
-                            <SelectItem value="MCQ">Multiple Choice</SelectItem>
-                            <SelectItem value="RATING">Rating</SelectItem>
-                            <SelectItem value="IMAGE">Image</SelectItem>
-                            <SelectItem value="VIDEO">Video</SelectItem>
-                            <SelectItem value="AUDIO">Audio</SelectItem>
-                            <SelectItem value="FILE">File Upload</SelectItem>
-                            <SelectItem value="MATRIX">Matrix</SelectItem>
+                            {questionCategoryOptions?.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                            {/* <SelectItem value="TEXT">Text</SelectItem>
+                            <SelectItem value="MCQ">Multiple Choice</SelectItem> */}
                           </SelectContent>
                         </Select>
                       </div>

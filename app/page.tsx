@@ -12,14 +12,14 @@ import {
   Share,
   ExternalLink,
   RefreshCw,
+  Edit,
 } from "lucide-react";
 import Link from "next/link";
-import { surveyApi, analyticsApi, apiWithFallback, demoData } from "@/lib/api";
+import { surveyApi, demoData, Survey } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
-  const [sentSurveys, setSentSurveys] = useState([]);
   const { user } = useAuth();
 
   // API calls with fallback to demo data
@@ -32,29 +32,17 @@ export default function Dashboard() {
     refetch: refetchStats,
   } = useApi(() => Promise.resolve({ data: demoData.dashboardStats }));
 
+  // Fetch surveys from API
   const {
-    data: charts,
-    loading: chartsLoading,
-    refetch: refetchCharts,
-  } = useApi(() => Promise.resolve({ data: demoData.dashboardCharts }));
-
-  const {
-    data: recentSurveys,
+    data: surveysResponse,
     loading: surveysLoading,
+    error: surveysError,
     refetch: refetchSurveys,
-  } = useApi(() =>
-    apiWithFallback(() => surveyApi.getSurveys(), demoData.surveys)
+  } = useApi<{ surveys: Survey[] }>(() =>
+    surveyApi.getAllSurveys().then((response) => ({ data: response }))
   );
 
-  useEffect(() => {
-    // Load sent surveys from localStorage as fallback
-    const savedSurveys = JSON.parse(
-      localStorage.getItem("sentSurveys") || "[]"
-    );
-    setSentSurveys(savedSurveys);
-  }, []);
-
-  const handleShare = (survey) => {
+  const handleShare = (survey: any) => {
     if (navigator.share) {
       navigator.share({
         title: survey.title,
@@ -72,14 +60,12 @@ export default function Dashboard() {
 
   const handleRefresh = () => {
     refetchStats();
-    refetchCharts();
     refetchSurveys();
   };
 
-  // Use API data if available, otherwise use localStorage data
-  const displaySurveys = recentSurveys || sentSurveys;
+  // Extract surveys from API response and handle empty state
+  const surveys = surveysResponse?.surveys || [];
   const displayStats = stats || demoData.dashboardStats;
-  const displayCharts = charts || demoData.dashboardCharts;
 
   return (
     <div className="flex min-h-screen">
@@ -111,28 +97,34 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Demo Data Notice */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="text-blue-600 mt-0.5">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-blue-800">Demo Mode</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                You're viewing demo data. Some backend APIs are still being
-                implemented. Your surveys and data will be available once the
-                backend is fully connected.
-              </p>
+        {/* Error Display for Surveys */}
+        {surveysError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="text-red-600 mt-0.5">
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-red-800">
+                  Error Loading Surveys
+                </h3>
+                <p className="text-sm text-red-700 mt-1">
+                  Failed to load your surveys: {surveysError}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
@@ -310,31 +302,74 @@ export default function Dashboard() {
                   <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
                 </CardContent>
               </Card>
-            ) : displaySurveys.length > 0 ? (
-              displaySurveys.slice(0, 5).map((survey, index) => (
+            ) : surveys.length > 0 ? (
+              surveys.slice(0, 5).map((survey: any, index: number) => (
                 <Card key={survey.id || index}>
                   <CardContent className="flex items-center justify-between p-4">
                     <div>
-                      <h3 className="font-medium">{survey.title}</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-medium">{survey.title}</h3>
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            survey.status === "DRAFT"
+                              ? "bg-gray-100 text-gray-700"
+                              : survey.status === "SCHEDULED"
+                              ? "bg-blue-100 text-blue-700"
+                              : survey.status === "PUBLISHED"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {survey.status}
+                        </span>
+                      </div>
                       <p className="text-sm text-slate-500">
-                        {survey.category} • {survey.responses || 0} responses •
-                        Target: {survey.target}
+                        {survey.description || "No description"} •{" "}
+                        {survey.questions.length} questions
+                        {survey.status === "SCHEDULED" &&
+                          survey.scheduled_date && (
+                            <>
+                              {" "}
+                              • Scheduled:{" "}
+                              {new Date(
+                                survey.scheduled_date
+                              ).toLocaleDateString()}
+                            </>
+                          )}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/survey-results/${survey.id}`}>
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          View Results
-                        </Link>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleShare(survey)}
-                      >
-                        <Share className="h-4 w-4" />
-                      </Button>
+                      {/* Show Edit button for DRAFT and SCHEDULED surveys */}
+                      {(survey.status === "DRAFT" ||
+                        survey.status === "SCHEDULED") && (
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/edit-survey/${survey.id}`}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </Link>
+                        </Button>
+                      )}
+
+                      {/* Show View Results for PUBLISHED surveys */}
+                      {survey.status === "PUBLISHED" && (
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/survey-results/${survey.id}`}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Results
+                          </Link>
+                        </Button>
+                      )}
+
+                      {/* Show Share button for DRAFT and SCHEDULED surveys */}
+                      {survey.status === "PUBLISHED" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleShare(survey)}
+                        >
+                          <Share className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -344,7 +379,7 @@ export default function Dashboard() {
                 <CardContent className="flex items-center justify-center py-12">
                   <div className="text-center">
                     <h3 className="text-lg font-medium text-slate-700 mb-2">
-                      No surveys yet
+                      No surveys created
                     </h3>
                     <p className="text-slate-500 mb-4">
                       Create your first survey to see it here

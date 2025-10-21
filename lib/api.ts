@@ -457,8 +457,33 @@ export const dashboardApi = {
 // Survey Management APIs
 export const surveyApi = {
   // GET /api/surveys
-  getAllSurveys: async (): Promise<ApiResponse<Survey[]>> => {
-    return apiRequest("/api/surveys");
+  getAllSurveys: async (): Promise<{ surveys: Survey[] }> => {
+    try {
+      const token = getAuthToken();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Add authentication header if token exists
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/surveys`, {
+        method: "GET",
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("API request failed:", error);
+      throw error;
+    }
   },
 
   // GET /api/surveys/{surveyId}
@@ -499,13 +524,15 @@ export const surveyApi = {
         headers,
         body: JSON.stringify(surveyData),
       });
+      console.log("response is", response);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      return data;
+      console.log("data is", data);
+      return { data };
     } catch (error) {
       console.error("API request failed:", error);
       throw error;
@@ -551,15 +578,7 @@ export const questionApi = {
   // POST /api/questions
   createQuestion: async (questionData: {
     surveyId: string;
-    question_type:
-      | "TEXT"
-      | "MCQ"
-      | "RATING"
-      | "IMAGE"
-      | "VIDEO"
-      | "AUDIO"
-      | "FILE"
-      | "MATRIX";
+    question_type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
     question_text: string;
     options: any[];
     media?: Array<{
@@ -568,7 +587,7 @@ export const questionApi = {
       thumbnail_url?: string;
     }>;
     categoryId: string;
-    subCategoryId: string;
+    // subCategoryId: string;
     order_index?: number;
     required?: boolean;
   }): Promise<ApiResponse<Question>> => {
@@ -1092,8 +1111,20 @@ export const categoriesApi = {
   getCategories: async (): Promise<
     ApiResponse<Array<{ id: string; name: string }>>
   > => {
-    const result = await apiRequest("/api/categories");
+    const result = await apiRequest("/api/categories/getSurveyCategory");
     // Handle the new API response format: { categories: [{ id: "uuid", name: "string" }] }
+    if (result.data && (result.data as any).categories) {
+      return { data: (result.data as any).categories };
+    }
+    return { data: [] };
+  },
+
+  // GET /api/categories
+  getQuestionCategories: async (): Promise<
+    ApiResponse<Array<{ id: string; type_name: string }>>
+  > => {
+    const result = await apiRequest("/api/categories/getQuestionCategorys");
+    // Handle the new API response format: { categories: [{ id: "uuid", type_name: "string" }] }
     if (result.data && (result.data as any).categories) {
       return { data: (result.data as any).categories };
     }
@@ -1182,6 +1213,27 @@ export const demoData = {
     { id: "fd456789-d456-d456-d456-def012345678", name: "Energy" },
   ],
 
+  question_categories: [
+    { id: "e690972c-0956-442e-a0b4-3c109c3d42f7", type_name: "short answer" },
+    { id: "4234edbe-bb13-4acd-918b-ea83e3107eb4", type_name: "paragraph" },
+    {
+      id: "ad17eee6-d97e-4bdc-9870-2881ea2b391f",
+      type_name: "multiple choice",
+    },
+    { id: "86e2d9dc-2f36-47ff-b502-cc24532091d9", type_name: "checkboxes" },
+    { id: "516210a8-16c5-465c-aa84-7a02b3c032a4", type_name: "dropdown" },
+    { id: "56abdae6-9b0d-4313-9187-8330ae8121e5", type_name: "file upload" },
+    { id: "97140e9a-acf8-4293-93b6-022a6962bce1", type_name: "linear scale" },
+    { id: "b0a418b1-f832-4b02-a44a-683008e6761b", type_name: "rating" },
+    {
+      id: "d6c6b58e-0037-4295-a9ec-4a1b6ff03429",
+      type_name: "multi-choice grid",
+    },
+    { id: "60516591-f744-4efd-ae56-58d8e1ca911c", type_name: "checkbox grid" },
+    { id: "276364c5-1b96-4b4e-a362-833973532241", type_name: "date" },
+    { id: "d16778d4-85bc-4fac-8815-2bb2f1346fd9", type_name: "time" },
+  ],
+
   audienceStats: {
     total: 10000,
     active: 9000,
@@ -1257,7 +1309,7 @@ export const demoData = {
 // Missing APIs that need backend implementation
 export const missingApis = {
   // These APIs are referenced in the frontend but not yet implemented in the new backend
-  categories: "GET /api/categories - needs implementation",
+  // categories: "GET /api/categories - needs implementation",
   dashboard: "Dashboard APIs - need implementation",
   audience: "Audience management APIs - need implementation",
   questionGeneration: "AI question generation - needs implementation",
