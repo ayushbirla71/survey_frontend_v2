@@ -137,10 +137,17 @@ async function apiRequest<T>(
       headers.Authorization = `Bearer ${token}`;
     }
 
+    // Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers,
+      signal: controller.signal,
       ...options,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       // Handle error responses
@@ -162,6 +169,9 @@ async function apiRequest<T>(
     }
   } catch (error) {
     console.error("API Error:", error);
+    if (error instanceof Error && error.name === "AbortError") {
+      return { error: "Request timeout - please check your connection" };
+    }
     return {
       error: error instanceof Error ? error.message : "Network error occurred",
     };
@@ -175,6 +185,7 @@ export async function apiWithFallback<T>(
 ): Promise<ApiResponse<T>> {
   try {
     const result = await apiCall();
+
     if (result.data !== undefined) {
       return result;
     } else {
@@ -661,6 +672,72 @@ export const questionApi = {
   },
 };
 
+// Survey Sharing APIs
+export const surveyShareApi = {
+  // POST /api/surveys/{surveyId}/generate-link
+  generatePublicLink: async (
+    surveyId: string,
+    options?: {
+      expiresAt?: string;
+      maxResponses?: number;
+      requireAuth?: boolean;
+    }
+  ): Promise<
+    ApiResponse<{
+      publicUrl: string;
+      shareCode: string;
+      expiresAt?: string;
+      maxResponses?: number;
+    }>
+  > => {
+    return apiRequest(`/api/surveys/${surveyId}/generate-link`, {
+      method: "POST",
+      body: JSON.stringify(options || {}),
+    });
+  },
+
+  // GET /api/surveys/{surveyId}/share-settings
+  getShareSettings: async (
+    surveyId: string
+  ): Promise<
+    ApiResponse<{
+      isPublic: boolean;
+      publicUrl?: string;
+      shareCode?: string;
+      expiresAt?: string;
+      maxResponses?: number;
+      responseCount: number;
+    }>
+  > => {
+    return apiRequest(`/api/surveys/${surveyId}/share-settings`);
+  },
+
+  // PUT /api/surveys/{surveyId}/share-settings
+  updateShareSettings: async (
+    surveyId: string,
+    settings: {
+      isPublic?: boolean;
+      expiresAt?: string;
+      maxResponses?: number;
+      requireAuth?: boolean;
+    }
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/surveys/${surveyId}/share-settings`, {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
+  },
+
+  // DELETE /api/surveys/{surveyId}/public-link
+  revokePublicLink: async (
+    surveyId: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/surveys/${surveyId}/public-link`, {
+      method: "DELETE",
+    });
+  },
+};
+
 // Response Management APIs
 export const responseApi = {
   // POST /api/responses
@@ -1135,12 +1212,29 @@ export const categoriesApi = {
   getCategories: async (): Promise<
     ApiResponse<Array<{ id: string; name: string }>>
   > => {
-    const result = await apiRequest("/api/categories/getSurveyCategory");
-    // Handle the new API response format: { categories: [{ id: "uuid", name: "string" }] }
-    if (result.data && (result.data as any).categories) {
-      return { data: (result.data as any).categories };
+    try {
+      // Try external API first
+      const result = await apiRequest("/api/categories/getSurveyCategory");
+      // Handle the new API response format: { categories: [{ id: "uuid", name: "string" }] }
+      if (result.data && (result.data as any).categories) {
+        return { data: (result.data as any).categories };
+      }
+
+      // If external API fails, try local API route
+      console.log("External API failed, trying local API route...");
+      const localResult = await fetch("/api/categories");
+      if (localResult.ok) {
+        const localData = await localResult.json();
+        if (localData.categories) {
+          return { data: localData.categories };
+        }
+      }
+
+      return { data: [] };
+    } catch (error) {
+      console.error("Categories API error:", error);
+      return { data: [] };
     }
-    return { data: [] };
   },
 
   // GET /api/categories

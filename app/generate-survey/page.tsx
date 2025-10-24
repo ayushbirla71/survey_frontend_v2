@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,9 +25,17 @@ import {
   RefreshCw,
   Sparkles,
   AlertCircle,
+  CheckCircle,
+  Share2,
+  Link as LinkIcon,
+  Copy,
+  ExternalLink,
+  Mail,
+  BarChart3,
+  FileText,
 } from "lucide-react";
 import SurveyPreview from "@/components/survey-preview";
-import QuestionEditor from "@/components/question-editor";
+import EnhancedQuestionEditor from "@/components/enhanced-question-editor";
 import AudienceSelector from "@/components/audience-selector";
 import Link from "next/link";
 import CodeView from "@/components/code-view";
@@ -37,6 +45,7 @@ import {
   surveyApi,
   questionApi,
   questionGenerationApi,
+  surveyShareApi,
   apiWithFallback,
   demoData,
 } from "@/lib/api";
@@ -81,15 +90,23 @@ export default function GenerateSurvey() {
   const [createdSurvey, setCreatedSurvey] = useState<any>(null);
   const [loadingSurvey, setLoadingSurvey] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+
+  // Store original survey data for comparison
+  const [originalSurveyData, setOriginalSurveyData] = useState<any>(null);
 
   // API calls
   const {
     data: categories,
     loading: categoriesLoading,
     error: categoriesError,
-  } = useApi(() =>
-    apiWithFallback(() => categoriesApi.getCategories(), demoData.categories)
-  );
+  } = useApi(() => {
+    return apiWithFallback(
+      () => categoriesApi.getCategories(),
+      demoData.categories
+    );
+  }, []); // Add empty dependency array to prevent infinite re-renders
 
   // const {
   //   data: questionConfig,
@@ -183,9 +200,29 @@ export default function GenerateSurvey() {
           const questionsResponse = await questionApi.getQuestionsBySurvey(
             editSurveyId
           );
+          console.log("Questions response:", questionsResponse);
+
           if (questionsResponse.data && questionsResponse.data.length > 0) {
-            setQuestions(questionsResponse.data);
+            // Map API questions to component format
+            const mappedQuestions = questionsResponse.data.map(
+              (q: any, index: number) => ({
+                id: q.id || `q${Date.now()}_${index}`,
+                type: q.question_type || q.type || "TEXT",
+                question: q.question_text || q.question || "",
+                options: q.options || [],
+                required: q.required || false,
+                categoryId: q.categoryId || "",
+                order_index: q.order_index || index,
+                description: q.description || "",
+                placeholder: q.placeholder || "",
+              })
+            );
+
+            setQuestions(mappedQuestions);
             setQuestionsGenerated(true);
+            console.log("Loaded questions:", mappedQuestions);
+          } else {
+            console.log("No questions found for survey");
           }
         } catch (questionError) {
           console.warn("Could not load questions:", questionError);
@@ -193,6 +230,15 @@ export default function GenerateSurvey() {
         }
 
         setCreatedSurvey(survey);
+
+        // Store original data for comparison
+        setOriginalSurveyData({
+          title: survey.title,
+          description: survey.description,
+          flow_type: survey.flow_type,
+          survey_send_by: survey.survey_send_by,
+          categoryOfSurvey: survey.categoryOfSurvey,
+        });
       } catch (error) {
         console.error("Error loading survey:", error);
         setLoadError("Failed to load survey data. Please try again.");
@@ -263,6 +309,24 @@ export default function GenerateSurvey() {
     setAudience(updatedAudience);
   };
 
+  const generatePublicLink = async () => {
+    if (!createdSurvey?.id) return;
+
+    try {
+      const result = await surveyShareApi.generatePublicLink(createdSurvey.id, {
+        maxResponses: 1000, // Default limit
+        requireAuth: false,
+      });
+
+      if (result.data) {
+        setPublicLink(result.data.publicUrl);
+        setShareCode(result.data.shareCode);
+      }
+    } catch (error) {
+      console.error("Failed to generate public link:", error);
+    }
+  };
+
   const createQuestionsForSurvey = async (surveyId: string) => {
     try {
       const questionPromises = questions.map(async (q: any, index: number) => {
@@ -271,7 +335,7 @@ export default function GenerateSurvey() {
           question_type: mapQuestionType(q.type),
           question_text: q.question,
           options: q.options || [],
-          categoryId: "default-category", // Will be updated when categories API is available
+          categoryId: q.categoryId || surveyCategoryId || "default-category",
           subCategoryId: "default-subcategory",
           order_index: index,
           required: q.required || false,
@@ -310,16 +374,33 @@ export default function GenerateSurvey() {
   //   } catch (error) {}
   // };
 
-  // Map old question types to new API types
-  const mapQuestionType = (oldType: string) => {
-    const typeMap: Record<string, string> = {
-      single_choice: "MCQ",
-      checkbox: "MCQ",
+  // Map question types to supported backend types (TEXT, IMAGE, VIDEO, AUDIO)
+  const mapQuestionType = (
+    questionType: string
+  ): "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" => {
+    const typeMap: Record<string, "TEXT" | "IMAGE" | "VIDEO" | "AUDIO"> = {
+      TEXT: "TEXT",
+      IMAGE: "IMAGE",
+      VIDEO: "VIDEO",
+      AUDIO: "AUDIO",
+      // Legacy mappings
+      single_choice: "TEXT",
+      checkbox: "TEXT",
       text: "TEXT",
-      rating: "RATING",
-      yes_no: "MCQ",
+      rating: "TEXT",
+      yes_no: "TEXT",
+      MCQ: "TEXT",
+      CHECKBOX: "TEXT",
+      DROPDOWN: "TEXT",
+      RATING: "TEXT",
+      DATE: "TEXT",
+      TIME: "TEXT",
+      EMAIL: "TEXT",
+      PHONE: "TEXT",
+      URL: "TEXT",
+      NUMBER: "TEXT",
     };
-    return typeMap[oldType] || "TEXT";
+    return typeMap[questionType] || "TEXT";
   };
 
   const handlePublishSurvey = async () => {
@@ -378,8 +459,8 @@ export default function GenerateSurvey() {
           JSON.stringify({ ...surveyData, id: result.id })
         );
 
-        // Navigate to thank you page
-        window.location.href = "/thank-you";
+        // Navigate to share step
+        setStep(6);
       } else {
         // API failed, fall back to localStorage method
         handleLocalSurveyCreation({
@@ -436,8 +517,21 @@ export default function GenerateSurvey() {
     existingSurveys.unshift(newSurvey);
     localStorage.setItem("sentSurveys", JSON.stringify(existingSurveys));
 
-    // Navigate to thank you page
-    window.location.href = "/thank-you";
+    // Navigate to share step
+    setStep(6);
+  };
+
+  // Function to check if survey data has changed
+  const hasSurveyDataChanged = () => {
+    if (!originalSurveyData) return true; // If no original data, consider it changed
+
+    return (
+      originalSurveyData.title !== title ||
+      originalSurveyData.description !== description ||
+      originalSurveyData.flow_type !== surveySettings.flow_type ||
+      originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
+      originalSurveyData.categoryOfSurvey !== surveyCategoryId
+    );
   };
 
   const handleStep1Continue = async () => {
@@ -454,27 +548,42 @@ export default function GenerateSurvey() {
 
     try {
       if (isEditMode && editSurveyId) {
-        // Update existing survey
-        const updateData = {
-          title: title,
-          description: description,
-          flow_type: surveySettings.flow_type,
-          survey_send_by: surveySettings.survey_send_by,
-        };
-
-        const result = await updateSurvey(updateData);
-        console.log("Update result:", result);
-        if (result) {
-          // Keep the existing survey data but update the fields
-          setCreatedSurvey({
-            ...createdSurvey,
+        // Check if data has changed before making API call
+        if (hasSurveyDataChanged()) {
+          // Update existing survey
+          const updateData = {
             title: title,
             description: description,
             flow_type: surveySettings.flow_type,
             survey_send_by: surveySettings.survey_send_by,
-          });
-          nextStep();
+          };
+
+          const result = await updateSurvey(updateData);
+          console.log("Update result:", result);
+          if (result) {
+            // Keep the existing survey data but update the fields
+            setCreatedSurvey({
+              ...createdSurvey,
+              title: title,
+              description: description,
+              flow_type: surveySettings.flow_type,
+              survey_send_by: surveySettings.survey_send_by,
+            });
+
+            // Update original data to reflect changes
+            setOriginalSurveyData({
+              ...originalSurveyData,
+              title: title,
+              description: description,
+              flow_type: surveySettings.flow_type,
+              survey_send_by: surveySettings.survey_send_by,
+              categoryOfSurvey: surveyCategoryId,
+            });
+          }
+        } else {
+          console.log("No changes detected, skipping update API call");
         }
+        nextStep();
       } else {
         // Create new survey
         const result = await createSurvey(surveyData);
@@ -584,8 +693,44 @@ export default function GenerateSurvey() {
                   4
                 </div>
                 <span className="mt-2 text-sm font-medium">
+                  Target Audience
+                </span>
+              </div>
+              <div className="flex-1 h-px bg-slate-200 mx-4" />
+              <div
+                className={`flex flex-col items-center ${
+                  step >= 5 ? "text-violet-600" : "text-slate-400"
+                }`}
+              >
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
+                    step >= 5
+                      ? "bg-violet-100 text-violet-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  5
+                </div>
+                <span className="mt-2 text-sm font-medium">
                   Preview & Publish
                 </span>
+              </div>
+              <div className="flex-1 h-px bg-slate-200 mx-4" />
+              <div
+                className={`flex flex-col items-center ${
+                  step >= 6 ? "text-violet-600" : "text-slate-400"
+                }`}
+              >
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
+                    step >= 6
+                      ? "bg-violet-100 text-violet-600"
+                      : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  6
+                </div>
+                <span className="mt-2 text-sm font-medium">Share Survey</span>
               </div>
             </div>
           </div>
@@ -849,7 +994,7 @@ export default function GenerateSurvey() {
                 </p>
               </div>
 
-              <QuestionEditor
+              <EnhancedQuestionEditor
                 questions={questions}
                 onQuestionsUpdate={handleQuestionUpdate}
               />
@@ -1124,6 +1269,169 @@ export default function GenerateSurvey() {
                     </>
                   )}
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Share Survey */}
+          {step === 6 && (
+            <div className="p-8">
+              <div className="mb-6 text-center">
+                <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                  🎉 Survey Published Successfully!
+                </h2>
+                <p className="text-slate-500">
+                  Your survey is now live and ready to collect responses
+                </p>
+              </div>
+
+              <div className="max-w-2xl mx-auto space-y-6">
+                {/* Survey Details */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-800">{title}</h3>
+                      <p className="text-sm text-green-600">
+                        {questions.length} questions • Published just now
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Public Link Generation */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Share2 className="h-5 w-5" />
+                      Share Your Survey
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {!publicLink ? (
+                      <div className="text-center py-6">
+                        <Button
+                          onClick={generatePublicLink}
+                          size="lg"
+                          className="bg-violet-600 hover:bg-violet-700"
+                        >
+                          <LinkIcon className="mr-2 h-4 w-4" />
+                          Generate Public Link
+                        </Button>
+                        <p className="text-sm text-slate-500 mt-2">
+                          Create a shareable link that anyone can use to access
+                          your survey
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <Label className="text-sm font-medium">
+                            Public Survey Link
+                          </Label>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Input
+                              value={publicLink}
+                              readOnly
+                              className="flex-1 bg-slate-50"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(publicLink);
+                                // You could add a toast notification here
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {shareCode && (
+                          <div>
+                            <Label className="text-sm font-medium">
+                              Share Code
+                            </Label>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Input
+                                value={shareCode}
+                                readOnly
+                                className="flex-1 bg-slate-50 font-mono"
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(shareCode);
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Users can enter this code at your survey portal
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-4">
+                          <Button
+                            variant="outline"
+                            onClick={() => window.open(publicLink, "_blank")}
+                            className="flex-1"
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Preview Survey
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              const subject = encodeURIComponent(
+                                `Survey: ${title}`
+                              );
+                              const body = encodeURIComponent(
+                                `Hi,\n\nI'd like to invite you to participate in my survey: "${title}"\n\nPlease click the link below to get started:\n${publicLink}\n\nThank you!`
+                              );
+                              window.open(
+                                `mailto:?subject=${subject}&body=${body}`
+                              );
+                            }}
+                            className="flex-1"
+                          >
+                            <Mail className="mr-2 h-4 w-4" />
+                            Share via Email
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Next Steps */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>What's Next?</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button variant="outline" asChild>
+                        <Link href="/">
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          View Dashboard
+                        </Link>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <Link href={`/survey-results/${createdSurvey?.id}`}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          View Responses
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           )}
