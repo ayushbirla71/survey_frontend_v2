@@ -50,6 +50,7 @@ import {
   demoData,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
+import { toast } from "react-toastify";
 
 export default function GenerateSurvey() {
   const searchParams = useSearchParams();
@@ -60,7 +61,6 @@ export default function GenerateSurvey() {
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState("");
   const [surveyCategoryId, setSurveyCategoryId] = useState("");
-  console.log("surveyCategoryId is", surveyCategoryId);
   const [description, setDescription] = useState("");
   const [autoGenerateQuestions, setAutoGenerateQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -107,6 +107,12 @@ export default function GenerateSurvey() {
       demoData.categories
     );
   }, []); // Add empty dependency array to prevent infinite re-renders
+
+  const {
+    mutate: createQuestion,
+    loading: createQuestionLoading,
+    error: createQuestionError,
+  } = useMutation(questionApi.createQuestion);
 
   // const {
   //   data: questionConfig,
@@ -202,31 +208,42 @@ export default function GenerateSurvey() {
           );
           console.log("Questions response:", questionsResponse);
 
-          if (questionsResponse.data && questionsResponse.data.length > 0) {
+          if (
+            questionsResponse.data &&
+            Array.isArray(questionsResponse.data) &&
+            questionsResponse.data.length > 0
+          ) {
             // Map API questions to component format
             const mappedQuestions = questionsResponse.data.map(
               (q: any, index: number) => ({
                 id: q.id || `q${Date.now()}_${index}`,
-                type: q.question_type || q.type || "TEXT",
-                question: q.question_text || q.question || "",
+                question_type: q.question_type || q.type || "TEXT",
+                question_text: q.question_text || q.question || "",
                 options: q.options || [],
                 required: q.required || false,
                 categoryId: q.categoryId || "",
                 order_index: q.order_index || index,
-                description: q.description || "",
-                placeholder: q.placeholder || "",
+                // description: q.description || "",
+                // placeholder: q.placeholder || "",
               })
             );
 
+            console.log("Setting questions:", mappedQuestions);
             setQuestions(mappedQuestions);
             setQuestionsGenerated(true);
-            console.log("Loaded questions:", mappedQuestions);
+            console.log("Loaded questions successfully:", mappedQuestions);
           } else {
-            console.log("No questions found for survey");
+            console.log(
+              "No questions found for survey or invalid response format"
+            );
+            setQuestions([]);
+            setQuestionsGenerated(false);
           }
         } catch (questionError) {
           console.warn("Could not load questions:", questionError);
           // Continue without questions - user can add them manually
+          setQuestions([]);
+          setQuestionsGenerated(false);
         }
 
         setCreatedSurvey(survey);
@@ -237,7 +254,7 @@ export default function GenerateSurvey() {
           description: survey.description,
           flow_type: survey.flow_type,
           survey_send_by: survey.survey_send_by,
-          categoryOfSurvey: survey.categoryOfSurvey,
+          surveyCategoryId: survey.surveyCategoryId,
         });
       } catch (error) {
         console.error("Error loading survey:", error);
@@ -329,22 +346,31 @@ export default function GenerateSurvey() {
 
   const createQuestionsForSurvey = async (surveyId: string) => {
     try {
+      console.log("^^^^Creating questions for survey:", surveyId);
+      console.log("^^^^^The value of the questions is : ", questions);
+
       const questionPromises = questions.map(async (q: any, index: number) => {
-        const questionData = {
+        const questionData: any = {
           surveyId,
-          question_type: mapQuestionType(q.type),
-          question_text: q.question,
+          // question_type: mapQuestionType(q.type),
+          question_type: q.question_type,
+          question_text: q.question_text,
           options: q.options || [],
           categoryId: q.categoryId || surveyCategoryId || "default-category",
-          subCategoryId: "default-subcategory",
+          // subCategoryId: "default-subcategory",
           order_index: index,
           required: q.required || false,
         };
+        if (q.mediaId) {
+          questionData.mediaId = q.mediaId;
+        }
+        console.log("^^^^^ questionData is", questionData);
 
         return await questionApi.createQuestion(questionData);
       });
 
       const results = await Promise.all(questionPromises);
+      console.log("^^^^^ results is", results);
       const createdQuestions = results
         .filter((r) => r.data)
         .map((r) => r.data!);
@@ -525,13 +551,25 @@ export default function GenerateSurvey() {
   const hasSurveyDataChanged = () => {
     if (!originalSurveyData) return true; // If no original data, consider it changed
 
-    return (
+    const hasChanged =
       originalSurveyData.title !== title ||
       originalSurveyData.description !== description ||
-      originalSurveyData.flow_type !== surveySettings.flow_type ||
-      originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
-      originalSurveyData.categoryOfSurvey !== surveyCategoryId
-    );
+      // originalSurveyData.flow_type !== surveySettings.flow_type ||
+      // originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
+      originalSurveyData.surveyCategoryId !== surveyCategoryId;
+
+    console.log("Survey data changed:", hasChanged, {
+      original: originalSurveyData,
+      current: {
+        title,
+        description,
+        flow_type: surveySettings.flow_type,
+        survey_send_by: surveySettings.survey_send_by,
+        surveyCategoryId: surveyCategoryId,
+      },
+    });
+
+    return hasChanged;
   };
 
   const handleStep1Continue = async () => {
@@ -550,6 +588,7 @@ export default function GenerateSurvey() {
       if (isEditMode && editSurveyId) {
         // Check if data has changed before making API call
         if (hasSurveyDataChanged()) {
+          console.log("Changes detected, calling update API");
           // Update existing survey
           const updateData = {
             title: title,
@@ -560,7 +599,7 @@ export default function GenerateSurvey() {
 
           const result = await updateSurvey(updateData);
           console.log("Update result:", result);
-          if (result) {
+          if (result && (result as any).data) {
             // Keep the existing survey data but update the fields
             setCreatedSurvey({
               ...createdSurvey,
@@ -577,12 +616,13 @@ export default function GenerateSurvey() {
               description: description,
               flow_type: surveySettings.flow_type,
               survey_send_by: surveySettings.survey_send_by,
-              categoryOfSurvey: surveyCategoryId,
+              surveyCategoryId: surveyCategoryId,
             });
           }
         } else {
           console.log("No changes detected, skipping update API call");
         }
+        // Move to next step regardless of whether update was made
         nextStep();
       } else {
         // Create new survey
@@ -595,6 +635,24 @@ export default function GenerateSurvey() {
       }
     } catch (error) {
       console.error("Error saving survey:", error);
+    }
+  };
+
+  const handleStep2Continue = async () => {
+    try {
+      console.log(">>>>> the value of the QUESTIONS is : ", questions);
+      if (questions.length === 0) {
+        alert("Please add at least one question");
+        // toast.error("Please add at least one question");
+        return;
+      }
+
+      const result = await createQuestionsForSurvey(createdSurvey.id);
+      console.log("Created questions RESULT is :", result);
+
+      nextStep();
+    } catch (error: any) {
+      console.log(">>> the error in the HANDLE STEP 2 function is : ", error);
     }
   };
 
@@ -997,6 +1055,7 @@ export default function GenerateSurvey() {
               <EnhancedQuestionEditor
                 questions={questions}
                 onQuestionsUpdate={handleQuestionUpdate}
+                survey={createdSurvey}
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
@@ -1004,7 +1063,7 @@ export default function GenerateSurvey() {
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
-                <Button onClick={nextStep}>
+                <Button onClick={handleStep2Continue}>
                   Continue
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>

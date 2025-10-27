@@ -61,21 +61,15 @@ export interface Survey {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+  surveyCategoryId: string;
+  autoGenerateQuestions: any;
 }
 
 // Question model from new API
 export interface Question {
   id: string;
   surveyId: string;
-  question_type:
-    | "TEXT"
-    | "MCQ"
-    | "RATING"
-    | "IMAGE"
-    | "VIDEO"
-    | "AUDIO"
-    | "FILE"
-    | "MATRIX";
+  question_type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
   question_text: string;
   options: any[];
   media?: Array<{
@@ -616,11 +610,12 @@ export const questionApi = {
     question_type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
     question_text: string;
     options: any[];
-    media?: Array<{
-      type: string;
-      url: string;
-      thumbnail_url?: string;
-    }>;
+    // media?: Array<{
+    //   type: string;
+    //   url: string;
+    //   thumbnail_url?: string;
+    // }>;
+    mediaId?: string;
     categoryId: string;
     // subCategoryId: string;
     order_index?: number;
