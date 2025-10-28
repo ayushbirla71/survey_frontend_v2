@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,12 +29,7 @@ import {
   DropResult,
 } from "@hello-pangea/dnd";
 import { useApi } from "@/hooks/useApi";
-import {
-  apiWithFallback,
-  categoriesApi,
-  demoData,
-  questionApi,
-} from "@/lib/api";
+import { apiWithFallback, categoriesApi, demoData } from "@/lib/api";
 
 type QuestionType = "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
 
@@ -55,20 +49,18 @@ interface OptionPayload {
   id?: string;
   text?: string;
   mediaId?: string | null;
-
   // scale
   rangeFrom?: number | null;
   rangeTo?: number | null;
   fromLabel?: string | null;
   toLabel?: string | null;
   icon?: string | null;
-
   // grid
   rowOptions?: GridOptionText[];
   columnOptions?: GridOptionText[];
 }
 
-interface QuestionVM {
+export interface QuestionVM {
   id: string;
   surveyId: string;
   question_type: QuestionType; // auto from media
@@ -76,9 +68,7 @@ interface QuestionVM {
   order_index: number;
   required: boolean;
   categoryId?: string;
-
   options: OptionPayload[]; // conforms to controller
-
   media?: MediaPreview[]; // preview only
   mediaId?: string | null; // backend id if uploaded
 }
@@ -87,7 +77,6 @@ interface QuestionEditorProps {
   questions: QuestionVM[];
   onQuestionsUpdate: (questions: QuestionVM[]) => void;
   survey: { id: string };
-  onSaveQuestion?: (q: QuestionVM) => Promise<void>;
 }
 
 const CATEGORY = {
@@ -104,12 +93,15 @@ const CATEGORY = {
 
 const isTextEntry = (n: string) =>
   [CATEGORY.SHORT_ANSWER, CATEGORY.PARAGRAPH].includes(n.toLowerCase());
+
 const isOptionsCat = (n: string) =>
   [CATEGORY.MULTIPLE_CHOICE, CATEGORY.CHECKBOXES, CATEGORY.DROPDOWN].includes(
     n.toLowerCase()
   );
+
 const isScaleCat = (n: string) =>
   [CATEGORY.LINEAR_SCALE, CATEGORY.RATING].includes(n.toLowerCase());
+
 const isGridCat = (n: string) =>
   [CATEGORY.MULTI_CHOICE_GRID, CATEGORY.CHECKBOX_GRID].includes(
     n.toLowerCase()
@@ -127,7 +119,6 @@ export default function EnhancedQuestionEditor({
   questions,
   onQuestionsUpdate,
   survey,
-  onSaveQuestion,
 }: QuestionEditorProps) {
   const [focusedQuestion, setFocusedQuestion] = useState<string | null>(null);
 
@@ -137,18 +128,20 @@ export default function EnhancedQuestionEditor({
       demoData.question_categories
     )
   );
+
   const categories = questionCategories || demoData.question_categories;
 
   const byId = useMemo(
-    () => new Map(questions.map((q) => [q.id, q])),
+    () => new Map(questions.map((q) => [q.id, q] as const)),
     [questions]
   );
+
   const reindex = (items: QuestionVM[]) =>
     items.map((q, i) => ({ ...q, order_index: i }));
 
   const getCategoryName = (categoryId?: string) => {
     if (!categoryId) return "";
-    const c = categories?.find((cat: any) => cat.id === categoryId);
+    const c = (categories as any[])?.find((cat) => cat.id === categoryId);
     return c ? String(c.type_name).trim() : String(categoryId);
   };
 
@@ -170,22 +163,22 @@ export default function EnhancedQuestionEditor({
           const current = q.options?.[0] || {};
           next.options = [
             {
-              rangeFrom: current.rangeFrom ?? 1,
-              rangeTo: current.rangeTo ?? 5,
-              fromLabel: current.fromLabel ?? null,
-              toLabel: current.toLabel ?? null,
-              icon: current.icon ?? null,
+              rangeFrom: (current as any).rangeFrom ?? 1,
+              rangeTo: (current as any).rangeTo ?? 5,
+              fromLabel: (current as any).fromLabel ?? null,
+              toLabel: (current as any).toLabel ?? null,
+              icon: (current as any).icon ?? null,
             },
           ];
         } else if (isGridCat(catName)) {
           const current = q.options?.[0] || {};
           next.options = [
             {
-              rowOptions: Array.isArray(current.rowOptions)
-                ? current.rowOptions
+              rowOptions: Array.isArray((current as any).rowOptions)
+                ? (current as any).rowOptions
                 : [],
-              columnOptions: Array.isArray(current.columnOptions)
-                ? current.columnOptions
+              columnOptions: Array.isArray((current as any).columnOptions)
+                ? (current as any).columnOptions
                 : [],
             },
           ];
@@ -197,6 +190,7 @@ export default function EnhancedQuestionEditor({
 
       return { ...q, [field]: value };
     });
+
     onQuestionsUpdate(updated);
   };
 
@@ -206,12 +200,14 @@ export default function EnhancedQuestionEditor({
     if (!q) return;
     handleQuestionChange(qid, "options", [...(q.options || []), { text: "" }]);
   };
+
   const removeOption = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
     const next = (q.options || []).filter((_, i) => i !== idx);
     handleQuestionChange(qid, "options", next);
   };
+
   const setOptionText = (qid: string, idx: number, text: string) => {
     const q = byId.get(qid);
     if (!q) return;
@@ -226,7 +222,7 @@ export default function EnhancedQuestionEditor({
     const q = byId.get(qid);
     if (!q) return;
     const base = q.options?.[0] || {};
-    const nextFirst = { ...base, [key]: val };
+    const nextFirst = { ...(base as any), [key]: val };
     handleQuestionChange(qid, "options", [nextFirst]);
   };
 
@@ -236,9 +232,11 @@ export default function EnhancedQuestionEditor({
     if (!q) return;
     const current = q.options?.[0] || {};
     const nextFirst = {
-      rowOptions: Array.isArray(current.rowOptions) ? current.rowOptions : [],
-      columnOptions: Array.isArray(current.columnOptions)
-        ? current.columnOptions
+      rowOptions: Array.isArray((current as any).rowOptions)
+        ? (current as any).rowOptions
+        : [],
+      columnOptions: Array.isArray((current as any).columnOptions)
+        ? (current as any).columnOptions
         : [],
     };
     handleQuestionChange(qid, "options", [nextFirst]);
@@ -248,48 +246,57 @@ export default function EnhancedQuestionEditor({
     ensureGridInit(qid);
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0];
+    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
     const rows = [...(first.rowOptions || []), { text: "" }];
     handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
   };
+
   const addGridColumn = (qid: string) => {
     ensureGridInit(qid);
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0];
+    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
     const cols = [...(first.columnOptions || []), { text: "" }];
     handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
   };
+
   const setGridRowText = (qid: string, idx: number, text: string) => {
     const q = byId.get(qid);
     if (!q) return;
     const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const rows = (first.rowOptions || []).map((r, i) =>
+    const rows = (first.rowOptions || []).map((r: any, i: number) =>
       i === idx ? { ...r, text } : r
     );
     handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
   };
+
   const setGridColumnText = (qid: string, idx: number, text: string) => {
     const q = byId.get(qid);
     if (!q) return;
     const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const cols = (first.columnOptions || []).map((c, i) =>
+    const cols = (first.columnOptions || []).map((c: any, i: number) =>
       i === idx ? { ...c, text } : c
     );
     handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
   };
+
   const removeGridRow = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
     const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const rows = (first.rowOptions || []).filter((_, i) => i !== idx);
+    const rows = (first.rowOptions || []).filter(
+      (_: any, i: number) => i !== idx
+    );
     handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
   };
+
   const removeGridColumn = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
     const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const cols = (first.columnOptions || []).filter((_, i) => i !== idx);
+    const cols = (first.columnOptions || []).filter(
+      (_: any, i: number) => i !== idx
+    );
     handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
   };
 
@@ -326,12 +333,11 @@ export default function EnhancedQuestionEditor({
     setFocusedQuestion(copy.id);
   };
 
-  const removeQuestion = async (id: string) => {
+  // IMPORTANT: no API call here — defer deletes to parent Continue sync
+  const removeQuestion = (id: string) => {
     const next = reindex(questions.filter((q) => q.id !== id));
     onQuestionsUpdate(next);
     if (focusedQuestion === id) setFocusedQuestion(null);
-
-    await questionApi.deleteQuestion(id);
   };
 
   const onDragEnd = (result: DropResult) => {
@@ -362,13 +368,6 @@ export default function EnhancedQuestionEditor({
     handleQuestionChange(qid, "media", []);
     handleQuestionChange(qid, "mediaId", null);
     handleQuestionChange(qid, "question_type", "TEXT");
-  };
-
-  const saveOne = async (qid: string) => {
-    if (!onSaveQuestion) return;
-    const q = byId.get(qid);
-    if (!q) return;
-    await onSaveQuestion(q);
   };
 
   return (
@@ -413,6 +412,7 @@ export default function EnhancedQuestionEditor({
                                 <div
                                   {...dragProvided.dragHandleProps}
                                   className="cursor-grab text-slate-500"
+                                  title="Drag to reorder"
                                 >
                                   <GripVertical className="h-4 w-4" />
                                 </div>
@@ -420,14 +420,9 @@ export default function EnhancedQuestionEditor({
                                   {index + 1}
                                 </span>
                               </div>
+
                               <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => saveOne(q.id)}
-                                >
-                                  Save
-                                </Button>
+                                {/* Save button removed intentionally */}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -448,19 +443,22 @@ export default function EnhancedQuestionEditor({
                             </CardHeader>
 
                             <CardContent className="space-y-4">
-                              {/* Question text -> question_text */}
-                              <Input
-                                value={q.question_text}
-                                onChange={(e) =>
-                                  handleQuestionChange(
-                                    q.id,
-                                    "question_text",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Question"
-                                className="text-lg font-medium"
-                              />
+                              {/* Question text */}
+                              <div className="space-y-1">
+                                <Label>Question</Label>
+                                <Input
+                                  value={q.question_text}
+                                  onChange={(e) =>
+                                    handleQuestionChange(
+                                      q.id,
+                                      "question_text",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Question"
+                                  className="text-lg font-medium"
+                                />
+                              </div>
 
                               {/* Category */}
                               <div className="space-y-1">
@@ -472,13 +470,15 @@ export default function EnhancedQuestionEditor({
                                   }
                                 >
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Select category">
-                                      {getCategoryName(q.categoryId) ||
-                                        "Select category"}
-                                    </SelectValue>
+                                    <SelectValue
+                                      placeholder={
+                                        getCategoryName(q.categoryId) ||
+                                        "Select category"
+                                      }
+                                    />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {categories?.map((cat: any) => (
+                                    {(categories as any[])?.map((cat) => (
                                       <SelectItem key={cat.id} value={cat.id}>
                                         {cat.type_name}
                                       </SelectItem>
@@ -523,6 +523,7 @@ export default function EnhancedQuestionEditor({
                                     </Button>
                                   ) : null}
                                 </div>
+
                                 {q.media && q.media.length > 0 ? (
                                   <div className="text-green-700 text-sm flex items-center gap-2">
                                     {q.question_type === "IMAGE" && (
@@ -534,7 +535,9 @@ export default function EnhancedQuestionEditor({
                                     {q.question_type === "AUDIO" && (
                                       <Mic className="h-4 w-4" />
                                     )}
-                                    Attached • type: {q.question_type}
+                                    <span>
+                                      Attached • type: {q.question_type}
+                                    </span>
                                   </div>
                                 ) : (
                                   <div className="text-slate-500 text-sm">
@@ -551,13 +554,7 @@ export default function EnhancedQuestionEditor({
                                   </Label>
                                   <Input
                                     disabled
-                                    placeholder={
-                                      getCategoryName(
-                                        q.categoryId
-                                      ).toLowerCase() === "paragraph"
-                                        ? "Long answer"
-                                        : "Short answer"
-                                    }
+                                    placeholder="Short/Long answer"
                                   />
                                 </div>
                               )}
@@ -572,9 +569,11 @@ export default function EnhancedQuestionEditor({
                                       size="sm"
                                       onClick={() => addOption(q.id)}
                                     >
+                                      <Plus className="mr-2 h-4 w-4" />
                                       Add option
                                     </Button>
                                   </div>
+
                                   <div className="space-y-2">
                                     {(q.options || []).map((opt, idx) => (
                                       <div
@@ -582,7 +581,7 @@ export default function EnhancedQuestionEditor({
                                         className="flex items-center gap-2"
                                       >
                                         <Input
-                                          value={opt.text ?? ""}
+                                          value={opt?.text ?? ""}
                                           onChange={(e) =>
                                             setOptionText(
                                               q.id,
@@ -604,6 +603,7 @@ export default function EnhancedQuestionEditor({
                                         </Button>
                                       </div>
                                     ))}
+
                                     {(q.options || []).length === 0 && (
                                       <div className="text-slate-500 text-sm">
                                         No options yet. Add at least one option.
@@ -623,6 +623,7 @@ export default function EnhancedQuestionEditor({
                                       ? "Rating scale"
                                       : "Linear scale"}
                                   </Label>
+
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div className="space-y-1">
                                       <Label>Min</Label>
@@ -684,28 +685,28 @@ export default function EnhancedQuestionEditor({
                                       </div>
                                     </div>
                                   </div>
+
                                   <div className="text-slate-500 text-xs">
                                     Tip: Common ranges are 1–5 or 1–10.
                                   </div>
                                 </div>
                               )}
 
-                              {/* Multi-choice grid / Checkbox grid: rows left, columns right */}
+                              {/* Multi-choice grid / Checkbox grid */}
                               {showGrid && (
                                 <div className="space-y-3">
                                   <Label>Grid options</Label>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Rows column */}
+                                    {/* Rows */}
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between">
                                         <Label>Rows</Label>
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => {
-                                            addGridRow(q.id);
-                                          }}
+                                          onClick={() => addGridRow(q.id)}
                                         >
+                                          <Plus className="mr-2 h-4 w-4" />
                                           Add row
                                         </Button>
                                       </div>
@@ -717,7 +718,7 @@ export default function EnhancedQuestionEditor({
                                               className="flex items-center gap-2"
                                             >
                                               <Input
-                                                value={row.text ?? ""}
+                                                value={row?.text ?? ""}
                                                 onChange={(e) =>
                                                   setGridRowText(
                                                     q.id,
@@ -749,17 +750,16 @@ export default function EnhancedQuestionEditor({
                                       </div>
                                     </div>
 
-                                    {/* Columns column */}
+                                    {/* Columns */}
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between">
                                         <Label>Columns</Label>
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => {
-                                            addGridColumn(q.id);
-                                          }}
+                                          onClick={() => addGridColumn(q.id)}
                                         >
+                                          <Plus className="mr-2 h-4 w-4" />
                                           Add column
                                         </Button>
                                       </div>
@@ -772,7 +772,7 @@ export default function EnhancedQuestionEditor({
                                             className="flex items-center gap-2"
                                           >
                                             <Input
-                                              value={col.text ?? ""}
+                                              value={col?.text ?? ""}
                                               onChange={(e) =>
                                                 setGridColumnText(
                                                   q.id,
@@ -803,6 +803,7 @@ export default function EnhancedQuestionEditor({
                                       </div>
                                     </div>
                                   </div>
+
                                   <div className="text-slate-500 text-xs">
                                     Respondents select one option per row for
                                     multi‑choice grid, or multiple per row for
@@ -817,6 +818,7 @@ export default function EnhancedQuestionEditor({
                     </Draggable>
                   );
                 })}
+
               {dropProvided.placeholder}
             </div>
           )}

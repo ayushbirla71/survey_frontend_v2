@@ -50,6 +50,7 @@ import {
   demoData,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
+import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
 
 export default function GenerateSurvey() {
@@ -64,6 +65,7 @@ export default function GenerateSurvey() {
   const [description, setDescription] = useState("");
   const [autoGenerateQuestions, setAutoGenerateQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
+  const [originalQuestions, setOriginalQuestions] = useState<any[]>([]);
   const [questionsGenerated, setQuestionsGenerated] = useState(false);
   const [generationMethod, setGenerationMethod] = useState<
     "openai" | "static" | null
@@ -230,6 +232,7 @@ export default function GenerateSurvey() {
 
             console.log("Setting questions:", mappedQuestions);
             setQuestions(mappedQuestions);
+            setOriginalQuestions(mappedQuestions);
             setQuestionsGenerated(true);
             console.log("Loaded questions successfully:", mappedQuestions);
           } else {
@@ -237,12 +240,14 @@ export default function GenerateSurvey() {
               "No questions found for survey or invalid response format"
             );
             setQuestions([]);
+            setOriginalQuestions([]);
             setQuestionsGenerated(false);
           }
         } catch (questionError) {
           console.warn("Could not load questions:", questionError);
           // Continue without questions - user can add them manually
           setQuestions([]);
+          setOriginalQuestions([]);
           setQuestionsGenerated(false);
         }
 
@@ -304,6 +309,20 @@ export default function GenerateSurvey() {
   };
 
   const nextStep = () => {
+    if (step === 3) {
+      if (surveySettings.survey_send_by == "NONE") {
+        // Generate HTML when moving to the preview step
+        const html = generateSurveyHtml({
+          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
+          description: description,
+          questions,
+        });
+        setSurveyHtml(html);
+
+        setStep(step + 2);
+        return;
+      }
+    }
     if (step === 4) {
       // Generate HTML when moving to the preview step
       const html = generateSurveyHtml({
@@ -647,8 +666,27 @@ export default function GenerateSurvey() {
         return;
       }
 
-      const result = await createQuestionsForSurvey(createdSurvey.id);
-      console.log("Created questions RESULT is :", result);
+      if (!createdSurvey?.id) {
+        // If for some reason survey isn't created yet, create first
+        // or preserve your existing flow that ensures createdSurvey is set in step 1
+        console.warn(
+          "No survey id found. Make sure Step 1 creates/sets survey."
+        );
+        return;
+      }
+
+      // Persist only on continue: create/update/delete in a single pass
+      const updated = await syncSurveyQuestions(
+        createdSurvey.id,
+        originalQuestions,
+        questions
+      );
+
+      // Update local questions with real ids for newly created items
+      setQuestions(updated);
+
+      // Original becomes current baseline for any further edits
+      setOriginalQuestions(updated);
 
       nextStep();
     } catch (error: any) {
@@ -732,7 +770,7 @@ export default function GenerateSurvey() {
                   3
                 </div>
                 <span className="mt-2 text-sm font-medium">
-                  Target Audience
+                  Survey Settings
                 </span>
               </div>
               <div className="flex-1 h-px bg-slate-200 mx-4" />
@@ -1129,7 +1167,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="EMAIL">Email</SelectItem>
                         <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
                         <SelectItem value="BOTH">Both</SelectItem>
-                        <SelectItem value="NONE">None (Link Only)</SelectItem>
+                        <SelectItem value="NONE">Public (Link Only)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
