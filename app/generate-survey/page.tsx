@@ -311,15 +311,8 @@ export default function GenerateSurvey() {
   const nextStep = () => {
     if (step === 3) {
       if (surveySettings.survey_send_by == "NONE") {
-        // Generate HTML when moving to the preview step
-        const html = generateSurveyHtml({
-          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
-          description: description,
-          questions,
-        });
-        setSurveyHtml(html);
-
-        setStep(step + 2);
+        // Skip audience step and go directly to preview
+        setStep(5);
         return;
       }
     }
@@ -335,7 +328,15 @@ export default function GenerateSurvey() {
     setStep(step + 1);
   };
 
-  const prevStep = () => setStep(step - 1);
+  const prevStep = () => {
+    // Handle back navigation properly
+    if (step === 5 && surveySettings.survey_send_by === "NONE") {
+      // If on preview and survey_sent_by is NONE, go back to settings (step 3)
+      setStep(3);
+      return;
+    }
+    setStep(step - 1);
+  };
 
   const handleQuestionUpdate = (updatedQuestions: any) => {
     setQuestions(updatedQuestions);
@@ -357,9 +358,22 @@ export default function GenerateSurvey() {
       if (result.data) {
         setPublicLink(result.data.publicUrl);
         setShareCode(result.data.shareCode);
+      } else {
+        // Fallback: Generate local URL if API doesn't return one
+        const baseUrl = window.location.origin;
+        const localPublicLink = `${baseUrl}/survey/${createdSurvey.id}`;
+        setPublicLink(localPublicLink);
+        setShareCode(createdSurvey.id);
+        toast.info("Using local survey link");
       }
     } catch (error) {
       console.error("Failed to generate public link:", error);
+      // Fallback: Generate local URL
+      const baseUrl = window.location.origin;
+      const localPublicLink = `${baseUrl}/survey/${createdSurvey.id}`;
+      setPublicLink(localPublicLink);
+      setShareCode(createdSurvey.id);
+      toast.warning("API unavailable, using local survey link");
     }
   };
 
@@ -1380,8 +1394,9 @@ export default function GenerateSurvey() {
                     </>
                   ) : (
                     <>
-                      Publish Survey to {audience.targetCount.toLocaleString()}{" "}
-                      People
+                      {/* Publish Survey to {audience.targetCount.toLocaleString()}{" "}
+                      People */}
+                      Publish Survey
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
