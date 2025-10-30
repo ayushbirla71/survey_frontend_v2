@@ -17,8 +17,8 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
-import { questionApi, responseApi } from "@/lib/api";
 import { toast } from "react-toastify";
+import { questionApi } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -64,33 +64,45 @@ export default function PublicSurveyPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch survey details
+      // Fetch survey details (no auth required for public surveys)
       const surveyResponse = await fetch(
-        `http://localhost:5000/api/surveys/${surveyId}`
+        `http://localhost:5000/api/surveys/${surveyId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
       );
 
       if (!surveyResponse.ok) {
-        throw new Error("Survey not found");
+        if (surveyResponse.status === 404) {
+          throw new Error("Survey not found");
+        } else if (surveyResponse.status === 403) {
+          throw new Error("This survey is not publicly accessible");
+        }
+        throw new Error("Failed to load survey");
       }
 
       const surveyData = await surveyResponse.json();
 
-      // Fetch questions for the survey
+      // Fetch questions for the survey (no auth required)
       const questionsResponse = await questionApi.getQuestionsBySurvey(
         surveyId
       );
+      console.log("Questions response:", questionsResponse);
 
       if (questionsResponse.data && Array.isArray(questionsResponse.data)) {
         const sortedQuestions = questionsResponse.data.sort(
-          (a, b) => (a.order_index || 0) - (b.order_index || 0)
+          (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0)
         );
 
         setSurvey({
-          id: surveyData.survey.id,
-          title: surveyData.survey.title,
-          description: surveyData.survey.description,
+          id: surveyData.survey?.id || surveyData.id,
+          title: surveyData.survey?.title || surveyData.title,
+          description: surveyData.survey?.description || surveyData.description,
           questions: sortedQuestions,
-          settings: surveyData.survey.settings || {},
+          settings: surveyData.survey?.settings || surveyData.settings || {},
         });
       } else {
         throw new Error("No questions found for this survey");
@@ -112,10 +124,7 @@ export default function PublicSurveyPage() {
 
   const handleNext = () => {
     const currentQuestion = survey?.questions[currentQuestionIndex];
-    if (
-      currentQuestion?.required &&
-      !answers[currentQuestion.id]
-    ) {
+    if (currentQuestion?.required && !answers[currentQuestion.id]) {
       toast.error("This question is required");
       return;
     }
@@ -174,9 +183,26 @@ export default function PublicSurveyPage() {
         answers: formattedAnswers,
       };
 
-      const result = await responseApi.submitResponse(responseData);
+      // Submit response without authentication (public survey)
+      const submitResponse = await fetch(
+        `http://localhost:5000/api/responses`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(responseData),
+        }
+      );
 
-      if (result.data) {
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to submit survey");
+      }
+
+      const result = await submitResponse.json();
+
+      if (result.data || result.id) {
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
       } else {
@@ -211,7 +237,9 @@ export default function PublicSurveyPage() {
         // Check if options exist to determine if it's MCQ, checkbox, etc.
         if (options && options.length > 0) {
           // Check if it's a checkbox type (multiple selection)
-          const isCheckbox = options.some((opt: any) => opt.type === "checkbox");
+          const isCheckbox = options.some(
+            (opt: any) => opt.type === "checkbox"
+          );
 
           if (isCheckbox) {
             // Checkbox - multiple selection
@@ -232,7 +260,9 @@ export default function PublicSurveyPage() {
                         } else {
                           handleAnswerChange(
                             question.id,
-                            currentAnswers.filter((a: string) => a !== option.text)
+                            currentAnswers.filter(
+                              (a: string) => a !== option.text
+                            )
                           );
                         }
                       }}
@@ -249,7 +279,9 @@ export default function PublicSurveyPage() {
             return (
               <RadioGroup
                 value={answer || ""}
-                onValueChange={(value) => handleAnswerChange(question.id, value)}
+                onValueChange={(value) =>
+                  handleAnswerChange(question.id, value)
+                }
               >
                 {options.map((option: any, idx: number) => (
                   <div key={idx} className="flex items-center space-x-2">
@@ -325,7 +357,8 @@ export default function PublicSurveyPage() {
                 Survey Not Found
               </h2>
               <p className="text-slate-600 mb-4">
-                {error || "The survey you're looking for doesn't exist or has been removed."}
+                {error ||
+                  "The survey you're looking for doesn't exist or has been removed."}
               </p>
               <Button onClick={() => router.push("/")}>Go to Home</Button>
             </div>
@@ -440,4 +473,3 @@ export default function PublicSurveyPage() {
     </div>
   );
 }
-

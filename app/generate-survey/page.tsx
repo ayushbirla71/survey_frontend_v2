@@ -94,6 +94,7 @@ export default function GenerateSurvey() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [publicLink, setPublicLink] = useState<string | null>(null);
   const [shareCode, setShareCode] = useState<string | null>(null);
+  const [publishLoading, setPublishLoading] = useState(false);
 
   // Store original survey data for comparison
   const [originalSurveyData, setOriginalSurveyData] = useState<any>(null);
@@ -139,7 +140,7 @@ export default function GenerateSurvey() {
 
   const {
     mutate: createSurvey,
-    loading: createLoading,
+    loading: createSurveyLoading,
     error: createError,
   } = useMutation(surveyApi.createSurvey);
 
@@ -464,44 +465,48 @@ export default function GenerateSurvey() {
 
   const handlePublishSurvey = async () => {
     try {
-      // Step 1: Create the survey with new API structure
-      const surveyData = {
-        title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
-        description: description,
-        flow_type: surveySettings.flow_type,
-        survey_send_by: surveySettings.survey_send_by,
-        settings: {
-          isAnonymous: surveySettings.isAnonymous,
-          showProgressBar: surveySettings.showProgressBar,
-          shuffleQuestions: surveySettings.shuffleQuestions,
-          allowMultipleSubmissions: surveySettings.allowMultipleSubmissions,
-        },
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      setPublishLoading(true);
+
+      // Update the survey status to PUBLISHED
+      const updateData = {
         status: "PUBLISHED" as const,
         scheduled_type: "IMMEDIATE" as const,
-        surveyCategoryId,
-        autoGenerateQuestions,
+        // settings: {
+        //   isAnonymous: surveySettings.isAnonymous,
+        //   showProgressBar: surveySettings.showProgressBar,
+        //   shuffleQuestions: surveySettings.shuffleQuestions,
+        //   allowMultipleSubmissions: surveySettings.allowMultipleSubmissions,
+        // },
       };
 
-      const result = await createSurvey(surveyData);
+      const result = await updateSurvey(updateData);
+      console.log("Update result:", result);
 
-      if (result && result.id) {
-        setCreatedSurvey(result);
+      if (result) {
+        console.log("Survey updated successfully:", result);
+        // Update local survey state
+        setCreatedSurvey({
+          ...createdSurvey,
+          status: "PUBLISHED",
+          scheduled_type: "IMMEDIATE",
+          // settings: updateData.settings,
+        });
 
-        // Step 2: Create questions for the survey
-        if (questions.length > 0) {
-          await createQuestionsForSurvey(result.id);
-        }
-
-        // Step 3: Generate HTML for preview
+        // Store survey data for later use
         const html = generateSurveyHtml({
-          id: result.id,
-          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
+          id: createdSurvey.id,
+          title: title,
           description: description,
           questions,
         });
+        // console.log("HTML generated:", html);
         setSurveyHtml(html);
 
-        // Store survey data for later use
         localStorage.setItem("lastSurveyHtml", html);
         localStorage.setItem(
           "lastSurveyTitle",
@@ -515,28 +520,30 @@ export default function GenerateSurvey() {
         );
         localStorage.setItem(
           "lastSurveyData",
-          JSON.stringify({ ...surveyData, id: result.id })
+          JSON.stringify({
+            ...createdSurvey,
+            status: "PUBLISHED",
+            // settings: updateData.settings,
+          })
         );
+
+        toast.success("Survey published successfully!");
 
         // Navigate to share step
         setStep(6);
       } else {
-        // API failed, fall back to localStorage method
-        handleLocalSurveyCreation({
-          title: `${getCategoryName(surveyCategoryId)} Survey - (${title})`,
-          description: description,
-          category: surveyCategoryId,
-          questions: questions,
-          audience: audience,
-        });
+        console.log("Failed to publish survey. Please try again.");
+        toast.error("Failed to publish survey. Please try again.");
       }
-    } catch (error) {
-      console.error("Failed to create survey via API:", error);
-      // Fall back to localStorage method
-      // handleLocalSurveyCreation(surveyData);
+    } catch (error: any) {
+      console.error("Error publishing survey:", error);
+      toast.error(error.message || "Failed to publish survey");
+    } finally {
+      setPublishLoading(false);
     }
   };
 
+  // Fallback method for local survey creation (kept for backward compatibility)
   const handleLocalSurveyCreation = (surveyData: any) => {
     // Save to localStorage for thank you page
     const surveyId = `survey-${Date.now()}`;
@@ -1385,17 +1392,16 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handlePublishSurvey}
                   size="lg"
-                  disabled={createLoading}
+                  disabled={publishLoading}
+                  className="bg-violet-600 hover:bg-violet-700"
                 >
-                  {createLoading ? (
+                  {publishLoading ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Publishing...
                     </>
                   ) : (
                     <>
-                      {/* Publish Survey to {audience.targetCount.toLocaleString()}{" "}
-                      People */}
                       Publish Survey
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </>

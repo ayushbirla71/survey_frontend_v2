@@ -295,7 +295,7 @@ export default function SurveyPreview({
   fetchKinds?: (ids: string[]) => Promise<KindsMap>;
 }) {
   const list = Array.isArray(questions) ? questions : [];
-  console.log("questions is", questions);
+  // console.log("questions is", questions);
 
   const categoryIds = useMemo(() => {
     const set = new Set<string>();
