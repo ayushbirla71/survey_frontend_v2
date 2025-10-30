@@ -26,7 +26,7 @@ import {
   Star,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { surveyApi, questionApi, categoriesApi } from "@/lib/api";
+import { surveyApi, questionApi, categoriesApi, responseApi } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -80,9 +80,9 @@ function normKindStr(s?: string): GKind | null {
   if (k === "linearscale" || k === "scale" || k === "likert")
     return "linear scale";
   if (k === "rating" || k === "stars") return "rating";
-  if (k === "multiplechoicegrid" || k === "mcqgrid" || k === "gridradio")
+  if (k === "multichoicegrid" || k === "mcqgrid" || k === "gridradio")
     return "multi-choice grid";
-  if (k === "checkboxesgrid" || k === "gridcheckbox") return "checkbox grid";
+  if (k === "checkboxgrid" || k === "gridcheckbox") return "checkbox grid";
   if (k === "date") return "date";
   if (k === "time") return "time";
   return null;
@@ -163,13 +163,12 @@ export default function PublicSurveyPage() {
         console.log("JSON is", json);
 
         const arr = Array.isArray(json?.data) ? json.data : [];
-        console.log("Arr is", arr);
         const result = arr.reduce((acc: KindsMap, item: any) => {
-          console.log("Item is", item);
           const nk = normKindStr(item?.type_name ?? "") ?? "short answer";
           acc[item.id] = nk;
           return acc;
         }, {});
+        console.log("Result is", result);
         setKindsMap(result);
       } catch (e) {
         console.warn("Failed to load category kinds:", e);
@@ -294,25 +293,13 @@ export default function PublicSurveyPage() {
         user_metadata: {},
         answers: formattedAnswers,
       };
+      console.log("Formatted answers:", formattedAnswers);
 
       // Submit response without authentication (public survey)
-      const submitResponse = await fetch(
-        `http://localhost:5000/api/responses`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(responseData),
-        }
-      );
+      const submitResponse = await responseApi.submitResponse(responseData);
+      console.log("submitResponse is", submitResponse);
 
-      if (!submitResponse.ok) {
-        const errorData = await submitResponse.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to submit survey");
-      }
-
-      const result = await submitResponse.json();
+      const result = submitResponse;
 
       if (result.data || result.id) {
         setSubmitted(true);
@@ -523,6 +510,194 @@ export default function PublicSurveyPage() {
               />
             </button>
           ))}
+        </div>
+      );
+    }
+
+    // Multi-choice grid (radio buttons per row)
+    if (kind === "multi-choice grid") {
+      const first = opts[0];
+      const rows =
+        first?.rowOptions?.map((r: any, i: number) => ({
+          id: r.id ?? `r-${i}`,
+          text: r.text ?? `Row ${i + 1}`,
+        })) ?? [];
+      const cols =
+        first?.columnOptions?.map((c: any, j: number) => ({
+          id: c.id ?? `c-${j}`,
+          text: c.text ?? `Column ${j + 1}`,
+        })) ?? [];
+
+      const gridAnswer = (answer as Record<string, string>) || {};
+
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-[480px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="px-3 py-2 text-left text-slate-500 font-medium"></th>
+                {cols.map((c: { id: string; text: string }) => (
+                  <th
+                    key={c.id}
+                    className="px-3 py-2 text-slate-700 font-medium text-center"
+                  >
+                    {c.text}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: { id: string; text: string }) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-3 py-2 text-slate-700">{r.text}</td>
+
+                  {cols.map((c: { id: string; text: string }) => {
+                    const cellId = `${question.id}-grid-mc-${r.id}-${c.id}`;
+                    return (
+                      <td key={c.id} className="px-3 py-2 text-center">
+                        {/* RadioGroup INSIDE the cell, not wrapping the row */}
+                        <RadioGroup
+                          value={gridAnswer[r.id] ?? ""}
+                          onValueChange={(selectedValue) => {
+                            const newGridAnswer = {
+                              ...gridAnswer,
+                              [r.id]: selectedValue,
+                            };
+                            handleAnswerChange(question.id, newGridAnswer);
+                          }}
+                        >
+                          <div key={c.id} className="px-3 py-2 text-center">
+                            <RadioGroupItem id={cellId} value={c.id} />
+                          </div>
+                        </RadioGroup>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      // return (
+      //   <div className="overflow-x-auto">
+      //     <table className="min-w-[480px] border-collapse text-sm">
+      //       <thead>
+      //         <tr>
+      //           <th className="px-3 py-2 text-left text-slate-500 font-medium">
+      //             {" "}
+      //           </th>
+      //           {cols.map((c: { id: string; text: string }) => (
+      //             <th
+      //               key={c.id}
+      //               className="px-3 py-2 text-slate-700 font-medium text-center"
+      //             >
+      //               {c.text}
+      //             </th>
+      //           ))}
+      //         </tr>
+      //       </thead>
+      //       <tbody>
+      //         {rows.map((r: { id: string; text: string }) => (
+      //           <tr key={r.id} className="border-t">
+      //             <td className="px-3 py-2 text-slate-700">{r.text}</td>
+
+      //             {/* Each row is its own RadioGroup */}
+      //             <RadioGroup
+      //               key={r.id}
+      //               value={gridAnswer[r.id] ?? ""}
+      //               onValueChange={(selectedValue) => {
+      //                 const newGridAnswer = {
+      //                   ...gridAnswer,
+      //                   [r.id]: selectedValue,
+      //                 };
+      //                 handleAnswerChange(question.id, newGridAnswer);
+      //               }}
+      //               className="contents" // keeps table layout intact
+      //             >
+      //               {cols.map((c: { id: string; text: string }) => {
+      //                 const cellId = `${question.id}-grid-mc-${r.id}-${c.id}`;
+      //                 return (
+      //                   <td key={c.id} className="px-3 py-2 text-center">
+      //                     <RadioGroupItem id={cellId} value={c.id} />
+      //                   </td>
+      //                 );
+      //               })}
+      //             </RadioGroup>
+      //           </tr>
+      //         ))}
+      //       </tbody>
+      //     </table>
+      //   </div>
+      // );
+    }
+
+    // Checkbox grid (checkboxes per row)
+    if (kind === "checkbox grid") {
+      const first = opts[0];
+      const rows =
+        first?.rowOptions?.map((r: any, i: number) => ({
+          id: r.id ?? `r-${i}`,
+          text: r.text ?? `Row ${i + 1}`,
+        })) ?? [];
+      const cols =
+        first?.columnOptions?.map((c: any, j: number) => ({
+          id: c.id ?? `c-${j}`,
+          text: c.text ?? `Column ${j + 1}`,
+        })) ?? [];
+
+      const gridAnswer = (answer as Record<string, string[]>) || {};
+
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-[480px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="px-3 py-2 text-left text-slate-500 font-medium">
+                  {" "}
+                </th>
+                {cols.map((c: { id: string; text: string }) => (
+                  <th
+                    key={c.id}
+                    className="px-3 py-2 text-slate-700 font-medium text-center"
+                  >
+                    {c.text}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: { id: string; text: string }) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-3 py-2 text-slate-700">{r.text}</td>
+                  {cols.map((c: { id: string; text: string }) => {
+                    const cellId = `${question.id}-grid-cb-${r.id}-${c.id}`;
+                    const rowAnswers = gridAnswer[r.id] || [];
+                    const isChecked = rowAnswers.includes(c.id);
+
+                    return (
+                      <td key={c.id} className="px-3 py-2 text-center">
+                        <Checkbox
+                          id={cellId}
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            const newRowAnswers = checked
+                              ? [...rowAnswers, c.id]
+                              : rowAnswers.filter((id: string) => id !== c.id);
+                            const newGridAnswer = {
+                              ...gridAnswer,
+                              [r.id]: newRowAnswers,
+                            };
+                            handleAnswerChange(question.id, newGridAnswer);
+                          }}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       );
     }

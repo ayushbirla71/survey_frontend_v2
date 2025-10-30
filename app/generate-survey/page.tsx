@@ -52,6 +52,7 @@ import {
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
+import { ro } from "date-fns/locale";
 
 export default function GenerateSurvey() {
   const searchParams = useSearchParams();
@@ -148,8 +149,8 @@ export default function GenerateSurvey() {
     mutate: updateSurvey,
     loading: updateLoading,
     error: updateError,
-  } = useMutation((updateData: any) =>
-    surveyApi.updateSurvey(editSurveyId!, updateData)
+  } = useMutation((params: { surveyId: string; surveyData: any }) =>
+    surveyApi.updateSurvey(params.surveyId, params.surveyData)
   );
 
   // const {
@@ -206,7 +207,7 @@ export default function GenerateSurvey() {
 
         // Load questions for the survey
         try {
-          const questionsResponse = await questionApi.getQuestionsBySurvey(
+          const questionsResponse = await questionApi.getQuestions(
             editSurveyId
           );
           console.log("Questions response:", questionsResponse);
@@ -223,6 +224,8 @@ export default function GenerateSurvey() {
                 question_type: q.question_type || q.type || "TEXT",
                 question_text: q.question_text || q.question || "",
                 options: q.options || [],
+                rowOptions: q.rowOptions || [],
+                columnOptions: q.columnOptions || [],
                 required: q.required || false,
                 categoryId: q.categoryId || "",
                 order_index: q.order_index || index,
@@ -484,7 +487,10 @@ export default function GenerateSurvey() {
         // },
       };
 
-      const result = await updateSurvey(updateData);
+      const result = await updateSurvey({
+        surveyId: createdSurvey.id,
+        surveyData: updateData,
+      });
       console.log("Update result:", result);
 
       if (result) {
@@ -637,7 +643,10 @@ export default function GenerateSurvey() {
             survey_send_by: surveySettings.survey_send_by,
           };
 
-          const result = await updateSurvey(updateData);
+          const result = await updateSurvey({
+            surveyId: editSurveyId!,
+            surveyData: updateData,
+          });
           console.log("Update result:", result);
           if (result && (result as any).data) {
             // Keep the existing survey data but update the fields

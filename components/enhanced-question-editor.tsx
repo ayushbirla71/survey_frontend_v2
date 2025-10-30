@@ -69,6 +69,8 @@ export interface QuestionVM {
   required: boolean;
   categoryId?: string;
   options: OptionPayload[]; // conforms to controller
+  rowOptions?: GridOptionText[];
+  columnOptions?: GridOptionText[];
   media?: MediaPreview[]; // preview only
   mediaId?: string | null; // backend id if uploaded
 }
