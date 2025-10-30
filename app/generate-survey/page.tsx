@@ -694,6 +694,21 @@ export default function GenerateSurvey() {
     }
   };
 
+  const fetchKinds = async (ids: string[]) => {
+    // Example using a typed API client; shape this to your backend
+    // Expected response: { data: Array<{ id: string; kind: string }> }
+    const resp = await categoriesApi.getQuestionCategories();
+    const data = Array.isArray(resp?.data) ? resp.data : [];
+    const rows = data.filter((r: any) => ids.includes(r.id));
+    console.log("****** Rows is", rows);
+    const map = rows.reduce((acc: Record<string, string>, r: any) => {
+      // Normalize to the supported set inside preview
+      acc[r.id] = r.type_name; // preview will normalize via normKindStr
+      return acc;
+    }, {});
+    return map as Record<string, any>;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto max-w-6xl py-6 px-4">
@@ -1164,9 +1179,9 @@ export default function GenerateSurvey() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="EMAIL">Email</SelectItem>
+                        {/* <SelectItem value="EMAIL">Email</SelectItem>
                         <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                        <SelectItem value="BOTH">Both</SelectItem>
+                        <SelectItem value="BOTH">Both</SelectItem> */}
                         <SelectItem value="NONE">Public (Link Only)</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1240,7 +1255,11 @@ export default function GenerateSurvey() {
                   Back
                 </Button>
                 <Button onClick={nextStep}>
-                  Continue to Audience
+                  {surveySettings.survey_send_by == "NONE" ? (
+                    <>Continue to Preview & Publish</>
+                  ) : (
+                    <>Continue to Audience</>
+                  )}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -1282,7 +1301,7 @@ export default function GenerateSurvey() {
               </div>
 
               <Tabs defaultValue="preview" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger
                     value="preview"
                     className="flex items-center gap-2"
@@ -1290,10 +1309,10 @@ export default function GenerateSurvey() {
                     <Eye className="h-4 w-4" />
                     Preview Survey
                   </TabsTrigger>
-                  <TabsTrigger value="code" className="flex items-center gap-2">
+                  {/* <TabsTrigger value="code" className="flex items-center gap-2">
                     <Code className="h-4 w-4" />
                     HTML Code
-                  </TabsTrigger>
+                  </TabsTrigger> */}
                 </TabsList>
 
                 <TabsContent value="preview" className="space-y-4">
@@ -1303,6 +1322,7 @@ export default function GenerateSurvey() {
                     )} Survey - (${title})`}
                     description={description}
                     questions={questions}
+                    fetchKinds={fetchKinds}
                   />
                 </TabsContent>
 

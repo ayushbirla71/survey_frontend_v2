@@ -120,6 +120,7 @@ export default function EnhancedQuestionEditor({
   onQuestionsUpdate,
   survey,
 }: QuestionEditorProps) {
+  console.log("^^^^^ Questions is", questions);
   const [focusedQuestion, setFocusedQuestion] = useState<string | null>(null);
 
   const { data: questionCategories } = useApi(() =>
