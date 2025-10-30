@@ -634,6 +634,40 @@ export const questionApi = {
     return apiRequest(`/api/questions/survey/${surveyId}`);
   },
 
+  // GET /api/questions/?surveyId={surveyId} OR /api/questions/?id={questionId}
+  // const response = await questionApi.getQuestions("survey123");
+  // same as GET /api/questions?surveyId=survey123
+  // const response = await questionApi.getQuestions(undefined, "question456");
+  // same as GET /api/questions?id=question456
+  getQuestions: async (
+    surveyId?: string,
+    id?: string
+  ): Promise<ApiResponse<Question[]>> => {
+    try {
+      // Build query params using URLSearchParams for cleaner handling
+      const params = new URLSearchParams();
+
+      if (surveyId) params.append("surveyId", surveyId);
+      else if (id) params.append("id", id);
+      else return { error: "Either 'surveyId' or 'id' must be provided." };
+
+      const url = `/api/questions?${params.toString()}`;
+
+      // Make API request (your apiRequest already handles auth, timeout, JSON parsing)
+      const response = await apiRequest<Question[]>(url);
+
+      return response;
+    } catch (err: any) {
+      console.error("Error fetching questions:", err);
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred while fetching questions.",
+      };
+    }
+  },
+
   // PUT /api/questions/{questionId}
   updateQuestion: async (
     questionId: string,

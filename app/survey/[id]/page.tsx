@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,14 +11,22 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   ArrowRight,
   CheckCircle,
   RefreshCw,
   AlertCircle,
+  Star,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { questionApi } from "@/lib/api";
+import { surveyApi, questionApi, categoriesApi } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -27,6 +35,10 @@ interface Question {
   options: any[];
   required: boolean;
   order_index: number;
+  categoryId?: string;
+  rows?: any[];
+  columns?: any[];
+  allowMultipleInGrid?: boolean;
 }
 
 interface Survey {
@@ -39,6 +51,81 @@ interface Survey {
     shuffleQuestions?: boolean;
     isAnonymous?: boolean;
   };
+}
+
+type GKind =
+  | "short answer"
+  | "paragraph"
+  | "multiple choice"
+  | "checkboxes"
+  | "dropdown"
+  | "linear scale"
+  | "rating"
+  | "multi-choice grid"
+  | "checkbox grid"
+  | "date"
+  | "time";
+
+type KindsMap = Record<string, GKind>;
+
+// Helper functions for question type normalization (from survey-preview.tsx)
+function normKindStr(s?: string): GKind | null {
+  if (!s) return null;
+  const k = s.toLowerCase().replace(/[\s_-]+/g, "");
+  if (k === "shortanswer") return "short answer";
+  if (k === "paragraph") return "paragraph";
+  if (k === "multiplechoice" || k === "mcq") return "multiple choice";
+  if (k === "checkboxes" || k === "checkbox") return "checkboxes";
+  if (k === "dropdown" || k === "select") return "dropdown";
+  if (k === "linearscale" || k === "scale" || k === "likert")
+    return "linear scale";
+  if (k === "rating" || k === "stars") return "rating";
+  if (k === "multiplechoicegrid" || k === "mcqgrid" || k === "gridradio")
+    return "multi-choice grid";
+  if (k === "checkboxesgrid" || k === "gridcheckbox") return "checkbox grid";
+  if (k === "date") return "date";
+  if (k === "time") return "time";
+  return null;
+}
+
+function inferFromOptions(q: Question): GKind | null {
+  const opts = q.options ?? [];
+
+  // Grid defined via options[0].rowOptions/columnOptions
+  const first = opts[0];
+  if (
+    first &&
+    Array.isArray(first.rowOptions) &&
+    Array.isArray(first.columnOptions)
+  ) {
+    return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
+  }
+
+  // Grid if options carry row/column pair references
+  const hasGridPairs = opts.some(
+    (o) => o.rowQuestionOptionId || o.columnQuestionOptionId
+  );
+  if (hasGridPairs) {
+    return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
+  }
+
+  // Linear scale via a single option range
+  if (opts.length === 1 && first?.rangeFrom != null && first?.rangeTo != null) {
+    return first?.icon?.toLowerCase() === "star" ? "rating" : "linear scale";
+  }
+
+  // Textual options => multiple choice by default
+  if (opts.some((o) => (o.text ?? "").trim().length > 0)) {
+    return "multiple choice";
+  }
+
+  // Map some legacy question_type values if present
+  const t = (q.question_type ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (t === "text") return "short answer";
+  if (t === "longtext") return "paragraph";
+  if (t === "dropdown") return "dropdown";
+
+  return null;
 }
 
 export default function PublicSurveyPage() {
@@ -54,6 +141,43 @@ export default function PublicSurveyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [startTime] = useState(Date.now());
+  const [kindsMap, setKindsMap] = useState<KindsMap>({});
+
+  // Extract category IDs from questions
+  const categoryIds = useMemo(() => {
+    if (!survey) return [];
+    const set = new Set<string>();
+    survey.questions.forEach((q) => {
+      if (q.categoryId) set.add(q.categoryId);
+    });
+    return Array.from(set);
+  }, [survey]);
+
+  // Fetch category kinds
+  useEffect(() => {
+    if (categoryIds.length === 0) return;
+
+    const fetchKinds = async () => {
+      try {
+        const json = await categoriesApi.getQuestionCategories();
+        console.log("JSON is", json);
+
+        const arr = Array.isArray(json?.data) ? json.data : [];
+        console.log("Arr is", arr);
+        const result = arr.reduce((acc: KindsMap, item: any) => {
+          console.log("Item is", item);
+          const nk = normKindStr(item?.type_name ?? "") ?? "short answer";
+          acc[item.id] = nk;
+          return acc;
+        }, {});
+        setKindsMap(result);
+      } catch (e) {
+        console.warn("Failed to load category kinds:", e);
+      }
+    };
+
+    fetchKinds();
+  }, [categoryIds.join(",")]);
 
   useEffect(() => {
     loadSurvey();
@@ -64,45 +188,33 @@ export default function PublicSurveyPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch survey details (no auth required for public surveys)
-      const surveyResponse = await fetch(
-        `http://localhost:5000/api/surveys/${surveyId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!surveyResponse.ok) {
-        if (surveyResponse.status === 404) {
-          throw new Error("Survey not found");
-        } else if (surveyResponse.status === 403) {
-          throw new Error("This survey is not publicly accessible");
-        }
-        throw new Error("Failed to load survey");
-      }
-
-      const surveyData = await surveyResponse.json();
+      // Use surveyApi.getSurvey() - it's now public (no auth required)
+      const surveyData = await surveyApi.getSurvey(surveyId);
 
       // Fetch questions for the survey (no auth required)
-      const questionsResponse = await questionApi.getQuestionsBySurvey(
-        surveyId
-      );
+      const questionsResponse = await questionApi.getQuestions(surveyId);
       console.log("Questions response:", questionsResponse);
 
-      if (questionsResponse.data && Array.isArray(questionsResponse.data)) {
-        const sortedQuestions = questionsResponse.data.sort(
+      if (
+        questionsResponse.data &&
+        typeof questionsResponse.data === "object"
+      ) {
+        // Convert the keyed object into an array
+        const questionsArray = Object.values(questionsResponse.data);
+        console.log("Converted Questions Array:", questionsArray);
+
+        // Sort the questions
+        const sortedQuestions = questionsArray.sort(
           (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0)
         );
+        console.log("Sorted questions:", sortedQuestions);
 
         setSurvey({
-          id: surveyData.survey?.id || surveyData.id,
-          title: surveyData.survey?.title || surveyData.title,
-          description: surveyData.survey?.description || surveyData.description,
+          id: surveyData.survey.id,
+          title: surveyData.survey.title,
+          description: surveyData.survey.description,
           questions: sortedQuestions,
-          settings: surveyData.survey?.settings || surveyData.settings || {},
+          settings: surveyData.survey.settings || {},
         });
       } else {
         throw new Error("No questions found for this survey");
@@ -216,8 +328,20 @@ export default function PublicSurveyPage() {
     }
   };
 
+  // Normalize question kind based on category or infer from options
+  const normalizeKind = (q: Question): GKind => {
+    const byCat = q.categoryId ? kindsMap[q.categoryId] : undefined;
+    if (byCat) return byCat;
+
+    const inferred = inferFromOptions(q);
+    if (inferred) return inferred;
+
+    return "short answer";
+  };
+
   const renderQuestionInput = (question: Question) => {
     const answer = answers[question.id];
+    const kind = normalizeKind(question);
 
     // Parse options if they're stored as JSON string
     let options = question.options;
@@ -229,110 +353,213 @@ export default function PublicSurveyPage() {
       }
     }
 
-    // Handle different question types
-    const questionType = question.question_type?.toUpperCase();
+    const opts = Array.isArray(options) ? options : [];
 
-    switch (questionType) {
-      case "TEXT":
-        // Check if options exist to determine if it's MCQ, checkbox, etc.
-        if (options && options.length > 0) {
-          // Check if it's a checkbox type (multiple selection)
-          const isCheckbox = options.some(
-            (opt: any) => opt.type === "checkbox"
-          );
-
-          if (isCheckbox) {
-            // Checkbox - multiple selection
-            return (
-              <div className="space-y-3">
-                {options.map((option: any, idx: number) => (
-                  <div key={idx} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`${question.id}-${idx}`}
-                      checked={(answer || []).includes(option.text)}
-                      onCheckedChange={(checked) => {
-                        const currentAnswers = answer || [];
-                        if (checked) {
-                          handleAnswerChange(question.id, [
-                            ...currentAnswers,
-                            option.text,
-                          ]);
-                        } else {
-                          handleAnswerChange(
-                            question.id,
-                            currentAnswers.filter(
-                              (a: string) => a !== option.text
-                            )
-                          );
-                        }
-                      }}
-                    />
-                    <Label htmlFor={`${question.id}-${idx}`}>
-                      {option.text}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            );
-          } else {
-            // Radio - single selection (MCQ)
-            return (
-              <RadioGroup
-                value={answer || ""}
-                onValueChange={(value) =>
-                  handleAnswerChange(question.id, value)
-                }
-              >
-                {options.map((option: any, idx: number) => (
-                  <div key={idx} className="flex items-center space-x-2">
-                    <RadioGroupItem
-                      value={option.text}
-                      id={`${question.id}-${idx}`}
-                    />
-                    <Label htmlFor={`${question.id}-${idx}`}>
-                      {option.text}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            );
-          }
-        } else {
-          // Short text input
-          return (
-            <Input
-              value={answer || ""}
-              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-              placeholder="Your answer"
-              className="max-w-md"
-            />
-          );
-        }
-
-      case "IMAGE":
-      case "VIDEO":
-      case "AUDIO":
-        // For media types, show as text input for now
-        return (
-          <Textarea
-            value={answer || ""}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="Your answer"
-            className="max-w-md"
-            rows={4}
-          />
-        );
-
-      default:
-        return (
-          <Input
-            value={answer || ""}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="Your answer"
-            className="max-w-md"
-          />
-        );
+    // Short answer
+    if (kind === "short answer") {
+      return (
+        <Input
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          placeholder="Your answer"
+          className="max-w-md"
+        />
+      );
     }
+
+    // Paragraph
+    if (kind === "paragraph") {
+      return (
+        <Textarea
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          placeholder="Your answer"
+          className="max-w-md resize-none"
+          rows={4}
+        />
+      );
+    }
+
+    // Multiple choice (radio buttons)
+    if (kind === "multiple choice") {
+      const textOptions = opts.filter((o) => (o.text ?? "").trim().length > 0);
+      return (
+        <RadioGroup
+          value={answer || ""}
+          onValueChange={(value) => handleAnswerChange(question.id, value)}
+        >
+          {textOptions.map((option: any, idx: number) => (
+            <div key={idx} className="flex items-center space-x-2">
+              <RadioGroupItem
+                value={option.text}
+                id={`${question.id}-${idx}`}
+              />
+              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+            </div>
+          ))}
+        </RadioGroup>
+      );
+    }
+
+    // Checkboxes (multiple selection)
+    if (kind === "checkboxes") {
+      const textOptions = opts.filter((o) => (o.text ?? "").trim().length > 0);
+      const currentAnswers = Array.isArray(answer) ? answer : [];
+
+      return (
+        <div className="space-y-3">
+          {textOptions.map((option: any, idx: number) => (
+            <div key={idx} className="flex items-center space-x-2">
+              <Checkbox
+                id={`${question.id}-${idx}`}
+                checked={currentAnswers.includes(option.text)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    handleAnswerChange(question.id, [
+                      ...currentAnswers,
+                      option.text,
+                    ]);
+                  } else {
+                    handleAnswerChange(
+                      question.id,
+                      currentAnswers.filter((a: string) => a !== option.text)
+                    );
+                  }
+                }}
+              />
+              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Dropdown
+    if (kind === "dropdown") {
+      const textOptions = opts.filter((o) => (o.text ?? "").trim().length > 0);
+      return (
+        <Select
+          value={answer || ""}
+          onValueChange={(value) => handleAnswerChange(question.id, value)}
+        >
+          <SelectTrigger className="max-w-md">
+            <SelectValue placeholder="Choose an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {textOptions.map((option: any, idx: number) => (
+              <SelectItem key={idx} value={option.text}>
+                {option.text}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    // Linear scale
+    if (kind === "linear scale") {
+      const opt = opts[0];
+      const min = opt?.rangeFrom ?? 1;
+      const max = opt?.rangeTo ?? 5;
+      const fromLabel = opt?.fromLabel ?? "";
+      const toLabel = opt?.toLabel ?? "";
+
+      const scaleValues = [];
+      for (let i = min; i <= max; i++) {
+        scaleValues.push(i);
+      }
+
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            {fromLabel && (
+              <span className="text-sm text-slate-600">{fromLabel}</span>
+            )}
+            <div className="flex gap-2">
+              {scaleValues.map((val) => (
+                <Button
+                  key={val}
+                  type="button"
+                  variant={answer === val ? "default" : "outline"}
+                  className={
+                    answer === val
+                      ? "bg-violet-600 hover:bg-violet-700"
+                      : "hover:bg-slate-100"
+                  }
+                  onClick={() => handleAnswerChange(question.id, val)}
+                >
+                  {val}
+                </Button>
+              ))}
+            </div>
+            {toLabel && (
+              <span className="text-sm text-slate-600">{toLabel}</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Rating (stars)
+    if (kind === "rating") {
+      const opt = opts[0];
+      const max = opt?.rangeTo ?? 5;
+
+      return (
+        <div className="flex gap-1">
+          {Array.from({ length: max }, (_, i) => i + 1).map((val) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => handleAnswerChange(question.id, val)}
+              className="focus:outline-none"
+            >
+              <Star
+                className={`h-8 w-8 ${
+                  answer >= val
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "text-slate-300"
+                }`}
+              />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // Date
+    if (kind === "date") {
+      return (
+        <Input
+          type="date"
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          className="max-w-md"
+        />
+      );
+    }
+
+    // Time
+    if (kind === "time") {
+      return (
+        <Input
+          type="time"
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          className="max-w-md"
+        />
+      );
+    }
+
+    // Default fallback
+    return (
+      <Input
+        value={answer || ""}
+        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+        placeholder="Your answer"
+        className="max-w-md"
+      />
+    );
   };
 
   if (loading) {
@@ -391,7 +618,8 @@ export default function PublicSurveyPage() {
   }
 
   const currentQuestion = survey.questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / survey.questions.length) * 100;
+  // Progress based on completed questions (starts at 0%)
+  const progress = (currentQuestionIndex / survey.questions.length) * 100;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
