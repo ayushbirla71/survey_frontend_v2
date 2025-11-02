@@ -769,15 +769,28 @@ export const surveyShareApi = {
 
 // Response Management APIs
 export const responseApi = {
-  // POST /api/responses
+  // POST /api/responses/submit
   submitResponse: async (responseData: {
     surveyId: string;
-    user_metadata?: any;
+    user_metadata?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      [key: string]: any;
+    };
     answers: Array<{
       questionId: string;
-      answer_type: string;
-      answer_value?: string;
-      media?: any[];
+      answer_value:
+        | string
+        | string[]
+        | Array<{
+            rowOptionId: string;
+            selectedColumns: string[];
+          }>;
+      media?: Array<{
+        type: string;
+        url: string;
+      }>;
     }>;
   }): Promise<ApiResponse<SurveyResponse>> => {
     return apiRequest("/api/responses", {
@@ -786,15 +799,28 @@ export const responseApi = {
     });
   },
 
-  // POST /api/responses/submit-token
+  // POST /api/responses/submit-with-token
   submitResponseWithToken: async (responseData: {
     token: string;
-    user_metadata?: any;
+    user_metadata?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      [key: string]: any;
+    };
     answers: Array<{
       questionId: string;
-      answer_type: string;
-      answer_value?: string;
-      media?: any[];
+      answer_value:
+        | string
+        | string[]
+        | Array<{
+            rowOptionId: string;
+            selectedColumns: string[];
+          }>;
+      media?: Array<{
+        type: string;
+        url: string;
+      }>;
     }>;
   }): Promise<ApiResponse<SurveyResponse>> => {
     return apiRequest("/api/responses/submit-token", {

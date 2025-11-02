@@ -273,16 +273,29 @@ export default function PublicSurveyPage() {
       const formattedAnswers = Object.entries(answers).map(
         ([questionId, answer]) => {
           const question = survey.questions.find((q) => q.id === questionId);
-          let answerValue = answer;
+          const kind = normalizeKind(question!);
+          let answerValue: any = answer;
 
-          // Handle array answers (checkboxes)
-          if (Array.isArray(answer)) {
-            answerValue = JSON.stringify(answer);
+          // Handle grid questions - convert object to array format
+          if (kind === "multi-choice grid" || kind === "checkbox grid") {
+            // Convert Record<string, string | string[]> to array format
+            const gridObject = answer as Record<string, string | string[]>;
+            answerValue = Object.entries(gridObject).map(([rowId, cols]) => ({
+              rowOptionId: rowId,
+              selectedColumns: Array.isArray(cols) ? cols : [cols],
+            }));
+          }
+          // Handle regular checkboxes (not grid)
+          else if (Array.isArray(answer) && kind === "checkboxes") {
+            answerValue = answer; // Keep as array of option IDs
+          }
+          // Handle other array answers
+          else if (Array.isArray(answer)) {
+            answerValue = answer;
           }
 
           return {
             questionId,
-            answer_type: question?.question_type || "TEXT",
             answer_value: answerValue,
           };
         }
@@ -293,7 +306,7 @@ export default function PublicSurveyPage() {
         user_metadata: {},
         answers: formattedAnswers,
       };
-      console.log("Formatted answers:", formattedAnswers);
+      console.log("Formatted answers for API:", formattedAnswers);
 
       // Submit response without authentication (public survey)
       const submitResponse = await responseApi.submitResponse(responseData);

@@ -41,8 +41,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname();
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/auth/login", "/auth/signup", "/survey/[id]"];
-  const isPublicRoute = publicRoutes.includes(pathname);
+  const publicRoutes = ["/auth/login", "/auth/signup"];
+  const publicRoutePrefixes = ["/survey/"]; // anything starting with /survey/ is public
+  // ✅ Check if the route is public
+  const isPublicRoute =
+    publicRoutes.includes(pathname) ||
+    publicRoutePrefixes.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     // Check if user is already logged in
