@@ -26,7 +26,13 @@ import {
   Star,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { surveyApi, questionApi, categoriesApi, responseApi } from "@/lib/api";
+import {
+  surveyApi,
+  questionApi,
+  categoriesApi,
+  responseApi,
+  shareApi,
+} from "@/lib/api";
 
 interface Question {
   id: string;
@@ -131,7 +137,9 @@ function inferFromOptions(q: Question): GKind | null {
 export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
-  const surveyId = params.id as string;
+  const token = params.id as string;
+  console.log("Token is", token);
+  // const surveyId = params.id as string;
 
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
@@ -178,11 +186,30 @@ export default function PublicSurveyPage() {
     fetchKinds();
   }, [categoryIds.join(",")]);
 
+  // useEffect(() => {
+  //   loadSurvey();
+  // }, [surveyId]);
   useEffect(() => {
-    loadSurvey();
-  }, [surveyId]);
+    validateSurvey();
+  }, [token]);
 
-  const loadSurvey = async () => {
+  const validateSurvey = async () => {
+    try {
+      const result = await shareApi.validateShareToken(token);
+      console.log("Validation result is", result);
+      if (result.data) {
+        loadSurvey(result.data.surveyId);
+      } else {
+        throw new Error("Failed to validate token");
+      }
+    } catch (e) {
+      console.error("Failed to validate token:", e);
+      setError("Failed to validate token");
+      setLoading(false);
+    }
+  };
+
+  const loadSurvey = async (surveyId: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -272,6 +299,8 @@ export default function PublicSurveyPage() {
       // Format answers for API
       const formattedAnswers = Object.entries(answers).map(
         ([questionId, answer]) => {
+          console.log("questionId is", questionId);
+          console.log("answer is", answer);
           const question = survey.questions.find((q) => q.id === questionId);
           const kind = normalizeKind(question!);
           let answerValue: any = answer;
@@ -390,10 +419,7 @@ export default function PublicSurveyPage() {
         >
           {textOptions.map((option: any, idx: number) => (
             <div key={idx} className="flex items-center space-x-2">
-              <RadioGroupItem
-                value={option.text}
-                id={`${question.id}-${idx}`}
-              />
+              <RadioGroupItem value={option.id} id={`${question.id}-${idx}`} />
               <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
             </div>
           ))}
@@ -412,17 +438,17 @@ export default function PublicSurveyPage() {
             <div key={idx} className="flex items-center space-x-2">
               <Checkbox
                 id={`${question.id}-${idx}`}
-                checked={currentAnswers.includes(option.text)}
+                checked={currentAnswers.includes(option.id)}
                 onCheckedChange={(checked) => {
                   if (checked) {
                     handleAnswerChange(question.id, [
                       ...currentAnswers,
-                      option.text,
+                      option.id,
                     ]);
                   } else {
                     handleAnswerChange(
                       question.id,
-                      currentAnswers.filter((a: string) => a !== option.text)
+                      currentAnswers.filter((a: string) => a !== option.id)
                     );
                   }
                 }}
@@ -436,7 +462,7 @@ export default function PublicSurveyPage() {
 
     // Dropdown
     if (kind === "dropdown") {
-      const textOptions = opts.filter((o) => (o.text ?? "").trim().length > 0);
+      const textOptions = opts.filter((o) => (o.id ?? "").trim().length > 0);
       return (
         <Select
           value={answer || ""}
@@ -447,7 +473,7 @@ export default function PublicSurveyPage() {
           </SelectTrigger>
           <SelectContent>
             {textOptions.map((option: any, idx: number) => (
-              <SelectItem key={idx} value={option.text}>
+              <SelectItem key={idx} value={option.id}>
                 {option.text}
               </SelectItem>
             ))}
@@ -798,6 +824,7 @@ export default function PublicSurveyPage() {
                 taking the time to complete this survey.
               </p>
               <Button onClick={() => router.push("/")}>Close</Button>
+              {/* <Button onClick={() => window.close()}>Close</Button> */}
             </div>
           </CardContent>
         </Card>

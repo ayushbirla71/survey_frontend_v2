@@ -48,6 +48,7 @@ import {
   surveyShareApi,
   apiWithFallback,
   demoData,
+  shareApi,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
@@ -354,14 +355,17 @@ export default function GenerateSurvey() {
     if (!createdSurvey?.id) return;
 
     try {
-      const result = await surveyShareApi.generatePublicLink(createdSurvey.id, {
-        maxResponses: 1000, // Default limit
-        requireAuth: false,
+      const result = await shareApi.shareSurvey({
+        surveyId: createdSurvey.id,
+        type:
+          surveySettings.survey_send_by === "NONE" ? "PUBLIC" : "PERSONALIZED",
       });
+      console.log("Share result is", result);
 
       if (result.data) {
-        setPublicLink(result.data.publicUrl);
-        setShareCode(result.data.shareCode);
+        console.log("Share result.data is", result.data);
+        setPublicLink(result.data.shareLink ?? "");
+        setShareCode(result.data.shareCode ?? "");
       } else {
         // Fallback: Generate local URL if API doesn't return one
         const baseUrl = window.location.origin;

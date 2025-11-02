@@ -133,13 +133,14 @@ async function apiRequest<T>(
 
     // Add timeout to prevent hanging requests
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers,
       signal: controller.signal,
       ...options,
     });
+    console.log("response is", response);
 
     clearTimeout(timeoutId);
 
@@ -847,7 +848,13 @@ export const shareApi = {
       email?: string;
       mobile_no?: string;
     }>;
-  }): Promise<ApiResponse<{ shareLink?: string; tokens?: ShareToken[] }>> => {
+  }): Promise<
+    ApiResponse<{
+      shareLink?: string;
+      shareCode?: string;
+      tokens?: ShareToken[];
+    }>
+  > => {
     return apiRequest("/api/share", {
       method: "POST",
       body: JSON.stringify(shareData),
@@ -855,7 +862,9 @@ export const shareApi = {
   },
 
   // GET /api/share/validate/{token}
-  validateShareToken: async (token: string): Promise<ApiResponse<Survey>> => {
+  validateShareToken: async (
+    token: string
+  ): Promise<ApiResponse<{ surveyId: string; survey: Survey }>> => {
     return apiRequest(`/api/share/validate/${token}`);
   },
 };
