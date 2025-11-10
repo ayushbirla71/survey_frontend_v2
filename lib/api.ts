@@ -102,6 +102,20 @@ export interface SurveyResponse {
   }>;
 }
 
+export interface SurveyResponseResult {
+  title: string;
+  description: string;
+  individualResponses: any[];
+  questionResults: any[];
+  responseTimeline: any[];
+  stats: {
+    totalResponses: number;
+    completionRate: number;
+    avgTime: number;
+    npsScore: number;
+  };
+}
+
 // ShareToken model from new API
 export interface ShareToken {
   id: string;
@@ -836,6 +850,13 @@ export const responseApi = {
   ): Promise<ApiResponse<SurveyResponse[]>> => {
     return apiRequest(`/api/responses/survey/${surveyId}`);
   },
+
+  // GET /api/responses/{responseId}
+  getSurveyResults: async (
+    surveyId: string
+  ): Promise<ApiResponse<SurveyResponseResult>> => {
+    return apiRequest(`/api/responses/surveys/${surveyId}/results`);
+  },
 };
 
 // Sharing APIs
@@ -1013,46 +1034,215 @@ export const analyticsApi = {
   },
 };
 
-// Survey Results APIs
+// Survey Results APIs (Based on SURVEY_RESULTS_FRONTEND_IMPLEMENTATION.md)
 export const surveyResultsApi = {
-  // GET /api/surveys/:id/results
+  // GET /api/survey-results/:surveyId - Get Survey Results with Pagination & Filters
   getSurveyResults: async (
-    id: string
+    surveyId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      startDate?: string;
+      endDate?: string;
+      questionId?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+    }
   ): Promise<
     ApiResponse<{
+      surveyId: string;
+      surveyTitle: string;
+      totalResponses: number;
+      currentPage: number;
+      totalPages: number;
+      responses: Array<{
+        id: string;
+        surveyId: string;
+        user_metadata: {
+          name?: string;
+          email?: string;
+          phone?: string;
+          [key: string]: any;
+        };
+        created_at: string;
+        response_answers: Array<{
+          id: string;
+          questionId: string;
+          answer_value: string | null;
+          selected_option_ids: string[] | null;
+          scaleRatingValue: number | null;
+          question: {
+            id: string;
+            question_text: string;
+            question_type: string;
+            options: any[];
+          };
+          grid_answers: any[];
+        }>;
+      }>;
+    }>
+  > => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
+    if (params?.questionId) queryParams.append("questionId", params.questionId);
+    if (params?.sortBy) queryParams.append("sortBy", params.sortBy);
+    if (params?.sortOrder) queryParams.append("sortOrder", params.sortOrder);
+
+    const endpoint = `/api/survey-results/${surveyId}${
+      queryParams.toString() ? `?${queryParams.toString()}` : ""
+    }`;
+    return apiRequest(endpoint);
+  },
+
+  // GET /api/survey-results/:surveyId/summary - Get Survey Results Summary
+  getSummary: async (
+    surveyId: string
+  ): Promise<
+    ApiResponse<{
+      surveyId: string;
+      surveyTitle: string;
+      totalQuestions: number;
+      totalResponses: number;
+      completionRate: string;
+      responseTimeline: Record<string, number>;
+      avgResponsesPerDay: string;
+    }>
+  > => {
+    return apiRequest(`/api/survey-results/${surveyId}/summary`);
+  },
+
+  // GET /api/survey-results/:surveyId/questions/:questionId - Get Question-wise Results
+  getQuestionResults: async (
+    surveyId: string,
+    questionId: string
+  ): Promise<
+    ApiResponse<{
+      surveyId: string;
+      questionId: string;
+      questionText: string;
+      questionType: string;
+      totalAnswers: number;
+      answerDistribution: Record<string, number> | null;
+      gridDistribution: any | null;
+      options: Array<{
+        id: string;
+        text: string;
+        rangeFrom: number | null;
+        rangeTo: number | null;
+      }>;
+    }>
+  > => {
+    return apiRequest(
+      `/api/survey-results/${surveyId}/questions/${questionId}`
+    );
+  },
+
+  // GET /api/survey-results/:surveyId/export - Export Survey Results
+  exportResults: async (
+    surveyId: string,
+    format: "json" | "csv" = "json"
+  ): Promise<
+    ApiResponse<{
+      surveyId: string;
+      surveyTitle: string;
+      exportedAt: string;
+      totalResponses: number;
+      responses: any[];
+    }>
+  > => {
+    const queryParams = new URLSearchParams();
+    queryParams.append("format", format);
+    return apiRequest(
+      `/api/survey-results/${surveyId}/export?${queryParams.toString()}`
+    );
+  },
+
+  // GET /api/survey-results/:surveyId/responses/:responseId - Get Response Details
+  getResponseDetails: async (
+    surveyId: string,
+    responseId: string
+  ): Promise<
+    ApiResponse<{
+      id: string;
+      surveyId: string;
+      user_metadata: {
+        name?: string;
+        email?: string;
+        phone?: string;
+        company?: string;
+        [key: string]: any;
+      };
+      created_at: string;
       survey: {
         id: string;
         title: string;
         description: string;
-        category: string;
-        createdAt: string;
       };
-      stats: {
-        totalResponses: number;
-        completionRate: number;
-        avgTime: number;
-        npsScore: number;
-      };
-      questionResults: Array<{
+      response_answers: Array<{
+        id: string;
         questionId: string;
-        question: string;
-        type: "single_choice" | "checkbox" | "text" | "rating";
-        responses: number;
-        data: Array<{ option: string; count: number; percentage: number }>;
-        averageRating?: number;
-        sampleResponses?: string[];
+        answer_value: string | null;
+        selected_option_ids: string[] | null;
+        scaleRatingValue: number | null;
+        question: {
+          id: string;
+          question_text: string;
+          question_type: string;
+        };
+        grid_answers: any[];
       }>;
-      demographics: {
-        age: Array<{ ageGroup: string; count: number }>;
-        gender: Array<{ gender: string; count: number }>;
-        location: Array<{ location: string; count: number }>;
-      };
-      responseTimeline: Array<{ date: string; responses: number }>;
     }>
   > => {
-    return apiRequest(`/api/surveys/${id}/results`);
+    return apiRequest(
+      `/api/survey-results/${surveyId}/responses/${responseId}`
+    );
   },
 
+  // GET /api/survey-results/:surveyId/filtered - Get Filtered Responses
+  getFilteredResponses: async (
+    surveyId: string,
+    params: {
+      questionId: string;
+      answerValue: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<
+    ApiResponse<{
+      surveyId: string;
+      questionId: string;
+      filterValue: string;
+      totalMatches: number;
+      currentPage: number;
+      totalPages: number;
+      responses: Array<{
+        id: string;
+        surveyId: string;
+        user_metadata: {
+          name?: string;
+          email?: string;
+          [key: string]: any;
+        };
+        created_at: string;
+        response_answers: any[];
+      }>;
+    }>
+  > => {
+    const queryParams = new URLSearchParams();
+    queryParams.append("questionId", params.questionId);
+    queryParams.append("answerValue", params.answerValue);
+    if (params.page) queryParams.append("page", params.page.toString());
+    if (params.limit) queryParams.append("limit", params.limit.toString());
+
+    return apiRequest(
+      `/api/survey-results/${surveyId}/filtered?${queryParams.toString()}`
+    );
+  },
+
+  // Legacy endpoints for backward compatibility
   // GET /api/surveys/:id/responses
   getIndividualResponses: async (
     id: string,

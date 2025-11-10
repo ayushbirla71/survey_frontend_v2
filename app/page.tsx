@@ -45,10 +45,14 @@ export default function Dashboard() {
 
   const handleShare = (survey: any) => {
     if (navigator.share) {
+      console.log(">>>>>> the value of the SURVEY IS : ", survey);
+
       navigator.share({
         title: survey.title,
         text: `Check out this survey: ${survey.title}`,
-        url: window.location.origin + `/survey/${survey.id}`,
+        url:
+          window.location.origin +
+          `/survey/${survey.share_tokens[0].token_hash}`,
       });
     } else {
       // Fallback: copy to clipboard
@@ -146,7 +150,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsLoading ? "..." : displayStats.totalSurveys}
+                {statsLoading ? "..." : surveys.length}
               </div>
               <p className="text-xs text-slate-500">
                 +{displayStats.surveyGrowth}% from last month
