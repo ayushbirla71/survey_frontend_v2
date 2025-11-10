@@ -16,6 +16,8 @@ import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, GripVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Badge } from "@/components/ui/badge";
+import { useApi } from "@/hooks/useApi";
+import { apiWithFallback, categoriesApi, demoData } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -27,7 +29,15 @@ interface Question {
     | "VIDEO"
     | "AUDIO"
     | "FILE"
-    | "MATRIX";
+    | "MATRIX"
+    | "CHECKBOX"
+    | "DROPDOWN"
+    | "DATE"
+    | "TIME"
+    | "EMAIL"
+    | "PHONE"
+    | "URL"
+    | "NUMBER";
   question: string;
   options?: string[];
   required: boolean;
@@ -39,6 +49,13 @@ interface Question {
   categoryId?: string;
   subCategoryId?: string;
   order_index?: number;
+  description?: string;
+  placeholder?: string;
+  validation?: {
+    min?: number;
+    max?: number;
+    pattern?: string;
+  };
 }
 
 interface QuestionEditorProps {
@@ -48,16 +65,46 @@ interface QuestionEditorProps {
 
 const getQuestionTypeLabel = (type: string) => {
   const labels: Record<string, string> = {
-    TEXT: "Text",
+    TEXT: "Short Answer",
     MCQ: "Multiple Choice",
-    RATING: "Rating",
+    CHECKBOX: "Checkboxes",
+    DROPDOWN: "Dropdown",
+    RATING: "Linear Scale",
     IMAGE: "Image",
     VIDEO: "Video",
     AUDIO: "Audio",
     FILE: "File Upload",
-    MATRIX: "Matrix",
+    MATRIX: "Multiple Choice Grid",
+    DATE: "Date",
+    TIME: "Time",
+    EMAIL: "Email",
+    PHONE: "Phone Number",
+    URL: "URL",
+    NUMBER: "Number",
   };
   return labels[type] || type;
+};
+
+const getQuestionTypeIcon = (type: string) => {
+  const icons: Record<string, string> = {
+    TEXT: "📝",
+    MCQ: "🔘",
+    CHECKBOX: "☑️",
+    DROPDOWN: "📋",
+    RATING: "⭐",
+    IMAGE: "🖼️",
+    VIDEO: "🎥",
+    AUDIO: "🎵",
+    FILE: "📎",
+    MATRIX: "📊",
+    DATE: "📅",
+    TIME: "⏰",
+    EMAIL: "📧",
+    PHONE: "📞",
+    URL: "🔗",
+    NUMBER: "🔢",
+  };
+  return icons[type] || "❓";
 };
 
 export default function QuestionEditor({
@@ -68,7 +115,34 @@ export default function QuestionEditor({
     questions.length > 0 ? questions[0].id : null
   );
 
+  // API calls
+  const {
+    data: questionCategories,
+    loading: questionCategoriesLoading,
+    error: questionCategoriesError,
+  } = useApi(() =>
+    apiWithFallback(
+      () => categoriesApi.getQuestionCategories(),
+      demoData.question_categories
+    )
+  );
+
+  const categories = questionCategories || demoData.question_categories;
+  // console.log("categories is", categories);
+
+  const questionCategoryOptions = categories?.map((cat: any) => ({
+    value: cat.id,
+    label: cat.type_name,
+  }));
+  // console.log("questionCategoryOptions is", questionCategoryOptions);
+
   const handleQuestionChange = (id: string, field: string, value: any) => {
+    console.log(
+      ">>>> the value of field is",
+      field,
+      " and the value is : ",
+      value
+    );
     const updatedQuestions = questions.map((q) => {
       if (q.id === id) {
         return { ...q, [field]: value };
@@ -142,7 +216,7 @@ export default function QuestionEditor({
     }
   };
 
-  const onDragEnd = (result) => {
+  const onDragEnd = (result: any) => {
     if (!result.destination) return;
 
     const items = Array.from(questions);
@@ -275,7 +349,7 @@ export default function QuestionEditor({
                           Question Type
                         </Label>
                         <Select
-                          value={question.type}
+                          defaultValue={question.type || undefined}
                           onValueChange={(value) =>
                             handleQuestionChange(question.id, "type", value)
                           }
@@ -284,14 +358,16 @@ export default function QuestionEditor({
                             <SelectValue placeholder="Select question type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="TEXT">Text</SelectItem>
-                            <SelectItem value="MCQ">Multiple Choice</SelectItem>
-                            <SelectItem value="RATING">Rating</SelectItem>
-                            <SelectItem value="IMAGE">Image</SelectItem>
-                            <SelectItem value="VIDEO">Video</SelectItem>
-                            <SelectItem value="AUDIO">Audio</SelectItem>
-                            <SelectItem value="FILE">File Upload</SelectItem>
-                            <SelectItem value="MATRIX">Matrix</SelectItem>
+                            {questionCategoryOptions?.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                            {/* <SelectItem value="TEXT">Text</SelectItem>
+                            <SelectItem value="MCQ">Multiple Choice</SelectItem> */}
                           </SelectContent>
                         </Select>
                       </div>

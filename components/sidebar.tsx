@@ -34,7 +34,7 @@ export default function Sidebar() {
       href: "/generate-survey",
       icon: FileSpreadsheet,
     },
-    { name: "Audience", href: "/audience", icon: Users },
+    // { name: "Audience", href: "/audience", icon: Users },
     { name: "Sent Surveys", href: "/sent-surveys", icon: Send },
   ];
 
@@ -50,8 +50,10 @@ export default function Sidebar() {
   return (
     <div className="hidden w-64 flex-col bg-slate-50 shadow-sm md:flex border-r border-slate-200">
       <div className="p-6 border-b border-slate-200 bg-white">
-        <h2 className="text-2xl font-bold text-slate-800">Survey.AI</h2>
-        <p className="text-sm text-slate-500 mt-1">Survey Platform</p>
+        <Link href={`/`}>
+          <h2 className="text-2xl font-bold text-slate-800">Survey.AI</h2>
+          <p className="text-sm text-slate-500 mt-1">Survey Platform</p>
+        </Link>
       </div>
 
       <div className="flex-1 p-4 bg-slate-50">

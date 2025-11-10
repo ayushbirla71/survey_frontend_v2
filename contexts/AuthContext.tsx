@@ -1,158 +1,162 @@
-"use client"
+"use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import { authApi, type User } from "@/lib/api"
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { authApi, type User } from "@/lib/api";
 
 interface AuthContextType {
-  user: User | null
-  loading: boolean
-  login: (email: string, password: string) => Promise<boolean>
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   signup: (userData: {
-    name: string
-    email: string
-    mobile_no?: string
-    password: string
-    role?: "USER" | "SYSTEM_ADMIN"
-    theme?: "LIGHT" | "DARK"
-  }) => Promise<boolean>
-  logout: () => void
-  isAuthenticated: boolean
+    name: string;
+    email: string;
+    mobile_no?: string;
+    password: string;
+    role?: "USER" | "SYSTEM_ADMIN";
+    theme?: "LIGHT" | "DARK";
+  }) => Promise<boolean>;
+  logout: () => void;
+  isAuthenticated: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
+  return context;
 }
 
 interface AuthProviderProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-  const pathname = usePathname()
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/auth/login", "/auth/signup"]
-  const isPublicRoute = publicRoutes.includes(pathname)
+  const publicRoutes = ["/auth/login", "/auth/signup"];
+  const publicRoutePrefixes = ["/survey/"]; // anything starting with /survey/ is public
+  // ✅ Check if the route is public
+  const isPublicRoute =
+    publicRoutes.includes(pathname) ||
+    publicRoutePrefixes.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     // Check if user is already logged in
     const initializeAuth = async () => {
       try {
-        const token = authApi.isAuthenticated()
-        const savedUser = localStorage.getItem("user")
-        
+        const token = authApi.isAuthenticated();
+        const savedUser = localStorage.getItem("user");
+
         if (token && savedUser) {
-          const userData = JSON.parse(savedUser)
-          setUser(userData)
+          const userData = JSON.parse(savedUser);
+          setUser(userData);
         } else {
           // Clear any stale data
-          authApi.removeAuthToken()
-          localStorage.removeItem("user")
-          
+          authApi.removeAuthToken();
+          localStorage.removeItem("user");
+
           // Redirect to login if on protected route
           if (!isPublicRoute) {
-            router.push("/auth/login")
+            router.push("/auth/login");
           }
         }
       } catch (error) {
-        console.error("Auth initialization error:", error)
-        authApi.removeAuthToken()
-        localStorage.removeItem("user")
-        
+        console.error("Auth initialization error:", error);
+        authApi.removeAuthToken();
+        localStorage.removeItem("user");
+
         if (!isPublicRoute) {
-          router.push("/auth/login")
+          router.push("/auth/login");
         }
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    initializeAuth()
-  }, [router, isPublicRoute])
+    initializeAuth();
+  }, [router, isPublicRoute]);
 
   // Redirect authenticated users away from auth pages
   useEffect(() => {
     if (!loading && user && isPublicRoute) {
-      router.push("/")
+      router.push("/");
     }
-  }, [user, loading, isPublicRoute, router])
+  }, [user, loading, isPublicRoute, router]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      setLoading(true)
-      const response = await authApi.login({ email, password })
-      
+      setLoading(true);
+      const response = await authApi.login({ email, password });
+
       if (response.data) {
-        const { user: userData, token } = response.data
-        
+        const { user: userData, token } = response.data;
+
         // Store token and user data
-        authApi.setAuthToken(token)
-        localStorage.setItem("user", JSON.stringify(userData))
-        setUser(userData)
-        
-        return true
+        authApi.setAuthToken(token);
+        localStorage.setItem("user", JSON.stringify(userData));
+        setUser(userData);
+
+        return true;
       } else {
-        throw new Error(response.error || "Login failed")
+        throw new Error(response.error || "Login failed");
       }
     } catch (error) {
-      console.error("Login error:", error)
-      return false
+      console.error("Login error:", error);
+      return false;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const signup = async (userData: {
-    name: string
-    email: string
-    mobile_no?: string
-    password: string
-    role?: "USER" | "SYSTEM_ADMIN"
-    theme?: "LIGHT" | "DARK"
+    name: string;
+    email: string;
+    mobile_no?: string;
+    password: string;
+    role?: "USER" | "SYSTEM_ADMIN";
+    theme?: "LIGHT" | "DARK";
   }): Promise<boolean> => {
     try {
-      setLoading(true)
-      const response = await authApi.signup(userData)
-      
+      setLoading(true);
+      const response = await authApi.signup(userData);
+
       if (response.data) {
-        const { user: newUser, token } = response.data
-        
+        const { user: newUser, token } = response.data;
+
         // Store token and user data
-        authApi.setAuthToken(token)
-        localStorage.setItem("user", JSON.stringify(newUser))
-        setUser(newUser)
-        
-        return true
+        authApi.setAuthToken(token);
+        localStorage.setItem("user", JSON.stringify(newUser));
+        setUser(newUser);
+
+        return true;
       } else {
-        throw new Error(response.error || "Signup failed")
+        throw new Error(response.error || "Signup failed");
       }
     } catch (error) {
-      console.error("Signup error:", error)
-      return false
+      console.error("Signup error:", error);
+      return false;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const logout = () => {
     // Clear auth data
-    authApi.removeAuthToken()
-    localStorage.removeItem("user")
-    setUser(null)
-    
+    authApi.removeAuthToken();
+    localStorage.removeItem("user");
+    setUser(null);
+
     // Redirect to login
-    router.push("/auth/login")
-  }
+    router.push("/auth/login");
+  };
 
   const value: AuthContextType = {
     user,
@@ -161,7 +165,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signup,
     logout,
     isAuthenticated: !!user,
-  }
+  };
 
   // Show loading spinner while checking auth
   if (loading) {
@@ -172,17 +176,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           <p className="mt-2 text-slate-600">Loading...</p>
         </div>
       </div>
-    )
+    );
   }
 
   // Don't render protected content if user is not authenticated
   if (!user && !isPublicRoute) {
-    return null
+    return null;
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

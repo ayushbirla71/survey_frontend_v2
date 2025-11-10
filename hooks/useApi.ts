@@ -1,44 +1,50 @@
-"use client"
+"use client";
 
 // Custom React hooks for API calls
-import { useState, useEffect } from "react"
-import type { ApiResponse, PaginatedResponse } from "@/lib/api"
+import { useState, useEffect } from "react";
+import type { ApiResponse, PaginatedResponse } from "@/lib/api";
 
 // Generic hook for API calls - Updated for new API structure
-export function useApi<T>(apiCall: () => Promise<ApiResponse<T>>, dependencies: any[] = []) {
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function useApi<T>(
+  apiCall: () => Promise<ApiResponse<T>>,
+  dependencies: any[] = []
+) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
-      const response = await apiCall()
+      const response = await apiCall();
 
       if (response.data !== undefined) {
-        setData(response.data)
+        setData(response.data);
       } else {
-        setError(response.error || "Failed to fetch data")
+        setError(response.error || "Failed to fetch data");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchData()
-  }, dependencies)
+    fetchData();
+  }, dependencies);
 
-  return { data, loading, error, refetch: fetchData }
+  return { data, loading, error, refetch: fetchData };
 }
 
 // Hook for paginated API calls - Updated for new API structure
-export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedResponse<T>>, initialParams: any = {}) {
-  const [data, setData] = useState<T[]>([])
+export function usePaginatedApi<T>(
+  apiCall: (params: any) => Promise<PaginatedResponse<T>>,
+  initialParams: any = {}
+) {
+  const [data, setData] = useState<T[]>([]);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -46,40 +52,40 @@ export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedRe
     totalPages: 0,
     hasNext: false,
     hasPrev: false,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [params, setParams] = useState(initialParams)
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [params, setParams] = useState(initialParams);
 
   const fetchData = async (newParams = params) => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
-      const response = await apiCall(newParams)
+      const response = await apiCall(newParams);
 
       if (response.data !== undefined && response.pagination) {
-        setData(response.data)
-        setPagination(response.pagination)
+        setData(response.data);
+        setPagination(response.pagination);
       } else {
-        setError("Failed to fetch data")
+        setError("Failed to fetch data");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
   const updateParams = (newParams: any) => {
-    const updatedParams = { ...params, ...newParams }
-    setParams(updatedParams)
-    fetchData(updatedParams)
-  }
+    const updatedParams = { ...params, ...newParams };
+    setParams(updatedParams);
+    fetchData(updatedParams);
+  };
 
   return {
     data,
@@ -88,34 +94,39 @@ export function usePaginatedApi<T>(apiCall: (params: any) => Promise<PaginatedRe
     error,
     updateParams,
     refetch: () => fetchData(),
-  }
+  };
 }
 
 // Hook for mutations (POST, PUT, DELETE) - Updated for new API structure
-export function useMutation<T, P = any>(mutationFn: (params: P) => Promise<ApiResponse<T>>) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function useMutation<T, P = any>(
+  mutationFn: (params: P) => Promise<ApiResponse<T>>
+) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const mutate = async (params: P): Promise<T | null> => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
-      const response = await mutationFn(params)
+      const response = await mutationFn(params);
+      console.log("response USE API MUTATE is", response);
 
       if (response.data !== undefined) {
-        return response.data
+        console.log("response.data USE API MUTATE is", response.data);
+        return response.data;
       } else {
-        setError(response.error || "Mutation failed")
-        return null
+        console.log("response.error USE API MUTATE is", response.error);
+        setError(response.error || "Mutation failed");
+        return null;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
-      return null
+      setError(err instanceof Error ? err.message : "Unknown error");
+      return null;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  return { mutate, loading, error }
+  return { mutate, loading, error };
 }
