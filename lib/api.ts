@@ -551,7 +551,7 @@ export const surveyApi = {
     scheduled_type?: "IMMEDIATE" | "SCHEDULED";
     categoryOfSurvey?: string;
     autoGenerateQuestions?: boolean;
-  }): Promise<{ message: string; survey: Survey }> => {
+  }): Promise<{ message?: string; survey?: Survey; data: any }> => {
     try {
       const token = getAuthToken();
       const headers: HeadersInit = {

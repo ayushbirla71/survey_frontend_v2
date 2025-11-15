@@ -260,9 +260,46 @@ export default function PublicSurveyPage() {
     }));
   };
 
+  // ✅ NEW: central helper to decide if a question is answered
+  const isQuestionAnswered = (question: Question): boolean => {
+    const value = answers[question.id];
+
+    if (value === null || value === undefined) return false;
+
+    // String answers (short, paragraph, date, time, dropdown, scale, rating)
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+
+    // Arrays (checkboxes, some multi-selects)
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+
+    // Objects (grids: row -> selected cols OR row -> single col)
+    if (typeof value === "object") {
+      const entries = Object.values(value);
+      if (entries.length === 0) return false;
+      return entries.some((v) => {
+        if (Array.isArray(v)) return v.length > 0;
+        if (typeof v === "string") return v.trim().length > 0;
+        return v !== null && v !== undefined;
+      });
+    }
+
+    // Fallback: treat as answered
+    return true;
+  };
+
+  // ✅ NEW: derived count of answered questions
+  const answeredCount = useMemo(() => {
+    if (!survey) return 0;
+    return survey.questions.filter((q) => isQuestionAnswered(q)).length;
+  }, [survey, answers]);
+
   const handleNext = () => {
     const currentQuestion = survey?.questions[currentQuestionIndex];
-    if (currentQuestion?.required && !answers[currentQuestion.id]) {
+    if (currentQuestion?.required && !isQuestionAnswered(currentQuestion)) {
       toast.error("This question is required");
       return;
     }
@@ -285,7 +322,7 @@ export default function PublicSurveyPage() {
 
     // Validate all required questions are answered
     const unansweredRequired = survey.questions.filter(
-      (q) => q.required && !answers[q.id]
+      (q) => q.required && !isQuestionAnswered(q)
     );
 
     if (unansweredRequired.length > 0) {
@@ -834,7 +871,11 @@ export default function PublicSurveyPage() {
 
   const currentQuestion = survey.questions[currentQuestionIndex];
   // Progress based on completed questions (starts at 0%)
-  const progress = (currentQuestionIndex / survey.questions.length) * 100;
+  // const progress = (currentQuestionIndex / survey.questions.length) * 100;
+  const progress =
+    survey.questions.length > 0
+      ? (answeredCount / survey.questions.length) * 100
+      : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">

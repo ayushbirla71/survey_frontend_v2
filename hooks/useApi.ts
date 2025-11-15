@@ -2,7 +2,8 @@
 
 // Custom React hooks for API calls
 import { useState, useEffect } from "react";
-import type { ApiResponse, PaginatedResponse } from "@/lib/api";
+import { authApi, type ApiResponse, type PaginatedResponse } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 // Generic hook for API calls - Updated for new API structure
 export function useApi<T>(
@@ -12,6 +13,8 @@ export function useApi<T>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const router = useRouter();
 
   const fetchData = async () => {
     try {
@@ -25,8 +28,14 @@ export function useApi<T>(
       } else {
         setError(response.error || "Failed to fetch data");
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.log(">>>> the error in the USE API is : ", err.message);
+      if (err.message.includes("401")) {
+        authApi.removeAuthToken();
+        router.refresh();
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
+      return;
     } finally {
       setLoading(false);
     }
