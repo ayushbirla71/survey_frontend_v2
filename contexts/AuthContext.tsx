@@ -44,16 +44,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const publicRoutes = ["/auth/login", "/auth/signup"];
   const publicRoutePrefixes = ["/survey/"]; // anything starting with /survey/ is public
   // ✅ Check if the route is public
+
+  // 🔹 Auth routes = only login/signup
+  const authRoutes = ["/auth/login", "/auth/signup"];
+
   const isPublicRoute =
     publicRoutes.includes(pathname) ||
     publicRoutePrefixes.some((prefix) => pathname.startsWith(prefix));
+
+  // ✅ Check if the route is an AUTH page (login/signup only)
+  const isAuthRoute = authRoutes.includes(pathname);
 
   useEffect(() => {
     // Check if user is already logged in
     const initializeAuth = async () => {
       try {
         const token = authApi.isAuthenticated();
-        const savedUser = localStorage.getItem("user");
+        const savedUser =
+          typeof window !== "undefined" ? localStorage.getItem("user") : null;
 
         if (token && savedUser) {
           const userData = JSON.parse(savedUser);
@@ -61,7 +69,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } else {
           // Clear any stale data
           authApi.removeAuthToken();
-          localStorage.removeItem("user");
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("user");
+          }
 
           // Redirect to login if on protected route
           if (!isPublicRoute) {
@@ -71,7 +81,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } catch (error) {
         console.error("Auth initialization error:", error);
         authApi.removeAuthToken();
-        localStorage.removeItem("user");
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("user");
+        }
 
         if (!isPublicRoute) {
           router.push("/auth/login");
@@ -84,12 +96,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initializeAuth();
   }, [router, isPublicRoute]);
 
-  // Redirect authenticated users away from auth pages
+  // ✅ Redirect authenticated users away from AUTH pages only
+  //    (do NOT include /survey/... here)
   useEffect(() => {
-    if (!loading && user && isPublicRoute) {
-      router.push("/");
+    if (!loading && user && isAuthRoute) {
+      router.push("/"); // dashboard
     }
-  }, [user, loading, isPublicRoute, router]);
+  }, [user, loading, isAuthRoute, router]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -101,7 +114,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Store token and user data
         authApi.setAuthToken(token);
-        localStorage.setItem("user", JSON.stringify(userData));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
         setUser(userData);
 
         return true;
@@ -133,7 +148,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Store token and user data
         authApi.setAuthToken(token);
-        localStorage.setItem("user", JSON.stringify(newUser));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("user", JSON.stringify(newUser));
+        }
         setUser(newUser);
 
         return true;
@@ -151,7 +168,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = () => {
     // Clear auth data
     authApi.removeAuthToken();
-    localStorage.removeItem("user");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user");
+    }
     setUser(null);
 
     // Redirect to login

@@ -1,5 +1,5 @@
 // API configuration and base functions
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Get JWT token from localStorage or your auth system
 const getAuthToken = (): string | null => {
@@ -551,7 +551,7 @@ export const surveyApi = {
     scheduled_type?: "IMMEDIATE" | "SCHEDULED";
     categoryOfSurvey?: string;
     autoGenerateQuestions?: boolean;
-  }): Promise<{ message: string; survey: Survey }> => {
+  }): Promise<{ message?: string; survey?: Survey; data: any }> => {
     try {
       const token = getAuthToken();
       const headers: HeadersInit = {

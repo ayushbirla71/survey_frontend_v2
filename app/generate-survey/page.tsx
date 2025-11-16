@@ -1172,7 +1172,7 @@ export default function GenerateSurvey() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <div>
+                  {/* <div>
                     <Label htmlFor="flow_type">Survey Flow Type</Label>
                     <Select
                       value={surveySettings.flow_type}
@@ -1194,7 +1194,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="GAME">Game</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div> */}
 
                   <div>
                     <Label htmlFor="survey_send_by">Distribution Method</Label>
@@ -1222,7 +1222,7 @@ export default function GenerateSurvey() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                {/* <div className="space-y-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="isAnonymous"
@@ -1280,7 +1280,7 @@ export default function GenerateSurvey() {
                       Allow multiple submissions
                     </Label>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
@@ -1501,7 +1501,7 @@ export default function GenerateSurvey() {
                           </div>
                         </div>
 
-                        {shareCode && (
+                        {/* {shareCode && (
                           <div>
                             <Label className="text-sm font-medium">
                               Share Code
@@ -1526,7 +1526,7 @@ export default function GenerateSurvey() {
                               Users can enter this code at your survey portal
                             </p>
                           </div>
-                        )}
+                        )} */}
 
                         <div className="flex gap-2 pt-4">
                           <Button
@@ -1537,7 +1537,7 @@ export default function GenerateSurvey() {
                             <ExternalLink className="mr-2 h-4 w-4" />
                             Preview Survey
                           </Button>
-                          <Button
+                          {/* <Button
                             variant="outline"
                             onClick={() => {
                               const subject = encodeURIComponent(
@@ -1554,7 +1554,7 @@ export default function GenerateSurvey() {
                           >
                             <Mail className="mr-2 h-4 w-4" />
                             Share via Email
-                          </Button>
+                          </Button> */}
                         </div>
                       </div>
                     )}
