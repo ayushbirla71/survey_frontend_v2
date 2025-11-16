@@ -1501,7 +1501,7 @@ export default function GenerateSurvey() {
                           </div>
                         </div>
 
-                        {shareCode && (
+                        {/* {shareCode && (
                           <div>
                             <Label className="text-sm font-medium">
                               Share Code
@@ -1526,7 +1526,7 @@ export default function GenerateSurvey() {
                               Users can enter this code at your survey portal
                             </p>
                           </div>
-                        )}
+                        )} */}
 
                         <div className="flex gap-2 pt-4">
                           <Button
@@ -1537,7 +1537,7 @@ export default function GenerateSurvey() {
                             <ExternalLink className="mr-2 h-4 w-4" />
                             Preview Survey
                           </Button>
-                          <Button
+                          {/* <Button
                             variant="outline"
                             onClick={() => {
                               const subject = encodeURIComponent(
@@ -1554,7 +1554,7 @@ export default function GenerateSurvey() {
                           >
                             <Mail className="mr-2 h-4 w-4" />
                             Share via Email
-                          </Button>
+                          </Button> */}
                         </div>
                       </div>
                     )}

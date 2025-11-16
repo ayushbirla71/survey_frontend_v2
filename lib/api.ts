@@ -1,5 +1,5 @@
 // API configuration and base functions
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Get JWT token from localStorage or your auth system
 const getAuthToken = (): string | null => {
