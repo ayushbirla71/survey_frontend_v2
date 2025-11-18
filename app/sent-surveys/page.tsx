@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { surveyApi } from "@/lib/api";
 import { usePaginatedApi, useMutation, useApi } from "@/hooks/useApi";
+import { toast } from "react-toastify";
 
 // Survey model from new API
 export interface Survey {
@@ -137,7 +138,7 @@ export default function SentSurveys() {
   // Use API data if available, otherwise use localStorage data
   const displaySurveys =
     surveys ||
-    localSurveys.filter((survey) => {
+    localSurveys.filter((survey: any) => {
       const matchesSearch =
         survey.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         survey.category.toLowerCase().includes(searchQuery.toLowerCase());
@@ -151,15 +152,15 @@ export default function SentSurveys() {
     switch (normalizedStatus) {
       case "PUBLISHED":
       case "ACTIVE":
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 text-green-800 hover:bg-green-800 hover:text-gray-100";
       case "COMPLETED":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-100 text-blue-800 hover:bg-blue-800 hover:text-blue-100";
       case "DRAFT":
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 hover:bg-gray-800 hover:text-gray-100";
       case "SCHEDULED":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-yellow-100 text-yellow-800 hover:bg-yellow-800 hover:text-yellow-100";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 hover:bg-gray-800 hover:text-gray-100";
     }
   };
 
@@ -177,22 +178,22 @@ export default function SentSurveys() {
     }
   };
 
-  const handleDuplicate = async (survey: any) => {
-    const result = await duplicateSurvey(survey.id);
-    if (result) {
-      refetch();
-      alert("Survey duplicated successfully!");
-    }
-  };
+  // const handleDuplicate = async (survey: any) => {
+  //   const result = await duplicateSurvey(survey.id);
+  //   if (result) {
+  //     refetch();
+  //     alert("Survey duplicated successfully!");
+  //   }
+  // };
 
-  const handleDelete = async (surveyId) => {
+  const handleDelete = async (surveyId: string) => {
     if (confirm("Are you sure you want to delete this survey?")) {
       const result = await deleteSurvey(surveyId);
       if (result) {
         refetch();
         // Also remove from localStorage
         const updatedSurveys = localSurveys.filter(
-          (survey) => survey.id !== surveyId
+          (survey: any) => survey.id !== surveyId
         );
         setLocalSurveys(updatedSurveys);
         localStorage.setItem("sentSurveys", JSON.stringify(updatedSurveys));
@@ -281,7 +282,7 @@ export default function SentSurveys() {
       {/* Survey Grid */}
       {!loading && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {displaySurveys.map((survey) => (
+          {displaySurveys.map((survey: any) => (
             <Card key={survey.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -309,10 +310,12 @@ export default function SentSurveys() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleShare(survey)}>
-                          <Share className="mr-2 h-4 w-4" />
-                          Share
-                        </DropdownMenuItem>
+                        {survey.status.toLowerCase() !== "draft" && (
+                          <DropdownMenuItem onClick={() => handleShare(survey)}>
+                            <Share className="mr-2 h-4 w-4" />
+                            Share
+                          </DropdownMenuItem>
+                        )}
                         {/* <DropdownMenuItem
                           onClick={() => handleDuplicate(survey)}
                         >
@@ -377,25 +380,50 @@ export default function SentSurveys() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 bg-transparent"
-                      asChild
-                    >
-                      <Link href={`/survey-results/${survey.id}`}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        View Results
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleShare(survey)}
-                    >
-                      <Share className="h-4 w-4" />
-                    </Button>
+                  <div>
+                    {survey.status.toLowerCase() !== "draft" ? (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 bg-transparent"
+                          asChild
+                        >
+                          <Link href={`/survey-results/${survey.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Results
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleShare(survey)}
+                        >
+                          <Share className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 bg-transparent"
+                          asChild
+                        >
+                          <Link href={`/generate-survey?edit=${survey.id}`}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Survey
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(survey.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

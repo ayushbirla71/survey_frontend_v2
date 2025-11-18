@@ -53,7 +53,33 @@ import {
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
-import { ro } from "date-fns/locale";
+
+// (only if you do not already have a similar type)
+type QuestionWithOptions = {
+  id: string;
+  surveyId: string;
+  question_type: string;
+  question_text: string;
+  options: {
+    text?: string;
+    rangeFrom?: number;
+    rangeTo?: number;
+    fromLabel?: string;
+    toLabel?: string;
+  }[];
+  order_index: number;
+  required: boolean;
+  is_approved?: boolean;
+  is_added_to_survey?: boolean;
+};
+
+// Full-screen blocking loader
+const FullScreenLoader = ({ message }: { message: string }) => (
+  <div className="fixed inset-0 bg-black/30 flex flex-col items-center justify-center z-[9999]">
+    <div className="w-12 h-12 border-4 border-violet-400 border-t-transparent animate-spin rounded-full"></div>
+    <p className="text-white mt-4 animate-pulse">{message}</p>
+  </div>
+);
 
 export default function GenerateSurvey() {
   const searchParams = useSearchParams();
@@ -100,6 +126,15 @@ export default function GenerateSurvey() {
 
   // Store original survey data for comparison
   const [originalSurveyData, setOriginalSurveyData] = useState<any>(null);
+
+  // add new state near your other useState hooks
+  const [aiGeneratedQuestions, setAiGeneratedQuestions] = useState<
+    QuestionWithOptions[]
+  >([]);
+  // Step-wise loading states
+  const [step1Loading, setStep1Loading] = useState(false);
+  const [step2Loading, setStep2Loading] = useState(false);
+  const [publishLoadingOverlay, setPublishLoadingOverlay] = useState(false);
 
   // API calls
   const {
@@ -190,10 +225,12 @@ export default function GenerateSurvey() {
       try {
         const response = await surveyApi.getSurvey(editSurveyId);
         const survey = response.survey;
+        console.log("Survey data ---->>>>>>>:", survey);
 
         // Populate form fields with existing survey data
         setTitle(survey.title || "");
         setDescription(survey.description || "");
+        setAutoGenerateQuestions(survey.autoGenerateQuestions || false);
         setSurveyCategoryId((survey as any).surveyCategoryId || "");
 
         // Update survey settings
@@ -211,7 +248,7 @@ export default function GenerateSurvey() {
           const questionsResponse = await questionApi.getQuestions(
             editSurveyId
           );
-          console.log("Questions response:", questionsResponse);
+          console.log("Questions response: ----->>>>>>>>> ", questionsResponse);
 
           if (
             questionsResponse.data &&
@@ -235,11 +272,11 @@ export default function GenerateSurvey() {
               })
             );
 
-            console.log("Setting questions:", mappedQuestions);
+            // console.log("Setting questions:", mappedQuestions);
             setQuestions(mappedQuestions);
             setOriginalQuestions(mappedQuestions);
             setQuestionsGenerated(true);
-            console.log("Loaded questions successfully:", mappedQuestions);
+            // console.log("Loaded questions successfully:", mappedQuestions);
           } else {
             console.log(
               "No questions found for survey or invalid response format"
@@ -360,10 +397,10 @@ export default function GenerateSurvey() {
         type:
           surveySettings.survey_send_by === "NONE" ? "PUBLIC" : "PERSONALIZED",
       });
-      console.log("Share result is", result);
+      // console.log("Share result is", result);
 
       if (result.data) {
-        console.log("Share result.data is", result.data);
+        // console.log("Share result.data is", result.data);
         setPublicLink(result.data.shareLink ?? "");
         setShareCode(result.data.shareCode ?? "");
       } else {
@@ -387,8 +424,8 @@ export default function GenerateSurvey() {
 
   const createQuestionsForSurvey = async (surveyId: string) => {
     try {
-      console.log("^^^^Creating questions for survey:", surveyId);
-      console.log("^^^^^The value of the questions is : ", questions);
+      // console.log("^^^^Creating questions for survey:", surveyId);
+      // console.log("^^^^^The value of the questions is : ", questions);
 
       const questionPromises = questions.map(async (q: any, index: number) => {
         const questionData: any = {
@@ -405,18 +442,18 @@ export default function GenerateSurvey() {
         if (q.mediaId) {
           questionData.mediaId = q.mediaId;
         }
-        console.log("^^^^^ questionData is", questionData);
+        // console.log("^^^^^ questionData is", questionData);
 
         return await questionApi.createQuestion(questionData);
       });
 
       const results = await Promise.all(questionPromises);
-      console.log("^^^^^ results is", results);
+      // console.log("^^^^^ results is", results);
       const createdQuestions = results
         .filter((r) => r.data)
         .map((r) => r.data!);
 
-      console.log(`Created ${createdQuestions.length} questions for survey`);
+      // console.log(`Created ${createdQuestions.length} questions for survey`);
       return createdQuestions;
     } catch (error) {
       console.error("Failed to create questions:", error);
@@ -495,10 +532,10 @@ export default function GenerateSurvey() {
         surveyId: createdSurvey.id,
         surveyData: updateData,
       });
-      console.log("Update result:", result);
+      // console.log("Update result:", result);
 
       if (result) {
-        console.log("Survey updated successfully:", result);
+        // console.log("Survey updated successfully:", result);
         // Update local survey state
         setCreatedSurvey({
           ...createdSurvey,
@@ -542,7 +579,7 @@ export default function GenerateSurvey() {
         // Navigate to share step
         setStep(6);
       } else {
-        console.log("Failed to publish survey. Please try again.");
+        // console.log("Failed to publish survey. Please try again.");
         toast.error("Failed to publish survey. Please try again.");
       }
     } catch (error: any) {
@@ -608,31 +645,23 @@ export default function GenerateSurvey() {
       // originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
       originalSurveyData.surveyCategoryId !== surveyCategoryId;
 
-    console.log("Survey data changed:", hasChanged, {
-      original: originalSurveyData,
-      current: {
-        title,
-        description,
-        flow_type: surveySettings.flow_type,
-        survey_send_by: surveySettings.survey_send_by,
-        surveyCategoryId: surveyCategoryId,
-      },
-    });
+    // console.log("Survey data changed:", hasChanged, {
+    //   original: originalSurveyData,
+    //   current: {
+    //     title,
+    //     description,
+    //     flow_type: surveySettings.flow_type,
+    //     survey_send_by: surveySettings.survey_send_by,
+    //     surveyCategoryId: surveyCategoryId,
+    //   },
+    // });
 
     return hasChanged;
   };
 
   const handleStep1Continue = async () => {
     if (!surveyCategoryId || !description || !title) return;
-
-    const surveyData = {
-      title: title,
-      description: description,
-      flow_type: surveySettings.flow_type,
-      survey_send_by: surveySettings.survey_send_by,
-      surveyCategoryId: surveyCategoryId,
-      autoGenerateQuestions: autoGenerateQuestions,
-    };
+    setStep1Loading(true);
 
     try {
       if (isEditMode && editSurveyId) {
@@ -651,7 +680,7 @@ export default function GenerateSurvey() {
             surveyId: editSurveyId!,
             surveyData: updateData,
           });
-          console.log("Update result:", result);
+          // console.log("Update result:", result);
           if (result && (result as any).data) {
             // Keep the existing survey data but update the fields
             setCreatedSurvey({
@@ -678,22 +707,57 @@ export default function GenerateSurvey() {
         // Move to next step regardless of whether update was made
         nextStep();
       } else {
+        const surveyData = {
+          title: title,
+          description: description,
+          flow_type: surveySettings.flow_type,
+          survey_send_by: surveySettings.survey_send_by,
+          surveyCategoryId: surveyCategoryId,
+          autoGenerateQuestions: autoGenerateQuestions,
+        };
         // Create new survey
         const result = await createSurvey(surveyData);
-        console.log("Create result:", result);
+        // console.log("Create result:", result);
         if (result && (result as any)?.survey && (result as any)?.survey?.id) {
           setCreatedSurvey((result as any).survey);
+          const aiQuestions = result.aiGeneratedQuestions;
+          if (
+            result.aiGeneratedQuestions &&
+            Array.isArray(result.aiGeneratedQuestions)
+          ) {
+            setAiGeneratedQuestions(result.aiGeneratedQuestions);
+
+            // if you want them to immediately appear in the main questions list:
+            setQuestions((prev) => {
+              // avoid duplicates if user re-submits, etc.
+              const existingIds = new Set(prev.map((q) => q.id));
+              const merged = [
+                ...prev,
+                ...result.aiGeneratedQuestions.filter(
+                  (q: QuestionWithOptions) => !existingIds.has(q.id)
+                ),
+              ];
+              // ensure they are ordered by order_index
+              return merged.sort(
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+              );
+            });
+          }
           nextStep();
         }
       }
     } catch (error) {
       console.error("Error saving survey:", error);
+      toast.error("Failed to save survey");
+    } finally {
+      setStep1Loading(false);
     }
   };
 
   const handleStep2Continue = async () => {
+    setStep2Loading(true);
     try {
-      console.log(">>>>> the value of the QUESTIONS is : ", questions);
+      // console.log(">>>>> the value of the QUESTIONS is : ", questions);
       if (questions.length === 0) {
         alert("Please add at least one question");
         // toast.error("Please add at least one question");
@@ -725,6 +789,9 @@ export default function GenerateSurvey() {
       nextStep();
     } catch (error: any) {
       console.log(">>> the error in the HANDLE STEP 2 function is : ", error);
+      toast.error(error.message || "Failed to save questions");
+    } finally {
+      setStep2Loading(false);
     }
   };
 
@@ -734,7 +801,7 @@ export default function GenerateSurvey() {
     const resp = await categoriesApi.getQuestionCategories();
     const data = Array.isArray(resp?.data) ? resp.data : [];
     const rows = data.filter((r: any) => ids.includes(r.id));
-    console.log("****** Rows is", rows);
+    // console.log("****** Rows is", rows);
     const map = rows.reduce((acc: Record<string, string>, r: any) => {
       // Normalize to the supported set inside preview
       acc[r.id] = r.type_name; // preview will normalize via normKindStr
@@ -929,6 +996,11 @@ export default function GenerateSurvey() {
           </div>
         )}
 
+        {step2Loading && (
+          <FullScreenLoader message="Saving your questions..." />
+        )}
+        {publishLoadingOverlay && <FullScreenLoader message="Publishing..." />}
+
         {/* Question Generation Status */}
         {/* {questionConfig && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1055,6 +1127,7 @@ export default function GenerateSurvey() {
                     onCheckedChange={(checked) =>
                       setAutoGenerateQuestions(!!checked)
                     }
+                    disabled={autoGenerateQuestions}
                   />
                   <Label htmlFor="auto-generate" className="text-sm">
                     Auto-generate questions
@@ -1098,13 +1171,14 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handleStep1Continue}
                   disabled={
+                    step1Loading ||
                     !surveyCategoryId ||
                     !description ||
                     categoriesLoading ||
                     !title
                   }
                 >
-                  {generatingQuestions ? (
+                  {generatingQuestions || step1Loading ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Generating Questions...
@@ -1150,9 +1224,14 @@ export default function GenerateSurvey() {
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
-                <Button onClick={handleStep2Continue}>
-                  Continue
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button onClick={handleStep2Continue} disabled={step2Loading}>
+                  {step2Loading ? (
+                    "Saving Questions..."
+                  ) : (
+                    <>
+                      Continue <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -1405,10 +1484,10 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handlePublishSurvey}
                   size="lg"
-                  disabled={publishLoading}
+                  disabled={publishLoading || publishLoadingOverlay}
                   className="bg-violet-600 hover:bg-violet-700"
                 >
-                  {publishLoading ? (
+                  {publishLoading || publishLoadingOverlay ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Publishing...

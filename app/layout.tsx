@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ToastContainer } from "react-toastify";
 
 export const metadata = {
   title: "Survey.AI - Survey Generation Platform",
@@ -27,7 +28,10 @@ export default function RootLayout({
         >
           <ErrorBoundary>
             <AuthProvider>
-              <AppLayout>{children}</AppLayout>
+              <AppLayout>
+                {children}
+                <ToastContainer />
+              </AppLayout>
             </AuthProvider>
           </ErrorBoundary>
         </ThemeProvider>
