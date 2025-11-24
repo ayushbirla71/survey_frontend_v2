@@ -44,6 +44,8 @@ interface Question {
   categoryId?: string;
   rows?: any[];
   columns?: any[];
+  rowOptions?: any[];
+  columnOptions?: any[];
   allowMultipleInGrid?: boolean;
 }
 
@@ -97,7 +99,17 @@ function normKindStr(s?: string): GKind | null {
 function inferFromOptions(q: Question): GKind | null {
   const opts = q.options ?? [];
 
-  // Grid defined via options[0].rowOptions/columnOptions
+  // NEW: Grid defined via question-level rowOptions/columnOptions (preferred)
+  if (
+    Array.isArray(q.rowOptions) &&
+    Array.isArray(q.columnOptions) &&
+    q.rowOptions.length > 0 &&
+    q.columnOptions.length > 0
+  ) {
+    return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
+  }
+
+  // LEGACY: Grid defined via options[0].rowOptions/columnOptions
   const first = opts[0];
   if (
     first &&
@@ -592,17 +604,46 @@ export default function PublicSurveyPage() {
 
     // Multi-choice grid (radio buttons per row)
     if (kind === "multi-choice grid") {
-      const first = opts[0];
-      const rows =
-        first?.rowOptions?.map((r: any, i: number) => ({
+      // NEW: Check question-level rowOptions/columnOptions first
+      let rows: { id: string; text: string }[] = [];
+      let cols: { id: string; text: string }[] = [];
+
+      if (
+        Array.isArray(question.rowOptions) &&
+        question.rowOptions.length > 0
+      ) {
+        rows = question.rowOptions.map((r: any, i: number) => ({
           id: r.id ?? `r-${i}`,
           text: r.text ?? `Row ${i + 1}`,
-        })) ?? [];
-      const cols =
-        first?.columnOptions?.map((c: any, j: number) => ({
+        }));
+      }
+
+      if (
+        Array.isArray(question.columnOptions) &&
+        question.columnOptions.length > 0
+      ) {
+        cols = question.columnOptions.map((c: any, j: number) => ({
           id: c.id ?? `c-${j}`,
           text: c.text ?? `Column ${j + 1}`,
-        })) ?? [];
+        }));
+      }
+
+      // LEGACY: Fallback to options[0] if question-level not found
+      if (rows.length === 0 || cols.length === 0) {
+        const first = opts[0];
+        if (rows.length === 0 && first?.rowOptions) {
+          rows = first.rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+        if (cols.length === 0 && first?.columnOptions) {
+          cols = first.columnOptions.map((c: any, j: number) => ({
+            id: c.id ?? `c-${j}`,
+            text: c.text ?? `Column ${j + 1}`,
+          }));
+        }
+      }
 
       const gridAnswer = (answer as Record<string, string>) || {};
 
@@ -710,17 +751,46 @@ export default function PublicSurveyPage() {
 
     // Checkbox grid (checkboxes per row)
     if (kind === "checkbox grid") {
-      const first = opts[0];
-      const rows =
-        first?.rowOptions?.map((r: any, i: number) => ({
+      // NEW: Check question-level rowOptions/columnOptions first
+      let rows: { id: string; text: string }[] = [];
+      let cols: { id: string; text: string }[] = [];
+
+      if (
+        Array.isArray(question.rowOptions) &&
+        question.rowOptions.length > 0
+      ) {
+        rows = question.rowOptions.map((r: any, i: number) => ({
           id: r.id ?? `r-${i}`,
           text: r.text ?? `Row ${i + 1}`,
-        })) ?? [];
-      const cols =
-        first?.columnOptions?.map((c: any, j: number) => ({
+        }));
+      }
+
+      if (
+        Array.isArray(question.columnOptions) &&
+        question.columnOptions.length > 0
+      ) {
+        cols = question.columnOptions.map((c: any, j: number) => ({
           id: c.id ?? `c-${j}`,
           text: c.text ?? `Column ${j + 1}`,
-        })) ?? [];
+        }));
+      }
+
+      // LEGACY: Fallback to options[0] if question-level not found
+      if (rows.length === 0 || cols.length === 0) {
+        const first = opts[0];
+        if (rows.length === 0 && first?.rowOptions) {
+          rows = first.rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+        if (cols.length === 0 && first?.columnOptions) {
+          cols = first.columnOptions.map((c: any, j: number) => ({
+            id: c.id ?? `c-${j}`,
+            text: c.text ?? `Column ${j + 1}`,
+          }));
+        }
+      }
 
       const gridAnswer = (answer as Record<string, string[]>) || {};
 

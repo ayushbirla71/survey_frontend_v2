@@ -225,7 +225,7 @@ export default function GenerateSurvey() {
       try {
         const response = await surveyApi.getSurvey(editSurveyId);
         const survey = response.survey;
-        console.log("Survey data ---->>>>>>>:", survey);
+        // console.log("Survey data ---->>>>>>>:", survey);
 
         // Populate form fields with existing survey data
         setTitle(survey.title || "");
@@ -245,18 +245,19 @@ export default function GenerateSurvey() {
 
         // Load questions for the survey
         try {
-          const questionsResponse = await questionApi.getQuestions(
-            editSurveyId
-          );
-          console.log("Questions response: ----->>>>>>>>> ", questionsResponse);
+          // const questionsResponse = await questionApi.getQuestions(
+          //   editSurveyId
+          // );
+          const questionsResponse = survey.questions;
+          // console.log("Questions response: ----->>>>>>>>> ", questionsResponse);
 
           if (
-            questionsResponse.data &&
-            Array.isArray(questionsResponse.data) &&
-            questionsResponse.data.length > 0
+            questionsResponse &&
+            Array.isArray(questionsResponse) &&
+            questionsResponse.length > 0
           ) {
             // Map API questions to component format
-            const mappedQuestions = questionsResponse.data.map(
+            const mappedQuestions = questionsResponse.map(
               (q: any, index: number) => ({
                 id: q.id || `q${Date.now()}_${index}`,
                 question_type: q.question_type || q.type || "TEXT",
@@ -281,9 +282,31 @@ export default function GenerateSurvey() {
             console.log(
               "No questions found for survey or invalid response format"
             );
-            setQuestions([]);
-            setOriginalQuestions([]);
-            setQuestionsGenerated(false);
+
+            const aiGeneratedQuestionsResponse =
+              await questionApi.getAiGeneratedQuestions(editSurveyId);
+            // console.log(
+            //   "AI Generated Questions Response:",
+            //   aiGeneratedQuestionsResponse
+            // );
+            if (
+              aiGeneratedQuestionsResponse.data &&
+              Array.isArray(aiGeneratedQuestionsResponse.data) &&
+              aiGeneratedQuestionsResponse.data.length > 0
+            ) {
+              // console.log(
+              //   "Setting AI generated questions:",
+              //   aiGeneratedQuestionsResponse
+              // );
+              setQuestions((prev) => {
+                return [...aiGeneratedQuestionsResponse.data];
+              });
+            } else {
+              console.log("No AI generated questions found");
+              setQuestions([]);
+              setOriginalQuestions([]);
+              setQuestionsGenerated(false);
+            }
           }
         } catch (questionError) {
           console.warn("Could not load questions:", questionError);
@@ -302,6 +325,7 @@ export default function GenerateSurvey() {
           flow_type: survey.flow_type,
           survey_send_by: survey.survey_send_by,
           surveyCategoryId: survey.surveyCategoryId,
+          autoGenerateQuestions: survey.autoGenerateQuestions,
         });
       } catch (error) {
         console.error("Error loading survey:", error);
@@ -438,6 +462,8 @@ export default function GenerateSurvey() {
           // subCategoryId: "default-subcategory",
           order_index: index,
           required: q.required || false,
+          rowOptions: q.rowOptions || [],
+          columnOptions: q.columnOptions || [],
         };
         if (q.mediaId) {
           questionData.mediaId = q.mediaId;
@@ -643,7 +669,8 @@ export default function GenerateSurvey() {
       originalSurveyData.description !== description ||
       // originalSurveyData.flow_type !== surveySettings.flow_type ||
       // originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
-      originalSurveyData.surveyCategoryId !== surveyCategoryId;
+      originalSurveyData.surveyCategoryId !== surveyCategoryId ||
+      originalSurveyData.autoGenerateQuestions != autoGenerateQuestions;
 
     // console.log("Survey data changed:", hasChanged, {
     //   original: originalSurveyData,
@@ -672,6 +699,7 @@ export default function GenerateSurvey() {
           const updateData = {
             title: title,
             description: description,
+            autoGenerateQuestions: autoGenerateQuestions,
             flow_type: surveySettings.flow_type,
             survey_send_by: surveySettings.survey_send_by,
           };
@@ -680,8 +708,9 @@ export default function GenerateSurvey() {
             surveyId: editSurveyId!,
             surveyData: updateData,
           });
+          // console.log(" ********* Update result:", result);
           // console.log("Update result:", result);
-          if (result && (result as any).data) {
+          if (result) {
             // Keep the existing survey data but update the fields
             setCreatedSurvey({
               ...createdSurvey,
@@ -700,6 +729,31 @@ export default function GenerateSurvey() {
               survey_send_by: surveySettings.survey_send_by,
               surveyCategoryId: surveyCategoryId,
             });
+
+            const aiQuestions = result.aiGeneratedQuestions;
+            // console.log(
+            //   ">>>>>> $$$$$$$$ the value of the AI QUESTIONS is : ",
+            //   aiQuestions
+            // );
+
+            if (aiQuestions && Array.isArray(aiQuestions)) {
+              // if you want them to immediately appear in the main questions list:
+              setQuestions((prev) => {
+                // avoid duplicates if user re-submits, etc.
+                const existingIds = new Set(prev.map((q) => q.id.toString()));
+                const merged = [
+                  ...prev,
+                  ...aiQuestions.filter(
+                    (q: QuestionWithOptions) =>
+                      !existingIds.has(q.id.toString())
+                  ),
+                ];
+                // ensure they are ordered by order_index
+                return merged.sort(
+                  (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+                );
+              });
+            }
           }
         } else {
           console.log("No changes detected, skipping update API call");
@@ -721,20 +775,32 @@ export default function GenerateSurvey() {
         if (result && (result as any)?.survey && (result as any)?.survey?.id) {
           setCreatedSurvey((result as any).survey);
           const aiQuestions = result.aiGeneratedQuestions;
-          if (
-            result.aiGeneratedQuestions &&
-            Array.isArray(result.aiGeneratedQuestions)
-          ) {
-            setAiGeneratedQuestions(result.aiGeneratedQuestions);
+          if (aiQuestions && Array.isArray(aiQuestions)) {
+            setAiGeneratedQuestions(aiQuestions);
 
             // if you want them to immediately appear in the main questions list:
             setQuestions((prev) => {
               // avoid duplicates if user re-submits, etc.
-              const existingIds = new Set(prev.map((q) => q.id));
+              const existingIds = new Set(prev.map((q) => q.id.toString()));
               const merged = [
                 ...prev,
-                ...result.aiGeneratedQuestions.filter(
-                  (q: QuestionWithOptions) => !existingIds.has(q.id)
+                ...aiQuestions.filter(
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
+                ),
+              ];
+              // ensure they are ordered by order_index
+              return merged.sort(
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+              );
+            });
+
+            setOriginalQuestions((prev) => {
+              // avoid duplicates if user re-submits, etc.
+              const existingIds = new Set(prev.map((q) => q.id.toString()));
+              const merged = [
+                ...prev,
+                ...aiQuestions.filter(
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
                 ),
               ];
               // ensure they are ordered by order_index
@@ -779,6 +845,7 @@ export default function GenerateSurvey() {
         originalQuestions,
         questions
       );
+      // console.log(">>>>>> the VALUE of the UPDATED QUESTIONS is : ", updated);
 
       // Update local questions with real ids for newly created items
       setQuestions(updated);
@@ -1127,7 +1194,7 @@ export default function GenerateSurvey() {
                     onCheckedChange={(checked) =>
                       setAutoGenerateQuestions(!!checked)
                     }
-                    disabled={autoGenerateQuestions}
+                    disabled={autoGenerateQuestions && isEditMode}
                   />
                   <Label htmlFor="auto-generate" className="text-sm">
                     Auto-generate questions

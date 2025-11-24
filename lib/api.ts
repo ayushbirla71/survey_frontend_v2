@@ -63,6 +63,7 @@ export interface Survey {
   updated_at: string;
   surveyCategoryId: string;
   autoGenerateQuestions: any;
+  questions: Question[];
 }
 
 // Question model from new API
@@ -596,15 +597,45 @@ export const surveyApi = {
         showProgressBar?: boolean;
         shuffleQuestions?: boolean;
       };
+      autoGenerateQuestions?: boolean;
       status?: "DRAFT" | "SCHEDULED" | "PUBLISHED";
       scheduled_date?: string;
       scheduled_type?: "IMMEDIATE" | "SCHEDULED";
     }
-  ): Promise<ApiResponse<{ message: string }>> => {
-    return apiRequest(`/api/surveys/${surveyId}`, {
-      method: "PUT",
-      body: JSON.stringify(surveyData),
-    });
+  ): Promise<{ message: string; aiGeneratedQuestions: any }> => {
+    try {
+      const token = getAuthToken();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Add authentication header if token exists
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/surveys/${surveyId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(surveyData),
+      });
+      console.log("response is", response);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("data is", data);
+      return { data };
+    } catch (error) {
+      console.error("API request failed:", error);
+      throw error;
+    }
+    // return apiRequest(`/api/surveys/${surveyId}`, {
+    //   method: "PUT",
+    //   body: JSON.stringify(surveyData),
+    // });
   },
 
   // DELETE /api/surveys/{surveyId}
@@ -635,6 +666,8 @@ export const questionApi = {
     // subCategoryId: string;
     order_index?: number;
     required?: boolean;
+    rowOptions?: any[];
+    columnOptions?: any[];
   }): Promise<ApiResponse<Question>> => {
     return apiRequest("/api/questions", {
       method: "POST",
@@ -683,6 +716,10 @@ export const questionApi = {
     }
   },
 
+  getAiGeneratedQuestions: async (surveyId: string) => {
+    return apiRequest(`/api/questions/${surveyId}`);
+  },
+
   // PUT /api/questions/{questionId}
   updateQuestion: async (
     questionId: string,
@@ -698,6 +735,8 @@ export const questionApi = {
       subCategoryId?: string;
       order_index?: number;
       required?: boolean;
+      rowOptions?: any[];
+      columnOptions?: any[];
     }
   ): Promise<ApiResponse<Question>> => {
     return apiRequest(`/api/questions/${questionId}`, {

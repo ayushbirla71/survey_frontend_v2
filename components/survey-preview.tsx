@@ -47,6 +47,8 @@ type ApiQuestion = {
   // Optional grid descriptors if present
   rows?: (GridLabel | string)[];
   columns?: (GridLabel | string)[];
+  rowOptions?: { text?: string | null; id?: string }[];
+  columnOptions?: { text?: string | null; id?: string }[];
   allowMultipleInGrid?: boolean;
 };
 
@@ -87,7 +89,17 @@ function normKindStr(s?: string): GKind | null {
 function inferFromOptions(q: ApiQuestion): GKind | null {
   const opts = q.options ?? [];
 
-  // NEW: Grid defined via options[0].rowOptions/columnOptions
+  // NEW: Grid defined via question-level rowOptions/columnOptions (preferred)
+  if (
+    Array.isArray(q.rowOptions) &&
+    Array.isArray(q.columnOptions) &&
+    q.rowOptions.length > 0 &&
+    q.columnOptions.length > 0
+  ) {
+    return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
+  }
+
+  // LEGACY: Grid defined via options[0].rowOptions/columnOptions
   const first = opts[0];
   if (
     first &&
@@ -148,7 +160,25 @@ function extractGrid(q: ApiQuestion): {
   rows: { id: string; text: string }[];
   cols: { id: string; text: string }[];
 } {
-  // 1) Preferred: from options[0].rowOptions/columnOptions (your new API shape)
+  // 1) NEW: Preferred - from question-level rowOptions/columnOptions
+  if (
+    Array.isArray(q.rowOptions) &&
+    Array.isArray(q.columnOptions) &&
+    q.rowOptions.length &&
+    q.columnOptions.length
+  ) {
+    const rows = q.rowOptions.map((r, i) => ({
+      id: r.id ?? `r-${i}`,
+      text: toText(r, `Row ${i + 1}`),
+    }));
+    const cols = q.columnOptions.map((c, j) => ({
+      id: c.id ?? `c-${j}`,
+      text: toText(c, `Column ${j + 1}`),
+    }));
+    return { rows, cols };
+  }
+
+  // 2) LEGACY: from options[0].rowOptions/columnOptions (old API shape)
   const first = q.options?.[0];
   if (
     first &&
@@ -166,7 +196,7 @@ function extractGrid(q: ApiQuestion): {
     return { rows, cols };
   }
 
-  // 2) Next: explicit rows/columns props
+  // 3) Next: explicit rows/columns props
   if (
     Array.isArray(q.rows) &&
     Array.isArray(q.columns) &&
@@ -184,7 +214,7 @@ function extractGrid(q: ApiQuestion): {
     return { rows, cols };
   }
 
-  // 3) Fallback: derive from pair IDs
+  // 4) Fallback: derive from pair IDs
   const rowMap = new Map<string, string>();
   const colMap = new Map<string, string>();
   (q.options ?? []).forEach((o, idx) => {

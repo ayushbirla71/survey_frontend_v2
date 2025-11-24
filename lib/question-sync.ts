@@ -16,6 +16,8 @@ export type AnyQuestion = {
   categoryId?: string;
   options?: any[];
   mediaId?: string | null;
+  rowOptions?: any[];
+  columnOptions?: any[];
 };
 
 export function normalize(q: AnyQuestion, surveyId: string) {
@@ -29,6 +31,8 @@ export function normalize(q: AnyQuestion, surveyId: string) {
     order_index: get(q, "order_index", "orderindex") ?? 0,
     required: q.required ?? false,
     mediaId: q.mediaId ?? null,
+    rowOptions: q.rowOptions ?? [],
+    columnOptions: q.columnOptions ?? [],
   };
 }
 
@@ -57,6 +61,10 @@ export function diffQuestions(original: AnyQuestion[], current: AnyQuestion[]) {
           get(cq, "question_text", "questiontext") ||
         (oq.categoryId ?? "") !== (cq.categoryId ?? "") ||
         JSON.stringify(oq.options ?? []) !== JSON.stringify(cq.options ?? []) ||
+        JSON.stringify(oq.rowOptions ?? []) !==
+          JSON.stringify(cq.rowOptions ?? []) ||
+        JSON.stringify(oq.columnOptions ?? []) !==
+          JSON.stringify(cq.columnOptions ?? []) ||
         (get(oq, "order_index", "orderindex") ?? 0) !==
           (get(cq, "order_index", "orderindex") ?? 0) ||
         (oq.required ?? false) !== (cq.required ?? false) ||
@@ -75,7 +83,10 @@ export async function syncSurveyQuestions(
   original: AnyQuestion[],
   current: AnyQuestion[]
 ) {
+  // console.log(">>>>>> the VALUE OF THE ORIGINAL QUESTIONS is : ", original);
+  // console.log(">>>>>> the VALUE OF THE CURRENT QUESTIONS is : ", current);
   const { toCreate, toUpdate, toDelete } = diffQuestions(original, current);
+  // console.log("toCreate is", toCreate, " and toUpdate is", toUpdate);
 
   // Create
   const createdPairs = await Promise.all(
@@ -90,6 +101,8 @@ export async function syncSurveyQuestions(
         categoryId: n.categoryId || "",
         order_index: n.order_index ?? 0,
         required: n.required ?? false,
+        rowOptions: n.rowOptions || [],
+        columnOptions: n.columnOptions || [],
       });
       if (error) throw new Error(error);
       return { localId: q.id, server: data };
@@ -107,6 +120,8 @@ export async function syncSurveyQuestions(
         categoryId: n.categoryId,
         order_index: n.order_index,
         required: n.required,
+        rowOptions: n.rowOptions || [],
+        columnOptions: n.columnOptions || [],
       });
       if (error) throw new Error(error);
     })
