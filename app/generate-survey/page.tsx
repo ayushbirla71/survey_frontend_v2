@@ -53,6 +53,7 @@ import {
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 
 // (only if you do not already have a similar type)
 type QuestionWithOptions = {
@@ -72,6 +73,29 @@ type QuestionWithOptions = {
   is_approved?: boolean;
   is_added_to_survey?: boolean;
 };
+
+type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+
+interface SurveySettings {
+  flow_type: "STATIC";
+  survey_send_by: SurveySendByType;
+  isAnonymous: boolean;
+  showProgressBar: boolean;
+  shuffleQuestions: boolean;
+  allowMultipleSubmissions: boolean;
+}
+
+interface ShareToken {
+  id?: string;
+  surveyId?: string;
+  recipient_email?: string;
+  recipient_mobile?: string;
+  agentUserUniqueId?: string;
+  token_hash?: string;
+  expires_at?: string;
+  used?: boolean;
+  created_at?: string;
+}
 
 // Full-screen blocking loader
 const FullScreenLoader = ({ message }: { message: string }) => (
@@ -98,9 +122,9 @@ export default function GenerateSurvey() {
   const [generationMethod, setGenerationMethod] = useState<
     "openai" | "static" | null
   >(null);
-  const [surveySettings, setSurveySettings] = useState({
-    flow_type: "STATIC" as const,
-    survey_send_by: "NONE" as const,
+  const [surveySettings, setSurveySettings] = useState<SurveySettings>({
+    flow_type: "STATIC",
+    survey_send_by: "NONE",
     isAnonymous: false,
     showProgressBar: true,
     shuffleQuestions: false,
@@ -115,6 +139,7 @@ export default function GenerateSurvey() {
     targetCount: 1,
     dataSource: "default",
   });
+  const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
   const [createdSurvey, setCreatedSurvey] = useState<any>(null);
@@ -135,6 +160,7 @@ export default function GenerateSurvey() {
   const [step1Loading, setStep1Loading] = useState(false);
   const [step2Loading, setStep2Loading] = useState(false);
   const [publishLoadingOverlay, setPublishLoadingOverlay] = useState(false);
+  const [excelData, setExcelData] = useState<ShareToken[] | null>(null);
 
   // API calls
   const {
@@ -416,17 +442,25 @@ export default function GenerateSurvey() {
     if (!createdSurvey?.id) return;
 
     try {
-      const result = await shareApi.shareSurvey({
+      const body: {
+        surveyId: string;
+        type: SurveySendByType;
+        agentUserUniqueIds?: string[];
+      } = {
         surveyId: createdSurvey.id,
-        type:
-          surveySettings.survey_send_by === "NONE" ? "PUBLIC" : "PERSONALIZED",
-      });
-      // console.log("Share result is", result);
+        type: surveySettings.survey_send_by,
+      };
+      if (surveySettings.survey_send_by === "AGENT") {
+        body.agentUserUniqueIds = userUniqueIdsList;
+      }
+      const result = await shareApi.shareSurvey(body);
+      console.log("Share result is", result);
 
       if (result.data) {
-        // console.log("Share result.data is", result.data);
+        console.log("Share result.data is", result.data);
         setPublicLink(result.data.shareLink ?? "");
         setShareCode(result.data.shareCode ?? "");
+        setExcelData(result.data.tokens ?? []);
       } else {
         // Fallback: Generate local URL if API doesn't return one
         const baseUrl = window.location.origin;
@@ -875,6 +909,31 @@ export default function GenerateSurvey() {
       return acc;
     }, {});
     return map as Record<string, any>;
+  };
+
+  const handleUserUniqueIdsUpdate = (userUniqueIds: string[]) => {
+    setUserUniqueIdsList(userUniqueIds);
+  };
+
+  const handleDownloadExcel = () => {
+    if (!excelData) return;
+
+    // Prepare worksheet data, header row first
+    const worksheetData = [
+      ["userUniqueId", "surveyLink"], // header row
+      ...excelData.map((item: any) => [
+        item.agentUserUniqueId,
+        item.token_hash,
+      ]),
+    ];
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+    // Trigger download
+    XLSX.writeFile(workbook, "SurveyLinks.xlsx");
   };
 
   return (
@@ -1347,7 +1406,7 @@ export default function GenerateSurvey() {
                     <Select
                       value={surveySettings.survey_send_by}
                       onValueChange={(
-                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT"
                       ) =>
                         setSurveySettings((prev: any) => ({
                           ...prev,
@@ -1363,6 +1422,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
                         <SelectItem value="BOTH">Both</SelectItem> */}
                         <SelectItem value="NONE">Public (Link Only)</SelectItem>
+                        <SelectItem value="AGENT">Agent</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1450,8 +1510,11 @@ export default function GenerateSurvey() {
           {step === 4 && (
             <div className="p-8">
               <AudienceSelector
+                createdSurvey={createdSurvey}
+                surveySettings={surveySettings}
                 audience={audience}
                 onAudienceUpdate={handleAudienceUpdate}
+                onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
@@ -1606,105 +1669,93 @@ export default function GenerateSurvey() {
                       Share Your Survey
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {!publicLink ? (
-                      <div className="text-center py-6">
-                        <Button
-                          onClick={generatePublicLink}
-                          size="lg"
-                          className="bg-violet-600 hover:bg-violet-700"
-                        >
-                          <LinkIcon className="mr-2 h-4 w-4" />
-                          Generate Public Link
-                        </Button>
-                        <p className="text-sm text-slate-500 mt-2">
-                          Create a shareable link that anyone can use to access
-                          your survey
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium">
-                            Public Survey Link
-                          </Label>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Input
-                              value={publicLink}
-                              readOnly
-                              className="flex-1 bg-slate-50"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                navigator.clipboard.writeText(publicLink);
-                                // You could add a toast notification here
-                              }}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          </div>
+                  {surveySettings?.survey_send_by === "AGENT" ? (
+                    <CardContent>
+                      {/* <p className="text-sm text-slate-500">
+                        Your survey is ready to be shared with your audience.
+                      </p> */}
+                      {!excelData ? (
+                        <div className="text-center py-6">
+                          <Button
+                            onClick={generatePublicLink}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Generate Agent Users Link Excel
+                          </Button>
+                          <p className="text-sm text-slate-500 mt-2">
+                            Create a file for each user with a link that
+                            Specific user can use to access the survey
+                          </p>
                         </div>
-
-                        {/* {shareCode && (
+                      ) : (
+                        <div className="mt-4">
+                          <Button
+                            onClick={handleDownloadExcel}
+                            size="lg"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Download Links Excel
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  ) : (
+                    <CardContent className="space-y-4">
+                      {!publicLink ? (
+                        <div className="text-center py-6">
+                          <Button
+                            onClick={generatePublicLink}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Generate Public Link
+                          </Button>
+                          <p className="text-sm text-slate-500 mt-2">
+                            Create a shareable link that anyone can use to
+                            access your survey
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
                           <div>
                             <Label className="text-sm font-medium">
-                              Share Code
+                              Public Survey Link
                             </Label>
                             <div className="flex items-center gap-2 mt-2">
                               <Input
-                                value={shareCode}
+                                value={publicLink}
                                 readOnly
-                                className="flex-1 bg-slate-50 font-mono"
+                                className="flex-1 bg-slate-50"
                               />
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(shareCode);
+                                  navigator.clipboard.writeText(publicLink);
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
                               </Button>
                             </div>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Users can enter this code at your survey portal
-                            </p>
                           </div>
-                        )} */}
 
-                        <div className="flex gap-2 pt-4">
-                          <Button
-                            variant="outline"
-                            onClick={() => window.open(publicLink, "_blank")}
-                            className="flex-1"
-                          >
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Preview Survey
-                          </Button>
-                          {/* <Button
-                            variant="outline"
-                            onClick={() => {
-                              const subject = encodeURIComponent(
-                                `Survey: ${title}`
-                              );
-                              const body = encodeURIComponent(
-                                `Hi,\n\nI'd like to invite you to participate in my survey: "${title}"\n\nPlease click the link below to get started:\n${publicLink}\n\nThank you!`
-                              );
-                              window.open(
-                                `mailto:?subject=${subject}&body=${body}`
-                              );
-                            }}
-                            className="flex-1"
-                          >
-                            <Mail className="mr-2 h-4 w-4" />
-                            Share via Email
-                          </Button> */}
+                          <div className="flex gap-2 pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => window.open(publicLink, "_blank")}
+                              className="flex-1"
+                            >
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              Preview Survey
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
+                      )}
+                    </CardContent>
+                  )}
                 </Card>
 
                 {/* Next Steps */}

@@ -119,14 +119,15 @@ export interface SurveyResponseResult {
 
 // ShareToken model from new API
 export interface ShareToken {
-  id: string;
-  surveyId: string;
+  id?: string;
+  surveyId?: string;
   recipient_email?: string;
   recipient_mobile?: string;
-  token_hash: string;
+  agentUserUniqueId?: string;
+  token_hash?: string;
   expires_at?: string;
-  used: boolean;
-  created_at: string;
+  used?: boolean;
+  created_at?: string;
 }
 
 // Base API function with error handling and authentication
@@ -903,11 +904,12 @@ export const shareApi = {
   // POST /api/share
   shareSurvey: async (shareData: {
     surveyId: string;
-    type: "PUBLIC" | "PERSONALIZED";
+    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
     recipients?: Array<{
       email?: string;
       mobile_no?: string;
     }>;
+    agentUserUniqueIds?: string[];
   }): Promise<
     ApiResponse<{
       shareLink?: string;
@@ -1179,25 +1181,31 @@ export const surveyResultsApi = {
     );
   },
 
-  // GET /api/survey-results/:surveyId/export - Export Survey Results
   exportResults: async (
-    surveyId: string,
-    format: "json" | "csv" = "json"
-  ): Promise<
-    ApiResponse<{
-      surveyId: string;
-      surveyTitle: string;
-      exportedAt: string;
-      totalResponses: number;
-      responses: any[];
-    }>
-  > => {
-    const queryParams = new URLSearchParams();
-    queryParams.append("format", format);
-    return apiRequest(
-      `/api/survey-results/${surveyId}/export?${queryParams.toString()}`
-    );
+    surveyId: string
+  ): Promise<ApiResponse<SurveyResponseResult>> => {
+    return apiRequest(`/api/responses/surveys/${surveyId}/export`);
   },
+
+  // GET /api/survey-results/:surveyId/export - Export Survey Results
+  // exportResults: async (
+  //   surveyId: string,
+  //   format: "json" | "csv" = "json"
+  // ): Promise<
+  //   ApiResponse<{
+  //     surveyId: string;
+  //     surveyTitle: string;
+  //     exportedAt: string;
+  //     totalResponses: number;
+  //     responses: any[];
+  //   }>
+  // > => {
+  //   const queryParams = new URLSearchParams();
+  //   queryParams.append("format", format);
+  //   return apiRequest(
+  //     `/api/survey-results/${surveyId}/export?${queryParams.toString()}`
+  //   );
+  // },
 
   // GET /api/survey-results/:surveyId/responses/:responseId - Get Response Details
   getResponseDetails: async (

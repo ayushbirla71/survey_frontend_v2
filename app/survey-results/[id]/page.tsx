@@ -21,6 +21,7 @@ import { useParams } from "next/navigation";
 import { surveyResultsApi, apiWithFallback, responseApi } from "@/lib/api";
 import { useApi, usePaginatedApi } from "@/hooks/useApi";
 import { useEffect } from "react";
+import { exportResponsesToExcel } from "@/lib/exportExcel";
 
 export default function SurveyResults() {
   const params = useParams();
@@ -96,27 +97,45 @@ export default function SurveyResults() {
     survey = surveyResults["survey-1"];
   }
 
-  const handleExport = async (format: "csv" | "json") => {
+  // const handleExport = async (format: "csv" | "json") => {
+  //   try {
+  //     const result = await surveyResultsApi.exportResults(surveyId, format);
+  //     if (result.data) {
+  //       // For JSON format, download as JSON file
+  //       if (format === "json") {
+  //         const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+  //           type: "application/json",
+  //         });
+  //         const url = URL.createObjectURL(blob);
+  //         const a = document.createElement("a");
+  //         a.href = url;
+  //         a.download = `survey_results_${surveyId}.json`;
+  //         document.body.appendChild(a);
+  //         a.click();
+  //         document.body.removeChild(a);
+  //         URL.revokeObjectURL(url);
+  //       } else {
+  //         // For CSV format, the API should return CSV data
+  //         alert("CSV export successful! Check your downloads.");
+  //       }
+  //     }
+  //   } catch (error) {
+  //     console.error("Export failed:", error);
+  //     alert("Export failed. Please try again.");
+  //   }
+  // };
+
+  const handleExport = async (format: "csv" | "json" | "excel") => {
     try {
-      const result = await surveyResultsApi.exportResults(surveyId, format);
+      const result: any = await surveyResultsApi.exportResults(surveyId);
+      console.log("Export result is", result);
       if (result.data) {
-        // For JSON format, download as JSON file
-        if (format === "json") {
-          const blob = new Blob([JSON.stringify(result.data, null, 2)], {
-            type: "application/json",
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `survey_results_${surveyId}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        } else {
-          // For CSV format, the API should return CSV data
-          alert("CSV export successful! Check your downloads.");
-        }
+        exportResponsesToExcel(
+          result.data.title,
+          result.data.questionResults,
+          result.data.individualResponses,
+          result.data.stats
+        );
       }
     } catch (error) {
       console.error("Export failed:", error);
@@ -175,10 +194,10 @@ export default function SurveyResults() {
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            <Button variant="outline">
+            {/* <Button variant="outline">
               <Share2 className="mr-2 h-4 w-4" />
               Share
-            </Button>
+            </Button> */}
           </div>
         </div>
 
@@ -321,7 +340,7 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {/* {question.type === "text" && (
+                  {question.type === "text" && (
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">
                         Recent responses:
@@ -337,7 +356,7 @@ export default function SurveyResults() {
                         )
                       )}
                     </div>
-                  )} */}
+                  )}
 
                   {question.type === "grid" && (
                     <div className="space-y-4">

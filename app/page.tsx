@@ -355,7 +355,8 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       {/* Show Edit button for DRAFT and SCHEDULED surveys */}
                       {(survey.status === "DRAFT" ||
-                        survey.status === "SCHEDULED") && (
+                        survey.status === "SCHEDULED" ||
+                        survey.share_tokens?.length == 0) && (
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/generate-survey?edit=${survey.id}`}>
                             <Edit className="mr-2 h-4 w-4" />
@@ -364,7 +365,8 @@ export default function Dashboard() {
                         </Button>
                       )}
                       {(survey.status === "DRAFT" ||
-                        survey.status === "SCHEDULED") && (
+                        survey.status === "SCHEDULED" ||
+                        survey.share_tokens?.length == 0) && (
                         <Button
                           variant="destructive"
                           size="sm"
@@ -382,25 +384,27 @@ export default function Dashboard() {
                       )}
 
                       {/* Show View Results for PUBLISHED surveys */}
-                      {survey.status === "PUBLISHED" && (
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/survey-results/${survey.id}`}>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View Results
-                          </Link>
-                        </Button>
-                      )}
+                      {survey.status === "PUBLISHED" &&
+                        survey.share_tokens?.length > 0 && (
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/survey-results/${survey.id}`}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              View Results
+                            </Link>
+                          </Button>
+                        )}
 
                       {/* Show Share button for DRAFT and SCHEDULED surveys */}
-                      {survey.status === "PUBLISHED" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleShare(survey)}
-                        >
-                          <Share className="h-4 w-4" />
-                        </Button>
-                      )}
+                      {survey.status === "PUBLISHED" &&
+                        survey.share_tokens?.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleShare(survey)}
+                          >
+                            <Share className="h-4 w-4" />
+                          </Button>
+                        )}
                     </div>
                   </CardContent>
                 </Card>

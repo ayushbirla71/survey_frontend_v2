@@ -150,9 +150,9 @@ export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
   const token = params.id as string;
-  console.log("Token is", token);
   // const surveyId = params.id as string;
 
+  const [notFoundHeader, setNotFoundHeader] = useState("Survey Not Found");
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -212,11 +212,12 @@ export default function PublicSurveyPage() {
       if (result.data) {
         loadSurvey(result.data.surveyId);
       } else {
-        throw new Error("Failed to validate token");
+        throw new Error(result.error || "Failed to validate token");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to validate token:", e);
-      setError("Failed to validate token");
+      setNotFoundHeader("Invalid survey link");
+      setError(e.message || "Failed to validate token");
       setLoading(false);
     }
   };
@@ -380,14 +381,18 @@ export default function PublicSurveyPage() {
       );
 
       const responseData = {
-        surveyId: survey.id,
+        // surveyId: survey.id,
+        token,
         user_metadata: {},
         answers: formattedAnswers,
       };
       console.log("Formatted answers for API:", formattedAnswers);
 
       // Submit response without authentication (public survey)
-      const submitResponse = await responseApi.submitResponse(responseData);
+      // const submitResponse = await responseApi.submitResponse(responseData);
+      const submitResponse = await responseApi.submitResponseWithToken(
+        responseData
+      );
       console.log("submitResponse is", submitResponse);
 
       const result = submitResponse;
@@ -902,7 +907,7 @@ export default function PublicSurveyPage() {
             <div className="text-center">
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold text-slate-800 mb-2">
-                Survey Not Found
+                {notFoundHeader}
               </h2>
               <p className="text-slate-600 mb-4">
                 {error ||
