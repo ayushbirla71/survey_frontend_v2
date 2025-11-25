@@ -3,6 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -125,21 +131,33 @@ export default function SurveyResults() {
   //   }
   // };
 
-  const handleExport = async (format: "csv" | "json" | "excel") => {
-    try {
-      const result: any = await surveyResultsApi.exportResults(surveyId);
-      console.log("Export result is", result);
-      if (result.data) {
-        exportResponsesToExcel(
-          result.data.title,
-          result.data.questionResults,
-          result.data.individualResponses,
-          result.data.stats
-        );
+  // ✨ UPDATED EXPORT HANDLER
+  const handleExport = async (format: "excel" | "pdf") => {
+    if (format === "excel") {
+      try {
+        const result: any = await surveyResultsApi.exportResults(surveyId);
+        if (result.data) {
+          exportResponsesToExcel(
+            result.data.title,
+            result.data.questionResults,
+            result.data.individualResponses,
+            result.data.stats
+          );
+        }
+      } catch (error) {
+        console.error("Excel Export failed:", error);
+        alert("Excel Export failed. Please try again.");
       }
-    } catch (error) {
-      console.error("Export failed:", error);
-      alert("Export failed. Please try again.");
+    }
+
+    if (format === "pdf") {
+      try {
+        const { exportSurveyToPDF } = await import("@/lib/exportPDF");
+        exportSurveyToPDF();
+      } catch (error) {
+        console.error("PDF Export failed:", error);
+        alert("PDF Export failed. Please try again.");
+      }
     }
   };
 
@@ -163,7 +181,8 @@ export default function SurveyResults() {
   const fmtPct = (n?: number) => (typeof n === "number" ? `${n}%` : "0%");
 
   return (
-    <div className="p-6">
+    <div className="p-6" id="export-section">
+      {/* <div id="export-section"></div> */}
       <div className="mb-8">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" asChild>
@@ -190,10 +209,34 @@ export default function SurveyResults() {
               />
               Refresh
             </Button>
-            <Button variant="outline" onClick={() => handleExport("csv")}>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+                {/* <Button variant="outline" onClick={() => handleExport("csv")}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button> */}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem
+                  onClick={() => handleExport("excel")}
+                  className="cursor-pointer"
+                >
+                  Export Excel
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={() => handleExport("pdf")}
+                  className="cursor-pointer"
+                >
+                  Export PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* <Button variant="outline">
               <Share2 className="mr-2 h-4 w-4" />
               Share
