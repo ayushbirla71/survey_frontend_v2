@@ -160,6 +160,7 @@ export default function PublicSurveyPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [startTime] = useState(Date.now());
   const [kindsMap, setKindsMap] = useState<KindsMap>({});
 
@@ -216,8 +217,14 @@ export default function PublicSurveyPage() {
       }
     } catch (e: any) {
       console.error("Failed to validate token:", e);
-      setNotFoundHeader("Invalid survey link");
-      setError(e.message || "Failed to validate token");
+      if (e.message.includes("Token already used.")) {
+        console.log("Token already used:--------");
+        setAlreadySubmitted(true);
+      } else {
+        console.log("Failed to validate token:--------");
+        setNotFoundHeader("Invalid survey link");
+        setError(e.message || "Failed to validate token");
+      }
       setLoading(false);
     }
   };
@@ -260,7 +267,8 @@ export default function PublicSurveyPage() {
       }
     } catch (err: any) {
       console.error("Error loading survey:", err);
-      setError(err.message || "Failed to load survey");
+      // setError(err.message || "Failed to load survey");
+      throw err.message || "Failed to load survey";
     } finally {
       setLoading(false);
     }
@@ -895,6 +903,28 @@ export default function PublicSurveyPage() {
           <RefreshCw className="h-8 w-8 animate-spin text-violet-600 mx-auto mb-4" />
           <p className="text-slate-600">Loading survey...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                You've Already Responded
+              </h2>
+              <p className="text-slate-600 mb-6">
+                Your can fill out this survey only once.
+              </p>
+              <Button onClick={() => router.push("/")}>Close</Button>
+              {/* <Button onClick={() => window.close()}>Close</Button> */}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

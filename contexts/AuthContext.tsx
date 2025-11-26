@@ -41,12 +41,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname();
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/auth/login", "/auth/signup"];
+  const publicRoutes = ["/auth/login", "/auth/admin-signup"];
   const publicRoutePrefixes = ["/survey/"]; // anything starting with /survey/ is public
   // ✅ Check if the route is public
 
   // 🔹 Auth routes = only login/signup
-  const authRoutes = ["/auth/login", "/auth/signup"];
+  const authRoutes = ["/auth/login", "/auth/admin-signup"];
 
   const isPublicRoute =
     publicRoutes.includes(pathname) ||

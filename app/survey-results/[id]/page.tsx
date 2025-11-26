@@ -26,14 +26,18 @@ import { surveyResults } from "@/lib/assist-data";
 import { useParams } from "next/navigation";
 import { surveyResultsApi, apiWithFallback, responseApi } from "@/lib/api";
 import { useApi, usePaginatedApi } from "@/hooks/useApi";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
+import { toast } from "react-toastify";
 
 export default function SurveyResults() {
   const params = useParams();
   const surveyId = params.id as string;
 
-  console.log(">>>>>>>>> THE VALUE OF SURVEYRESULTS IS : ", surveyResults);
+  const [exportExcelLoading, setExportExcelLoading] = useState(false);
+  const [exportPdfLoading, setExportPdfLoading] = useState(false);
+
+  // console.log(">>>>>>>>> THE VALUE OF SURVEYRESULTS IS : ", surveyResults);
 
   // API calls using new survey-results endpoints
   const {
@@ -44,17 +48,17 @@ export default function SurveyResults() {
   } = useApi(() => {
     return responseApi.getSurveyResults(surveyId);
   }, [surveyId]);
-  console.log("Results data is", resultsData);
-  console.log(">>> Results Error is", resultsError);
+  // console.log("Results data is", resultsData);
+  // console.log(">>> Results Error is", resultsError);
 
-  const {
-    data: summaryData,
-    loading: summaryLoading,
-    error: summaryError,
-    refetch: refetchSummary,
-  } = useApi(() => {
-    return surveyResultsApi.getSummary(surveyId);
-  }, [surveyId]);
+  // const {
+  //   data: summaryData,
+  //   loading: summaryLoading,
+  //   error: summaryError,
+  //   refetch: refetchSummary,
+  // } = useApi(() => {
+  //   return surveyResultsApi.getSummary(surveyId);
+  // }, [surveyId]);
 
   // Use API data if available, otherwise use demo data
   let survey = null;
@@ -134,8 +138,10 @@ export default function SurveyResults() {
   // ✨ UPDATED EXPORT HANDLER
   const handleExport = async (format: "excel" | "pdf") => {
     if (format === "excel") {
+      setExportExcelLoading(true);
       try {
         const result: any = await surveyResultsApi.exportResults(surveyId);
+        // console.log("Export result is", result);
         if (result.data) {
           exportResponsesToExcel(
             result.data.title,
@@ -146,17 +152,22 @@ export default function SurveyResults() {
         }
       } catch (error) {
         console.error("Excel Export failed:", error);
-        alert("Excel Export failed. Please try again.");
+        toast.error("Excel Export failed. Please try again.");
+      } finally {
+        setExportExcelLoading(false);
       }
     }
 
     if (format === "pdf") {
+      setExportPdfLoading(true);
       try {
         const { exportSurveyToPDF } = await import("@/lib/exportPDF");
         exportSurveyToPDF();
       } catch (error) {
         console.error("PDF Export failed:", error);
-        alert("PDF Export failed. Please try again.");
+        toast.error("PDF Export failed. Please try again.");
+      } finally {
+        setExportPdfLoading(false);
       }
     }
   };
@@ -185,7 +196,7 @@ export default function SurveyResults() {
       {/* <div id="export-section"></div> */}
       <div className="mb-8">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild>
+          <Button variant="outline" size="icon" asChild className="pdf-hide">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -196,7 +207,7 @@ export default function SurveyResults() {
             </h1>
             <p className="text-slate-500">{survey.description}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 pdf-hide">
             <Button
               variant="outline"
               onClick={handleRefresh}
@@ -211,9 +222,14 @@ export default function SurveyResults() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline">
+                <Button
+                  variant="outline"
+                  disabled={exportExcelLoading || exportPdfLoading}
+                >
                   <Download className="mr-2 h-4 w-4" />
-                  Export
+                  {exportExcelLoading || exportPdfLoading
+                    ? "Exporting..."
+                    : "Export"}
                 </Button>
                 {/* <Button variant="outline" onClick={() => handleExport("csv")}>
                   <Download className="mr-2 h-4 w-4" />
@@ -224,15 +240,17 @@ export default function SurveyResults() {
                 <DropdownMenuItem
                   onClick={() => handleExport("excel")}
                   className="cursor-pointer"
+                  disabled={exportExcelLoading}
                 >
-                  Export Excel
+                  {exportExcelLoading ? "Exporting..." : "Export Excel"}
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
                   onClick={() => handleExport("pdf")}
                   className="cursor-pointer"
+                  disabled={exportPdfLoading}
                 >
-                  Export PDF
+                  {exportPdfLoading ? "Exporting..." : "Export PDF"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -630,18 +648,28 @@ export default function SurveyResults() {
                   <Button
                     variant="outline"
                     className="h-20 flex-col bg-transparent"
-                    onClick={() => handleExport("csv")}
+                    onClick={() => handleExport("excel")}
+                    disabled={exportExcelLoading}
                   >
-                    <Download className="mb-2 h-6 w-6" />
-                    Export as CSV
+                    {exportExcelLoading ? (
+                      <RefreshCw className="mb-2 h-6 w-6 animate-spin" />
+                    ) : (
+                      <Download className="mb-2 h-6 w-6" />
+                    )}
+                    {exportExcelLoading ? "Exporting..." : "Export as Excel"}
                   </Button>
                   <Button
                     variant="outline"
                     className="h-20 flex-col bg-transparent"
-                    onClick={() => handleExport("json")}
+                    onClick={() => handleExport("pdf")}
+                    disabled={exportPdfLoading}
                   >
-                    <Download className="mb-2 h-6 w-6" />
-                    Export Raw Data (JSON)
+                    {exportPdfLoading ? (
+                      <RefreshCw className="mb-2 h-6 w-6 animate-spin" />
+                    ) : (
+                      <Download className="mb-2 h-6 w-6" />
+                    )}
+                    {exportPdfLoading ? "Exporting..." : "Export PDF"}
                   </Button>
                 </div>
               </div>
