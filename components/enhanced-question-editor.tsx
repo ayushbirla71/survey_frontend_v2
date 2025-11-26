@@ -229,78 +229,68 @@ export default function EnhancedQuestionEditor({
     handleQuestionChange(qid, "options", [nextFirst]);
   };
 
-  // Grid
+  // Grid - Now storing rowOptions and columnOptions at question level
   const ensureGridInit = (qid: string) => {
     const q = byId.get(qid);
     if (!q) return;
-    const current = q.options?.[0] || {};
-    const nextFirst = {
-      rowOptions: Array.isArray((current as any).rowOptions)
-        ? (current as any).rowOptions
-        : [],
-      columnOptions: Array.isArray((current as any).columnOptions)
-        ? (current as any).columnOptions
-        : [],
-    };
-    handleQuestionChange(qid, "options", [nextFirst]);
+
+    // Initialize rowOptions and columnOptions at question level if not present
+    if (!Array.isArray(q.rowOptions)) {
+      handleQuestionChange(qid, "rowOptions", []);
+    }
+    if (!Array.isArray(q.columnOptions)) {
+      handleQuestionChange(qid, "columnOptions", []);
+    }
   };
 
   const addGridRow = (qid: string) => {
     ensureGridInit(qid);
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const rows = [...(first.rowOptions || []), { text: "" }];
-    handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
+    const rows = [...(q.rowOptions || []), { text: "" }];
+    handleQuestionChange(qid, "rowOptions", rows);
   };
 
   const addGridColumn = (qid: string) => {
     ensureGridInit(qid);
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const cols = [...(first.columnOptions || []), { text: "" }];
-    handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
+    const cols = [...(q.columnOptions || []), { text: "" }];
+    handleQuestionChange(qid, "columnOptions", cols);
   };
 
   const setGridRowText = (qid: string, idx: number, text: string) => {
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const rows = (first.rowOptions || []).map((r: any, i: number) =>
+    const rows = (q.rowOptions || []).map((r: any, i: number) =>
       i === idx ? { ...r, text } : r
     );
-    handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
+    handleQuestionChange(qid, "rowOptions", rows);
   };
 
   const setGridColumnText = (qid: string, idx: number, text: string) => {
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const cols = (first.columnOptions || []).map((c: any, i: number) =>
+    const cols = (q.columnOptions || []).map((c: any, i: number) =>
       i === idx ? { ...c, text } : c
     );
-    handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
+    handleQuestionChange(qid, "columnOptions", cols);
   };
 
   const removeGridRow = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const rows = (first.rowOptions || []).filter(
-      (_: any, i: number) => i !== idx
-    );
-    handleQuestionChange(qid, "options", [{ ...first, rowOptions: rows }]);
+    const rows = (q.rowOptions || []).filter((_: any, i: number) => i !== idx);
+    handleQuestionChange(qid, "rowOptions", rows);
   };
 
   const removeGridColumn = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
-    const first = q.options[0] || { rowOptions: [], columnOptions: [] };
-    const cols = (first.columnOptions || []).filter(
+    const cols = (q.columnOptions || []).filter(
       (_: any, i: number) => i !== idx
     );
-    handleQuestionChange(qid, "options", [{ ...first, columnOptions: cols }]);
+    handleQuestionChange(qid, "columnOptions", cols);
   };
 
   const addQuestion = () => {
@@ -714,7 +704,7 @@ export default function EnhancedQuestionEditor({
                                         </Button>
                                       </div>
                                       <div className="space-y-2">
-                                        {(q.options?.[0]?.rowOptions || []).map(
+                                        {(q.rowOptions || []).map(
                                           (row, idx) => (
                                             <div
                                               key={`row-${idx}`}
@@ -744,8 +734,7 @@ export default function EnhancedQuestionEditor({
                                             </div>
                                           )
                                         )}
-                                        {(q.options?.[0]?.rowOptions || [])
-                                          .length === 0 && (
+                                        {(q.rowOptions || []).length === 0 && (
                                           <div className="text-slate-500 text-sm">
                                             No rows yet. Add rows.
                                           </div>
@@ -767,38 +756,40 @@ export default function EnhancedQuestionEditor({
                                         </Button>
                                       </div>
                                       <div className="space-y-2">
-                                        {(
-                                          q.options?.[0]?.columnOptions || []
-                                        ).map((col, idx) => (
-                                          <div
-                                            key={`col-${idx}`}
-                                            className="flex items-center gap-2"
-                                          >
-                                            <Input
-                                              value={col?.text ?? ""}
-                                              onChange={(e) =>
-                                                setGridColumnText(
-                                                  q.id,
-                                                  idx,
-                                                  e.target.value
-                                                )
-                                              }
-                                              placeholder={`Column ${idx + 1}`}
-                                            />
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              title="Remove column"
-                                              onClick={() =>
-                                                removeGridColumn(q.id, idx)
-                                              }
+                                        {(q.columnOptions || []).map(
+                                          (col, idx) => (
+                                            <div
+                                              key={`col-${idx}`}
+                                              className="flex items-center gap-2"
                                             >
-                                              <Trash2 className="h-4 w-4 text-red-600" />
-                                            </Button>
-                                          </div>
-                                        ))}
-                                        {(q.options?.[0]?.columnOptions || [])
-                                          .length === 0 && (
+                                              <Input
+                                                value={col?.text ?? ""}
+                                                onChange={(e) =>
+                                                  setGridColumnText(
+                                                    q.id,
+                                                    idx,
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder={`Column ${
+                                                  idx + 1
+                                                }`}
+                                              />
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                title="Remove column"
+                                                onClick={() =>
+                                                  removeGridColumn(q.id, idx)
+                                                }
+                                              >
+                                                <Trash2 className="h-4 w-4 text-red-600" />
+                                              </Button>
+                                            </div>
+                                          )
+                                        )}
+                                        {(q.columnOptions || []).length ===
+                                          0 && (
                                           <div className="text-slate-500 text-sm">
                                             No columns yet. Add columns.
                                           </div>

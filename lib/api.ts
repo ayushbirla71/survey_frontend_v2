@@ -63,6 +63,7 @@ export interface Survey {
   updated_at: string;
   surveyCategoryId: string;
   autoGenerateQuestions: any;
+  questions: Question[];
 }
 
 // Question model from new API
@@ -118,14 +119,15 @@ export interface SurveyResponseResult {
 
 // ShareToken model from new API
 export interface ShareToken {
-  id: string;
-  surveyId: string;
+  id?: string;
+  surveyId?: string;
   recipient_email?: string;
   recipient_mobile?: string;
-  token_hash: string;
+  agentUserUniqueId?: string;
+  token_hash?: string;
   expires_at?: string;
-  used: boolean;
-  created_at: string;
+  used?: boolean;
+  created_at?: string;
 }
 
 // Base API function with error handling and authentication
@@ -596,15 +598,45 @@ export const surveyApi = {
         showProgressBar?: boolean;
         shuffleQuestions?: boolean;
       };
+      autoGenerateQuestions?: boolean;
       status?: "DRAFT" | "SCHEDULED" | "PUBLISHED";
       scheduled_date?: string;
       scheduled_type?: "IMMEDIATE" | "SCHEDULED";
     }
-  ): Promise<ApiResponse<{ message: string }>> => {
-    return apiRequest(`/api/surveys/${surveyId}`, {
-      method: "PUT",
-      body: JSON.stringify(surveyData),
-    });
+  ): Promise<{ message: string; aiGeneratedQuestions: any }> => {
+    try {
+      const token = getAuthToken();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Add authentication header if token exists
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/surveys/${surveyId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(surveyData),
+      });
+      console.log("response is", response);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("data is", data);
+      return { data };
+    } catch (error) {
+      console.error("API request failed:", error);
+      throw error;
+    }
+    // return apiRequest(`/api/surveys/${surveyId}`, {
+    //   method: "PUT",
+    //   body: JSON.stringify(surveyData),
+    // });
   },
 
   // DELETE /api/surveys/{surveyId}
@@ -635,6 +667,8 @@ export const questionApi = {
     // subCategoryId: string;
     order_index?: number;
     required?: boolean;
+    rowOptions?: any[];
+    columnOptions?: any[];
   }): Promise<ApiResponse<Question>> => {
     return apiRequest("/api/questions", {
       method: "POST",
@@ -683,6 +717,10 @@ export const questionApi = {
     }
   },
 
+  getAiGeneratedQuestions: async (surveyId: string) => {
+    return apiRequest(`/api/questions/${surveyId}`);
+  },
+
   // PUT /api/questions/{questionId}
   updateQuestion: async (
     questionId: string,
@@ -698,6 +736,8 @@ export const questionApi = {
       subCategoryId?: string;
       order_index?: number;
       required?: boolean;
+      rowOptions?: any[];
+      columnOptions?: any[];
     }
   ): Promise<ApiResponse<Question>> => {
     return apiRequest(`/api/questions/${questionId}`, {
@@ -864,11 +904,12 @@ export const shareApi = {
   // POST /api/share
   shareSurvey: async (shareData: {
     surveyId: string;
-    type: "PUBLIC" | "PERSONALIZED";
+    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
     recipients?: Array<{
       email?: string;
       mobile_no?: string;
     }>;
+    agentUserUniqueIds?: string[];
   }): Promise<
     ApiResponse<{
       shareLink?: string;
@@ -1140,25 +1181,31 @@ export const surveyResultsApi = {
     );
   },
 
-  // GET /api/survey-results/:surveyId/export - Export Survey Results
   exportResults: async (
-    surveyId: string,
-    format: "json" | "csv" = "json"
-  ): Promise<
-    ApiResponse<{
-      surveyId: string;
-      surveyTitle: string;
-      exportedAt: string;
-      totalResponses: number;
-      responses: any[];
-    }>
-  > => {
-    const queryParams = new URLSearchParams();
-    queryParams.append("format", format);
-    return apiRequest(
-      `/api/survey-results/${surveyId}/export?${queryParams.toString()}`
-    );
+    surveyId: string
+  ): Promise<ApiResponse<SurveyResponseResult>> => {
+    return apiRequest(`/api/responses/surveys/${surveyId}/export`);
   },
+
+  // GET /api/survey-results/:surveyId/export - Export Survey Results
+  // exportResults: async (
+  //   surveyId: string,
+  //   format: "json" | "csv" = "json"
+  // ): Promise<
+  //   ApiResponse<{
+  //     surveyId: string;
+  //     surveyTitle: string;
+  //     exportedAt: string;
+  //     totalResponses: number;
+  //     responses: any[];
+  //   }>
+  // > => {
+  //   const queryParams = new URLSearchParams();
+  //   queryParams.append("format", format);
+  //   return apiRequest(
+  //     `/api/survey-results/${surveyId}/export?${queryParams.toString()}`
+  //   );
+  // },
 
   // GET /api/survey-results/:surveyId/responses/:responseId - Get Response Details
   getResponseDetails: async (

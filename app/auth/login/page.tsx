@@ -162,7 +162,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
+          {/* <div className="mt-6 text-center text-sm">
             <span className="text-slate-600">Don't have an account? </span>
             <Link
               href="/auth/signup"
@@ -170,7 +170,7 @@ export default function LoginPage() {
             >
               Sign up
             </Link>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

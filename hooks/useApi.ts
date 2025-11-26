@@ -32,7 +32,8 @@ export function useApi<T>(
       console.log(">>>> the error in the USE API is : ", err.message);
       if (err.message.includes("401")) {
         authApi.removeAuthToken();
-        router.refresh();
+        // router.refresh();
+        window.location.reload();
       }
       setError(err instanceof Error ? err.message : "Unknown error");
       return;

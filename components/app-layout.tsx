@@ -13,7 +13,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
 
   // Routes that don't need the sidebar (auth pages)
-  const authRoutes = ["/auth/login", "/auth/signup"];
+  const authRoutes = ["/auth/login", "/auth/admin-signup"];
   const authRoutesPrefixes = ["/survey/"];
   const isAuthRoute =
     authRoutes.includes(pathname) ||

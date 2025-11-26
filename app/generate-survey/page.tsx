@@ -53,7 +53,57 @@ import {
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
-import { ro } from "date-fns/locale";
+import * as XLSX from "xlsx";
+
+// (only if you do not already have a similar type)
+type QuestionWithOptions = {
+  id: string;
+  surveyId: string;
+  question_type: string;
+  question_text: string;
+  options: {
+    text?: string;
+    rangeFrom?: number;
+    rangeTo?: number;
+    fromLabel?: string;
+    toLabel?: string;
+  }[];
+  order_index: number;
+  required: boolean;
+  is_approved?: boolean;
+  is_added_to_survey?: boolean;
+};
+
+type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+
+interface SurveySettings {
+  flow_type: "STATIC";
+  survey_send_by: SurveySendByType;
+  isAnonymous: boolean;
+  showProgressBar: boolean;
+  shuffleQuestions: boolean;
+  allowMultipleSubmissions: boolean;
+}
+
+interface ShareToken {
+  id?: string;
+  surveyId?: string;
+  recipient_email?: string;
+  recipient_mobile?: string;
+  agentUserUniqueId?: string;
+  token_hash?: string;
+  expires_at?: string;
+  used?: boolean;
+  created_at?: string;
+}
+
+// Full-screen blocking loader
+const FullScreenLoader = ({ message }: { message: string }) => (
+  <div className="fixed inset-0 bg-black/30 flex flex-col items-center justify-center z-[9999]">
+    <div className="w-12 h-12 border-4 border-violet-400 border-t-transparent animate-spin rounded-full"></div>
+    <p className="text-white mt-4 animate-pulse">{message}</p>
+  </div>
+);
 
 export default function GenerateSurvey() {
   const searchParams = useSearchParams();
@@ -72,9 +122,9 @@ export default function GenerateSurvey() {
   const [generationMethod, setGenerationMethod] = useState<
     "openai" | "static" | null
   >(null);
-  const [surveySettings, setSurveySettings] = useState({
-    flow_type: "STATIC" as const,
-    survey_send_by: "NONE" as const,
+  const [surveySettings, setSurveySettings] = useState<SurveySettings>({
+    flow_type: "STATIC",
+    survey_send_by: "NONE",
     isAnonymous: false,
     showProgressBar: true,
     shuffleQuestions: false,
@@ -89,6 +139,7 @@ export default function GenerateSurvey() {
     targetCount: 1,
     dataSource: "default",
   });
+  const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
   const [createdSurvey, setCreatedSurvey] = useState<any>(null);
@@ -100,6 +151,16 @@ export default function GenerateSurvey() {
 
   // Store original survey data for comparison
   const [originalSurveyData, setOriginalSurveyData] = useState<any>(null);
+
+  // add new state near your other useState hooks
+  const [aiGeneratedQuestions, setAiGeneratedQuestions] = useState<
+    QuestionWithOptions[]
+  >([]);
+  // Step-wise loading states
+  const [step1Loading, setStep1Loading] = useState(false);
+  const [step2Loading, setStep2Loading] = useState(false);
+  const [publishLoadingOverlay, setPublishLoadingOverlay] = useState(false);
+  const [excelData, setExcelData] = useState<ShareToken[] | null>(null);
 
   // API calls
   const {
@@ -190,10 +251,12 @@ export default function GenerateSurvey() {
       try {
         const response = await surveyApi.getSurvey(editSurveyId);
         const survey = response.survey;
+        // console.log("Survey data ---->>>>>>>:", survey);
 
         // Populate form fields with existing survey data
         setTitle(survey.title || "");
         setDescription(survey.description || "");
+        setAutoGenerateQuestions(survey.autoGenerateQuestions || false);
         setSurveyCategoryId((survey as any).surveyCategoryId || "");
 
         // Update survey settings
@@ -208,18 +271,19 @@ export default function GenerateSurvey() {
 
         // Load questions for the survey
         try {
-          const questionsResponse = await questionApi.getQuestions(
-            editSurveyId
-          );
-          console.log("Questions response:", questionsResponse);
+          // const questionsResponse = await questionApi.getQuestions(
+          //   editSurveyId
+          // );
+          const questionsResponse = survey.questions;
+          // console.log("Questions response: ----->>>>>>>>> ", questionsResponse);
 
           if (
-            questionsResponse.data &&
-            Array.isArray(questionsResponse.data) &&
-            questionsResponse.data.length > 0
+            questionsResponse &&
+            Array.isArray(questionsResponse) &&
+            questionsResponse.length > 0
           ) {
             // Map API questions to component format
-            const mappedQuestions = questionsResponse.data.map(
+            const mappedQuestions = questionsResponse.map(
               (q: any, index: number) => ({
                 id: q.id || `q${Date.now()}_${index}`,
                 question_type: q.question_type || q.type || "TEXT",
@@ -235,18 +299,40 @@ export default function GenerateSurvey() {
               })
             );
 
-            console.log("Setting questions:", mappedQuestions);
+            // console.log("Setting questions:", mappedQuestions);
             setQuestions(mappedQuestions);
             setOriginalQuestions(mappedQuestions);
             setQuestionsGenerated(true);
-            console.log("Loaded questions successfully:", mappedQuestions);
+            // console.log("Loaded questions successfully:", mappedQuestions);
           } else {
             console.log(
               "No questions found for survey or invalid response format"
             );
-            setQuestions([]);
-            setOriginalQuestions([]);
-            setQuestionsGenerated(false);
+
+            const aiGeneratedQuestionsResponse =
+              await questionApi.getAiGeneratedQuestions(editSurveyId);
+            // console.log(
+            //   "AI Generated Questions Response:",
+            //   aiGeneratedQuestionsResponse
+            // );
+            if (
+              aiGeneratedQuestionsResponse.data &&
+              Array.isArray(aiGeneratedQuestionsResponse.data) &&
+              aiGeneratedQuestionsResponse.data.length > 0
+            ) {
+              // console.log(
+              //   "Setting AI generated questions:",
+              //   aiGeneratedQuestionsResponse
+              // );
+              setQuestions((prev) => {
+                return [...aiGeneratedQuestionsResponse.data];
+              });
+            } else {
+              console.log("No AI generated questions found");
+              setQuestions([]);
+              setOriginalQuestions([]);
+              setQuestionsGenerated(false);
+            }
           }
         } catch (questionError) {
           console.warn("Could not load questions:", questionError);
@@ -265,6 +351,7 @@ export default function GenerateSurvey() {
           flow_type: survey.flow_type,
           survey_send_by: survey.survey_send_by,
           surveyCategoryId: survey.surveyCategoryId,
+          autoGenerateQuestions: survey.autoGenerateQuestions,
         });
       } catch (error) {
         console.error("Error loading survey:", error);
@@ -355,17 +442,25 @@ export default function GenerateSurvey() {
     if (!createdSurvey?.id) return;
 
     try {
-      const result = await shareApi.shareSurvey({
+      const body: {
+        surveyId: string;
+        type: SurveySendByType;
+        agentUserUniqueIds?: string[];
+      } = {
         surveyId: createdSurvey.id,
-        type:
-          surveySettings.survey_send_by === "NONE" ? "PUBLIC" : "PERSONALIZED",
-      });
+        type: surveySettings.survey_send_by,
+      };
+      if (surveySettings.survey_send_by === "AGENT") {
+        body.agentUserUniqueIds = userUniqueIdsList;
+      }
+      const result = await shareApi.shareSurvey(body);
       console.log("Share result is", result);
 
       if (result.data) {
         console.log("Share result.data is", result.data);
         setPublicLink(result.data.shareLink ?? "");
         setShareCode(result.data.shareCode ?? "");
+        setExcelData(result.data.tokens ?? []);
       } else {
         // Fallback: Generate local URL if API doesn't return one
         const baseUrl = window.location.origin;
@@ -387,8 +482,8 @@ export default function GenerateSurvey() {
 
   const createQuestionsForSurvey = async (surveyId: string) => {
     try {
-      console.log("^^^^Creating questions for survey:", surveyId);
-      console.log("^^^^^The value of the questions is : ", questions);
+      // console.log("^^^^Creating questions for survey:", surveyId);
+      // console.log("^^^^^The value of the questions is : ", questions);
 
       const questionPromises = questions.map(async (q: any, index: number) => {
         const questionData: any = {
@@ -401,22 +496,24 @@ export default function GenerateSurvey() {
           // subCategoryId: "default-subcategory",
           order_index: index,
           required: q.required || false,
+          rowOptions: q.rowOptions || [],
+          columnOptions: q.columnOptions || [],
         };
         if (q.mediaId) {
           questionData.mediaId = q.mediaId;
         }
-        console.log("^^^^^ questionData is", questionData);
+        // console.log("^^^^^ questionData is", questionData);
 
         return await questionApi.createQuestion(questionData);
       });
 
       const results = await Promise.all(questionPromises);
-      console.log("^^^^^ results is", results);
+      // console.log("^^^^^ results is", results);
       const createdQuestions = results
         .filter((r) => r.data)
         .map((r) => r.data!);
 
-      console.log(`Created ${createdQuestions.length} questions for survey`);
+      // console.log(`Created ${createdQuestions.length} questions for survey`);
       return createdQuestions;
     } catch (error) {
       console.error("Failed to create questions:", error);
@@ -495,10 +592,10 @@ export default function GenerateSurvey() {
         surveyId: createdSurvey.id,
         surveyData: updateData,
       });
-      console.log("Update result:", result);
+      // console.log("Update result:", result);
 
       if (result) {
-        console.log("Survey updated successfully:", result);
+        // console.log("Survey updated successfully:", result);
         // Update local survey state
         setCreatedSurvey({
           ...createdSurvey,
@@ -542,7 +639,7 @@ export default function GenerateSurvey() {
         // Navigate to share step
         setStep(6);
       } else {
-        console.log("Failed to publish survey. Please try again.");
+        // console.log("Failed to publish survey. Please try again.");
         toast.error("Failed to publish survey. Please try again.");
       }
     } catch (error: any) {
@@ -606,33 +703,26 @@ export default function GenerateSurvey() {
       originalSurveyData.description !== description ||
       // originalSurveyData.flow_type !== surveySettings.flow_type ||
       // originalSurveyData.survey_send_by !== surveySettings.survey_send_by ||
-      originalSurveyData.surveyCategoryId !== surveyCategoryId;
+      originalSurveyData.surveyCategoryId !== surveyCategoryId ||
+      originalSurveyData.autoGenerateQuestions != autoGenerateQuestions;
 
-    console.log("Survey data changed:", hasChanged, {
-      original: originalSurveyData,
-      current: {
-        title,
-        description,
-        flow_type: surveySettings.flow_type,
-        survey_send_by: surveySettings.survey_send_by,
-        surveyCategoryId: surveyCategoryId,
-      },
-    });
+    // console.log("Survey data changed:", hasChanged, {
+    //   original: originalSurveyData,
+    //   current: {
+    //     title,
+    //     description,
+    //     flow_type: surveySettings.flow_type,
+    //     survey_send_by: surveySettings.survey_send_by,
+    //     surveyCategoryId: surveyCategoryId,
+    //   },
+    // });
 
     return hasChanged;
   };
 
   const handleStep1Continue = async () => {
     if (!surveyCategoryId || !description || !title) return;
-
-    const surveyData = {
-      title: title,
-      description: description,
-      flow_type: surveySettings.flow_type,
-      survey_send_by: surveySettings.survey_send_by,
-      surveyCategoryId: surveyCategoryId,
-      autoGenerateQuestions: autoGenerateQuestions,
-    };
+    setStep1Loading(true);
 
     try {
       if (isEditMode && editSurveyId) {
@@ -643,6 +733,7 @@ export default function GenerateSurvey() {
           const updateData = {
             title: title,
             description: description,
+            autoGenerateQuestions: autoGenerateQuestions,
             flow_type: surveySettings.flow_type,
             survey_send_by: surveySettings.survey_send_by,
           };
@@ -651,8 +742,9 @@ export default function GenerateSurvey() {
             surveyId: editSurveyId!,
             surveyData: updateData,
           });
-          console.log("Update result:", result);
-          if (result && (result as any).data) {
+          // console.log(" ********* Update result:", result);
+          // console.log("Update result:", result);
+          if (result) {
             // Keep the existing survey data but update the fields
             setCreatedSurvey({
               ...createdSurvey,
@@ -671,6 +763,31 @@ export default function GenerateSurvey() {
               survey_send_by: surveySettings.survey_send_by,
               surveyCategoryId: surveyCategoryId,
             });
+
+            const aiQuestions = result.aiGeneratedQuestions;
+            // console.log(
+            //   ">>>>>> $$$$$$$$ the value of the AI QUESTIONS is : ",
+            //   aiQuestions
+            // );
+
+            if (aiQuestions && Array.isArray(aiQuestions)) {
+              // if you want them to immediately appear in the main questions list:
+              setQuestions((prev) => {
+                // avoid duplicates if user re-submits, etc.
+                const existingIds = new Set(prev.map((q) => q.id.toString()));
+                const merged = [
+                  ...prev,
+                  ...aiQuestions.filter(
+                    (q: QuestionWithOptions) =>
+                      !existingIds.has(q.id.toString())
+                  ),
+                ];
+                // ensure they are ordered by order_index
+                return merged.sort(
+                  (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+                );
+              });
+            }
           }
         } else {
           console.log("No changes detected, skipping update API call");
@@ -678,22 +795,69 @@ export default function GenerateSurvey() {
         // Move to next step regardless of whether update was made
         nextStep();
       } else {
+        const surveyData = {
+          title: title,
+          description: description,
+          flow_type: surveySettings.flow_type,
+          survey_send_by: surveySettings.survey_send_by,
+          surveyCategoryId: surveyCategoryId,
+          autoGenerateQuestions: autoGenerateQuestions,
+        };
         // Create new survey
         const result = await createSurvey(surveyData);
-        console.log("Create result:", result);
+        // console.log("Create result:", result);
         if (result && (result as any)?.survey && (result as any)?.survey?.id) {
           setCreatedSurvey((result as any).survey);
+          const aiQuestions = result.aiGeneratedQuestions;
+          if (aiQuestions && Array.isArray(aiQuestions)) {
+            setAiGeneratedQuestions(aiQuestions);
+
+            // if you want them to immediately appear in the main questions list:
+            setQuestions((prev) => {
+              // avoid duplicates if user re-submits, etc.
+              const existingIds = new Set(prev.map((q) => q.id.toString()));
+              const merged = [
+                ...prev,
+                ...aiQuestions.filter(
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
+                ),
+              ];
+              // ensure they are ordered by order_index
+              return merged.sort(
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+              );
+            });
+
+            setOriginalQuestions((prev) => {
+              // avoid duplicates if user re-submits, etc.
+              const existingIds = new Set(prev.map((q) => q.id.toString()));
+              const merged = [
+                ...prev,
+                ...aiQuestions.filter(
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
+                ),
+              ];
+              // ensure they are ordered by order_index
+              return merged.sort(
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+              );
+            });
+          }
           nextStep();
         }
       }
     } catch (error) {
       console.error("Error saving survey:", error);
+      toast.error("Failed to save survey");
+    } finally {
+      setStep1Loading(false);
     }
   };
 
   const handleStep2Continue = async () => {
+    setStep2Loading(true);
     try {
-      console.log(">>>>> the value of the QUESTIONS is : ", questions);
+      // console.log(">>>>> the value of the QUESTIONS is : ", questions);
       if (questions.length === 0) {
         alert("Please add at least one question");
         // toast.error("Please add at least one question");
@@ -715,6 +879,7 @@ export default function GenerateSurvey() {
         originalQuestions,
         questions
       );
+      // console.log(">>>>>> the VALUE of the UPDATED QUESTIONS is : ", updated);
 
       // Update local questions with real ids for newly created items
       setQuestions(updated);
@@ -725,6 +890,9 @@ export default function GenerateSurvey() {
       nextStep();
     } catch (error: any) {
       console.log(">>> the error in the HANDLE STEP 2 function is : ", error);
+      toast.error(error.message || "Failed to save questions");
+    } finally {
+      setStep2Loading(false);
     }
   };
 
@@ -734,13 +902,38 @@ export default function GenerateSurvey() {
     const resp = await categoriesApi.getQuestionCategories();
     const data = Array.isArray(resp?.data) ? resp.data : [];
     const rows = data.filter((r: any) => ids.includes(r.id));
-    console.log("****** Rows is", rows);
+    // console.log("****** Rows is", rows);
     const map = rows.reduce((acc: Record<string, string>, r: any) => {
       // Normalize to the supported set inside preview
       acc[r.id] = r.type_name; // preview will normalize via normKindStr
       return acc;
     }, {});
     return map as Record<string, any>;
+  };
+
+  const handleUserUniqueIdsUpdate = (userUniqueIds: string[]) => {
+    setUserUniqueIdsList(userUniqueIds);
+  };
+
+  const handleDownloadExcel = () => {
+    if (!excelData) return;
+
+    // Prepare worksheet data, header row first
+    const worksheetData = [
+      ["userUniqueId", "surveyLink"], // header row
+      ...excelData.map((item: any) => [
+        item.agentUserUniqueId,
+        item.token_hash,
+      ]),
+    ];
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+    // Trigger download
+    XLSX.writeFile(workbook, "SurveyLinks.xlsx");
   };
 
   return (
@@ -929,6 +1122,11 @@ export default function GenerateSurvey() {
           </div>
         )}
 
+        {step2Loading && (
+          <FullScreenLoader message="Saving your questions..." />
+        )}
+        {publishLoadingOverlay && <FullScreenLoader message="Publishing..." />}
+
         {/* Question Generation Status */}
         {/* {questionConfig && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1055,6 +1253,7 @@ export default function GenerateSurvey() {
                     onCheckedChange={(checked) =>
                       setAutoGenerateQuestions(!!checked)
                     }
+                    disabled={autoGenerateQuestions && isEditMode}
                   />
                   <Label htmlFor="auto-generate" className="text-sm">
                     Auto-generate questions
@@ -1098,13 +1297,14 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handleStep1Continue}
                   disabled={
+                    step1Loading ||
                     !surveyCategoryId ||
                     !description ||
                     categoriesLoading ||
                     !title
                   }
                 >
-                  {generatingQuestions ? (
+                  {generatingQuestions || step1Loading ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Generating Questions...
@@ -1150,9 +1350,14 @@ export default function GenerateSurvey() {
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
-                <Button onClick={handleStep2Continue}>
-                  Continue
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button onClick={handleStep2Continue} disabled={step2Loading}>
+                  {step2Loading ? (
+                    "Saving Questions..."
+                  ) : (
+                    <>
+                      Continue <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -1201,7 +1406,7 @@ export default function GenerateSurvey() {
                     <Select
                       value={surveySettings.survey_send_by}
                       onValueChange={(
-                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE"
+                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT"
                       ) =>
                         setSurveySettings((prev: any) => ({
                           ...prev,
@@ -1217,6 +1422,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
                         <SelectItem value="BOTH">Both</SelectItem> */}
                         <SelectItem value="NONE">Public (Link Only)</SelectItem>
+                        <SelectItem value="AGENT">Agent</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1304,8 +1510,11 @@ export default function GenerateSurvey() {
           {step === 4 && (
             <div className="p-8">
               <AudienceSelector
+                createdSurvey={createdSurvey}
+                surveySettings={surveySettings}
                 audience={audience}
                 onAudienceUpdate={handleAudienceUpdate}
+                onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
@@ -1405,10 +1614,10 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handlePublishSurvey}
                   size="lg"
-                  disabled={publishLoading}
+                  disabled={publishLoading || publishLoadingOverlay}
                   className="bg-violet-600 hover:bg-violet-700"
                 >
-                  {publishLoading ? (
+                  {publishLoading || publishLoadingOverlay ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Publishing...
@@ -1460,105 +1669,93 @@ export default function GenerateSurvey() {
                       Share Your Survey
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {!publicLink ? (
-                      <div className="text-center py-6">
-                        <Button
-                          onClick={generatePublicLink}
-                          size="lg"
-                          className="bg-violet-600 hover:bg-violet-700"
-                        >
-                          <LinkIcon className="mr-2 h-4 w-4" />
-                          Generate Public Link
-                        </Button>
-                        <p className="text-sm text-slate-500 mt-2">
-                          Create a shareable link that anyone can use to access
-                          your survey
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium">
-                            Public Survey Link
-                          </Label>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Input
-                              value={publicLink}
-                              readOnly
-                              className="flex-1 bg-slate-50"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                navigator.clipboard.writeText(publicLink);
-                                // You could add a toast notification here
-                              }}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          </div>
+                  {surveySettings?.survey_send_by === "AGENT" ? (
+                    <CardContent>
+                      {/* <p className="text-sm text-slate-500">
+                        Your survey is ready to be shared with your audience.
+                      </p> */}
+                      {!excelData ? (
+                        <div className="text-center py-6">
+                          <Button
+                            onClick={generatePublicLink}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Generate Agent Users Link Excel
+                          </Button>
+                          <p className="text-sm text-slate-500 mt-2">
+                            Create a file for each user with a link that
+                            Specific user can use to access the survey
+                          </p>
                         </div>
-
-                        {/* {shareCode && (
+                      ) : (
+                        <div className="mt-4">
+                          <Button
+                            onClick={handleDownloadExcel}
+                            size="lg"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Download Links Excel
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  ) : (
+                    <CardContent className="space-y-4">
+                      {!publicLink ? (
+                        <div className="text-center py-6">
+                          <Button
+                            onClick={generatePublicLink}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Generate Public Link
+                          </Button>
+                          <p className="text-sm text-slate-500 mt-2">
+                            Create a shareable link that anyone can use to
+                            access your survey
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
                           <div>
                             <Label className="text-sm font-medium">
-                              Share Code
+                              Public Survey Link
                             </Label>
                             <div className="flex items-center gap-2 mt-2">
                               <Input
-                                value={shareCode}
+                                value={publicLink}
                                 readOnly
-                                className="flex-1 bg-slate-50 font-mono"
+                                className="flex-1 bg-slate-50"
                               />
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(shareCode);
+                                  navigator.clipboard.writeText(publicLink);
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
                               </Button>
                             </div>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Users can enter this code at your survey portal
-                            </p>
                           </div>
-                        )} */}
 
-                        <div className="flex gap-2 pt-4">
-                          <Button
-                            variant="outline"
-                            onClick={() => window.open(publicLink, "_blank")}
-                            className="flex-1"
-                          >
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Preview Survey
-                          </Button>
-                          {/* <Button
-                            variant="outline"
-                            onClick={() => {
-                              const subject = encodeURIComponent(
-                                `Survey: ${title}`
-                              );
-                              const body = encodeURIComponent(
-                                `Hi,\n\nI'd like to invite you to participate in my survey: "${title}"\n\nPlease click the link below to get started:\n${publicLink}\n\nThank you!`
-                              );
-                              window.open(
-                                `mailto:?subject=${subject}&body=${body}`
-                              );
-                            }}
-                            className="flex-1"
-                          >
-                            <Mail className="mr-2 h-4 w-4" />
-                            Share via Email
-                          </Button> */}
+                          <div className="flex gap-2 pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => window.open(publicLink, "_blank")}
+                              className="flex-1"
+                            >
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              Preview Survey
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
+                      )}
+                    </CardContent>
+                  )}
                 </Card>
 
                 {/* Next Steps */}

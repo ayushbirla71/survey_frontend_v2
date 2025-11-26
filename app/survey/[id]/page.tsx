@@ -44,6 +44,8 @@ interface Question {
   categoryId?: string;
   rows?: any[];
   columns?: any[];
+  rowOptions?: any[];
+  columnOptions?: any[];
   allowMultipleInGrid?: boolean;
 }
 
@@ -97,7 +99,17 @@ function normKindStr(s?: string): GKind | null {
 function inferFromOptions(q: Question): GKind | null {
   const opts = q.options ?? [];
 
-  // Grid defined via options[0].rowOptions/columnOptions
+  // NEW: Grid defined via question-level rowOptions/columnOptions (preferred)
+  if (
+    Array.isArray(q.rowOptions) &&
+    Array.isArray(q.columnOptions) &&
+    q.rowOptions.length > 0 &&
+    q.columnOptions.length > 0
+  ) {
+    return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
+  }
+
+  // LEGACY: Grid defined via options[0].rowOptions/columnOptions
   const first = opts[0];
   if (
     first &&
@@ -138,9 +150,9 @@ export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
   const token = params.id as string;
-  console.log("Token is", token);
   // const surveyId = params.id as string;
 
+  const [notFoundHeader, setNotFoundHeader] = useState("Survey Not Found");
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +160,7 @@ export default function PublicSurveyPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [startTime] = useState(Date.now());
   const [kindsMap, setKindsMap] = useState<KindsMap>({});
 
@@ -200,11 +213,18 @@ export default function PublicSurveyPage() {
       if (result.data) {
         loadSurvey(result.data.surveyId);
       } else {
-        throw new Error("Failed to validate token");
+        throw new Error(result.error || "Failed to validate token");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to validate token:", e);
-      setError("Failed to validate token");
+      if (e.message.includes("Token already used.")) {
+        console.log("Token already used:--------");
+        setAlreadySubmitted(true);
+      } else {
+        console.log("Failed to validate token:--------");
+        setNotFoundHeader("Invalid survey link");
+        setError(e.message || "Failed to validate token");
+      }
       setLoading(false);
     }
   };
@@ -247,7 +267,8 @@ export default function PublicSurveyPage() {
       }
     } catch (err: any) {
       console.error("Error loading survey:", err);
-      setError(err.message || "Failed to load survey");
+      // setError(err.message || "Failed to load survey");
+      throw err.message || "Failed to load survey";
     } finally {
       setLoading(false);
     }
@@ -368,14 +389,18 @@ export default function PublicSurveyPage() {
       );
 
       const responseData = {
-        surveyId: survey.id,
+        // surveyId: survey.id,
+        token,
         user_metadata: {},
         answers: formattedAnswers,
       };
       console.log("Formatted answers for API:", formattedAnswers);
 
       // Submit response without authentication (public survey)
-      const submitResponse = await responseApi.submitResponse(responseData);
+      // const submitResponse = await responseApi.submitResponse(responseData);
+      const submitResponse = await responseApi.submitResponseWithToken(
+        responseData
+      );
       console.log("submitResponse is", submitResponse);
 
       const result = submitResponse;
@@ -592,17 +617,46 @@ export default function PublicSurveyPage() {
 
     // Multi-choice grid (radio buttons per row)
     if (kind === "multi-choice grid") {
-      const first = opts[0];
-      const rows =
-        first?.rowOptions?.map((r: any, i: number) => ({
+      // NEW: Check question-level rowOptions/columnOptions first
+      let rows: { id: string; text: string }[] = [];
+      let cols: { id: string; text: string }[] = [];
+
+      if (
+        Array.isArray(question.rowOptions) &&
+        question.rowOptions.length > 0
+      ) {
+        rows = question.rowOptions.map((r: any, i: number) => ({
           id: r.id ?? `r-${i}`,
           text: r.text ?? `Row ${i + 1}`,
-        })) ?? [];
-      const cols =
-        first?.columnOptions?.map((c: any, j: number) => ({
+        }));
+      }
+
+      if (
+        Array.isArray(question.columnOptions) &&
+        question.columnOptions.length > 0
+      ) {
+        cols = question.columnOptions.map((c: any, j: number) => ({
           id: c.id ?? `c-${j}`,
           text: c.text ?? `Column ${j + 1}`,
-        })) ?? [];
+        }));
+      }
+
+      // LEGACY: Fallback to options[0] if question-level not found
+      if (rows.length === 0 || cols.length === 0) {
+        const first = opts[0];
+        if (rows.length === 0 && first?.rowOptions) {
+          rows = first.rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+        if (cols.length === 0 && first?.columnOptions) {
+          cols = first.columnOptions.map((c: any, j: number) => ({
+            id: c.id ?? `c-${j}`,
+            text: c.text ?? `Column ${j + 1}`,
+          }));
+        }
+      }
 
       const gridAnswer = (answer as Record<string, string>) || {};
 
@@ -710,17 +764,46 @@ export default function PublicSurveyPage() {
 
     // Checkbox grid (checkboxes per row)
     if (kind === "checkbox grid") {
-      const first = opts[0];
-      const rows =
-        first?.rowOptions?.map((r: any, i: number) => ({
+      // NEW: Check question-level rowOptions/columnOptions first
+      let rows: { id: string; text: string }[] = [];
+      let cols: { id: string; text: string }[] = [];
+
+      if (
+        Array.isArray(question.rowOptions) &&
+        question.rowOptions.length > 0
+      ) {
+        rows = question.rowOptions.map((r: any, i: number) => ({
           id: r.id ?? `r-${i}`,
           text: r.text ?? `Row ${i + 1}`,
-        })) ?? [];
-      const cols =
-        first?.columnOptions?.map((c: any, j: number) => ({
+        }));
+      }
+
+      if (
+        Array.isArray(question.columnOptions) &&
+        question.columnOptions.length > 0
+      ) {
+        cols = question.columnOptions.map((c: any, j: number) => ({
           id: c.id ?? `c-${j}`,
           text: c.text ?? `Column ${j + 1}`,
-        })) ?? [];
+        }));
+      }
+
+      // LEGACY: Fallback to options[0] if question-level not found
+      if (rows.length === 0 || cols.length === 0) {
+        const first = opts[0];
+        if (rows.length === 0 && first?.rowOptions) {
+          rows = first.rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+        if (cols.length === 0 && first?.columnOptions) {
+          cols = first.columnOptions.map((c: any, j: number) => ({
+            id: c.id ?? `c-${j}`,
+            text: c.text ?? `Column ${j + 1}`,
+          }));
+        }
+      }
 
       const gridAnswer = (answer as Record<string, string[]>) || {};
 
@@ -824,6 +907,28 @@ export default function PublicSurveyPage() {
     );
   }
 
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                You've Already Responded
+              </h2>
+              <p className="text-slate-600 mb-6">
+                Your can fill out this survey only once.
+              </p>
+              <Button onClick={() => router.push("/")}>Close</Button>
+              {/* <Button onClick={() => window.close()}>Close</Button> */}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (error || !survey) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -832,7 +937,7 @@ export default function PublicSurveyPage() {
             <div className="text-center">
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold text-slate-800 mb-2">
-                Survey Not Found
+                {notFoundHeader}
               </h2>
               <p className="text-slate-600 mb-4">
                 {error ||

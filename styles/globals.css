@@ -88,3 +88,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ✨ Hide only when exporting PDF */
+.pdf-hide {
+  display: none !important;
+}
