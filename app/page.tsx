@@ -19,6 +19,8 @@ import Link from "next/link";
 import { surveyApi, demoData, Survey } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -44,22 +46,40 @@ export default function Dashboard() {
   );
 
   const handleShare = (survey: any) => {
-    if (navigator.share) {
+    try {
       console.log(">>>>>> the value of the SURVEY IS : ", survey);
+      if (survey.share_tokens.length > 0) {
+        // Prepare worksheet data, header row first
+        const worksheetData = [
+          ["userUniqueId", "surveyLink"], // header row
+          ...survey.share_tokens.map((item: any) => [
+            item.agentUserUniqueId,
+            `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
+          ]),
+        ];
 
-      navigator.share({
-        title: survey.title,
-        text: `Check out this survey: ${survey.title}`,
-        url:
-          window.location.origin +
-          `/survey/${survey.share_tokens[0].token_hash}`,
-      });
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(
-        `${window.location.origin}/survey/${survey.id}`
-      );
-      alert("Survey link copied to clipboard!");
+        // Create worksheet and workbook
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+        // Trigger download
+        XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+      } else {
+        if (navigator.share) {
+          navigator.share({
+            title: survey.title,
+            text: `Check out this survey: ${survey.title}`,
+            url:
+              window.location.origin +
+              `/survey/${survey.share_tokens[0].token_hash}`,
+          });
+        } else {
+          toast.info("Share feature not available on this device.");
+        }
+      }
+    } catch (error) {
+      toast.error("Failed to share survey");
     }
   };
 
