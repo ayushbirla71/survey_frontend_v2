@@ -986,7 +986,7 @@ export default function PublicSurveyPage() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Survey Header */}
-        <Card className="mb-6">
+        {/* <Card className="mb-6">
           <CardHeader className="border-b border-slate-200 bg-violet-50">
             <CardTitle className="text-2xl text-violet-900">
               {survey.title}
@@ -995,15 +995,15 @@ export default function PublicSurveyPage() {
               <p className="text-slate-600 mt-2">{survey.description}</p>
             )}
           </CardHeader>
-        </Card>
+        </Card> */}
 
         {/* Progress Bar */}
         {survey.settings?.showProgressBar !== false && (
           <div className="mb-6">
             <div className="flex justify-between text-sm text-slate-600 mb-2">
-              <span>
+              {/* <span>
                 Question {currentQuestionIndex + 1} of {survey.questions.length}
-              </span>
+              </span> */}
               <span>{Math.round(progress)}% Complete</span>
             </div>
             <Progress value={progress} className="h-2" />

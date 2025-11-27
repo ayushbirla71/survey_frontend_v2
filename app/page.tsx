@@ -79,6 +79,10 @@ export default function Dashboard() {
 
   // Extract surveys from API response and handle empty state
   const surveys = surveysResponse?.surveys || [];
+  const totalResponses = surveys.reduce(
+    (sum: number, survey: any) => sum + survey.responses.length,
+    0
+  );
   const displayStats = stats || demoData.dashboardStats;
 
   return (
@@ -141,7 +145,7 @@ export default function Dashboard() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">
@@ -152,9 +156,9 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">
                 {statsLoading ? "..." : surveys.length}
               </div>
-              <p className="text-xs text-slate-500">
+              {/* <p className="text-xs text-slate-500">
                 +{displayStats.surveyGrowth}% from last month
-              </p>
+              </p> */}
             </CardContent>
           </Card>
 
@@ -166,11 +170,13 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsLoading ? "..." : displayStats.totalResponses}
+                {statsLoading
+                  ? "..."
+                  : totalResponses || displayStats.totalResponses}
               </div>
-              <p className="text-xs text-slate-500">
+              {/* <p className="text-xs text-slate-500">
                 +{displayStats.responseGrowth}% from last month
-              </p>
+              </p> */}
             </CardContent>
           </Card>
 
@@ -182,15 +188,16 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsLoading ? "..." : displayStats.completionRate}%
+                {statsLoading ? "..." : 100}%
+                {/* {statsLoading ? "..." : displayStats.completionRate}% */}
               </div>
-              <p className="text-xs text-slate-500">
+              {/* <p className="text-xs text-slate-500">
                 +{displayStats.completionRateGrowth}% from last month
-              </p>
+              </p> */}
             </CardContent>
           </Card>
 
-          <Card>
+          {/* <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">
                 Avg. Response Time
@@ -204,7 +211,7 @@ export default function Dashboard() {
                 -{displayStats.responseTimeImprovement}% from last month
               </p>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         {/* Error Display */}
