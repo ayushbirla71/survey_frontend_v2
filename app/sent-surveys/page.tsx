@@ -22,6 +22,7 @@ import {
   Edit,
   Copy,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -33,6 +34,7 @@ import {
 import { surveyApi } from "@/lib/api";
 import { usePaginatedApi, useMutation, useApi } from "@/hooks/useApi";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 
 // Survey model from new API
 export interface Survey {
@@ -161,6 +163,51 @@ export default function SentSurveys() {
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-800 hover:text-yellow-100";
       default:
         return "bg-gray-100 text-gray-800 hover:bg-gray-800 hover:text-gray-100";
+    }
+  };
+
+  const prepareWorkbook = (survey: any) => {
+    // 1. Prepare worksheet data
+    const worksheetData = [
+      ["userUniqueId", "surveyLink"], // header row
+      ...survey.share_tokens.map((item: any) => [
+        item.agentUserUniqueId,
+        `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
+      ]),
+    ];
+
+    // 2. Create worksheet and workbook
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+    return workbook;
+  };
+
+  // =======================================================
+  // Function for the DOWNLOAD Button (Personalized Surveys)
+  // =======================================================
+  const handleDownload = (survey: any) => {
+    try {
+      if (!survey.share_tokens || survey.share_tokens.length === 0) {
+        toast.info("No survey links available to download.");
+        return;
+      }
+
+      // For personalized surveys (share_tokens.length > 1), download Excel
+      if (survey.share_tokens.length > 1) {
+        const workbook = prepareWorkbook(survey);
+        XLSX.writeFile(workbook, `${survey.title}_PersonalizedLinks.xlsx`);
+        toast.success("Personalized survey links downloaded successfully!");
+      } else {
+        // For public surveys (share_tokens.length == 1), just show info
+        toast.info(
+          "This is a public survey. Use the share button to share the link."
+        );
+      }
+    } catch (error) {
+      console.error("Failed to download survey links:", error);
+      toast.error("Failed to download survey links.");
     }
   };
 
@@ -310,10 +357,18 @@ export default function SentSurveys() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {survey.status.toLowerCase() !== "draft" && (
+                        {survey.status.toLowerCase() === "published" &&
+                        survey.share_tokens?.length === 1 ? (
                           <DropdownMenuItem onClick={() => handleShare(survey)}>
                             <Share className="mr-2 h-4 w-4" />
                             Share
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => handleDownload(survey)}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
                           </DropdownMenuItem>
                         )}
                         {/* <DropdownMenuItem
@@ -381,7 +436,7 @@ export default function SentSurveys() {
                   </div>
 
                   <div>
-                    {survey.status.toLowerCase() !== "draft" ? (
+                    {survey.status.toLowerCase() == "published" ? (
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
@@ -394,13 +449,23 @@ export default function SentSurveys() {
                             View Results
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleShare(survey)}
-                        >
-                          <Share className="h-4 w-4" />
-                        </Button>
+                        {survey.share_tokens?.length === 1 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleShare(survey)}
+                          >
+                            <Share className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownload(survey)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <div className="flex gap-2">

@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Edit,
   Trash2,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { surveyApi, demoData, Survey } from "@/lib/api";
@@ -45,41 +46,331 @@ export default function Dashboard() {
     surveyApi.getAllSurveys().then((response) => ({ data: response }))
   );
 
-  const handleShare = (survey: any) => {
+  // const createExcelFile = (survey: any) => {
+  //   const worksheetData = [
+  //     ["userUniqueId", "surveyLink"],
+  //     ...survey.share_tokens.map((item: any) => [
+  //       item.agentUserUniqueId,
+  //       `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
+  //     ]),
+  //   ];
+
+  //   const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+  //   const workbook = XLSX.utils.book_new();
+  //   XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+  //   const excelBuffer = XLSX.write(workbook, {
+  //     bookType: "xlsx",
+  //     type: "array",
+  //   });
+
+  //   const blob = new Blob([excelBuffer], {
+  //     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  //   });
+
+  //   const file = new File([blob], "SurveyLinks.xlsx", {
+  //     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  //   });
+
+  //   return { workbook, file };
+  // };
+
+  // const handleDownload = (survey: any) => {
+  //   try {
+  //     if (survey.share_tokens && survey.share_tokens.length > 0) {
+  //       const { workbook } = createExcelFile(survey);
+  //       XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+  //     } else {
+  //       // No agent share tokens → nothing to export as Excel
+  //       toast.info(
+  //         "No agent share tokens to export. Try sharing the survey link instead."
+  //       );
+  //     }
+  //   } catch (error) {
+  //     console.error(error);
+  //     toast.error("Failed to download Excel");
+  //   }
+  // };
+
+  // const handleShare = async (survey: any) => {
+  //   try {
+  //     // ✅ Case 1: share_tokens.length > 0 → share Excel file via navigator.share
+  //     if (survey.share_tokens && survey.share_tokens.length > 0) {
+  //       const { file: blob } = createExcelFile(survey);
+  //       console.log("File is", blob);
+
+  //       if (navigator.canShare && navigator.canShare({ files: [blob] })) {
+  //         console.log("Sharing file...");
+  //         const file = new File([blob], "SurveyLinks.xlsx", {
+  //           type: blob.type,
+  //         });
+
+  //         await navigator.share({
+  //           title: "Survey Links",
+  //           text: "Here are the survey sharing links.",
+  //           files: [file],
+  //         });
+  //       } else {
+  //         toast.info(
+  //           "File sharing not supported on this device. Try downloading instead."
+  //         );
+  //       }
+  //       return;
+  //     }
+
+  //     // ✅ Case 2: share_tokens.length == 0 → share single survey link (your original logic)
+  //     const firstToken = survey.share_tokens?.[0];
+
+  //     if (!firstToken || !firstToken.token_hash) {
+  //       // This defends against undefined access
+  //       toast.info("No share token available to create survey link.");
+  //       return;
+  //     }
+
+  //     const url = window.location.origin + `/survey/${firstToken.token_hash}`;
+
+  //     if (navigator.share) {
+  //       await navigator.share({
+  //         title: survey.title,
+  //         text: `Check out this survey: ${survey.title}`,
+  //         url,
+  //       });
+  //     } else {
+  //       toast.info("Share feature not available on this device.");
+  //     }
+  //   } catch (error) {
+  //     console.error(error);
+  //     toast.error("Failed to share survey");
+  //   }
+  // };
+
+  // const handleShare = (survey: any) => {
+  //   try {
+  //     console.log(">>>>>> the value of the SURVEY IS : ", survey);
+  //     if (survey.share_tokens.length > 0) {
+  //       // Prepare worksheet data, header row first
+  //       const worksheetData = [
+  //         ["userUniqueId", "surveyLink"], // header row
+  //         ...survey.share_tokens.map((item: any) => [
+  //           item.agentUserUniqueId,
+  //           `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
+  //         ]),
+  //       ];
+
+  //       // Create worksheet and workbook
+  //       const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+  //       const workbook = XLSX.utils.book_new();
+  //       XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+  //       // Trigger download
+  //       XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+  //     } else {
+  //       if (navigator.share) {
+  //         navigator.share({
+  //           title: survey.title,
+  //           text: `Check out this survey: ${survey.title}`,
+  //           url:
+  //             window.location.origin +
+  //             `/survey/${survey.share_tokens[0].token_hash}`,
+  //         });
+  //       } else {
+  //         toast.info("Share feature not available on this device.");
+  //       }
+  //     }
+  //   } catch (error) {
+  //     toast.error("Failed to share survey");
+  //   }
+  // };
+
+  // --- Helper function to prepare Workbook for Personalized Surveys ---
+  const prepareWorkbook = (survey: any) => {
+    // 1. Prepare worksheet data
+    const worksheetData = [
+      ["userUniqueId", "surveyLink"], // header row
+      ...survey.share_tokens.map((item: any) => [
+        item.agentUserUniqueId,
+        `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
+      ]),
+    ];
+
+    // 2. Create worksheet and workbook
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+    return workbook;
+  };
+
+  // =======================================================
+  // Function for the DOWNLOAD Button (Personalized Surveys)
+  // =======================================================
+  const handleDownload = (survey: any) => {
     try {
-      console.log(">>>>>> the value of the SURVEY IS : ", survey);
-      if (survey.share_tokens.length > 0) {
-        // Prepare worksheet data, header row first
-        const worksheetData = [
-          ["userUniqueId", "surveyLink"], // header row
-          ...survey.share_tokens.map((item: any) => [
-            item.agentUserUniqueId,
-            `${process.env.NEXT_PUBLIC_FRONTEND_URL}/survey/${item.token_hash}`,
-          ]),
-        ];
+      if (!survey.share_tokens || survey.share_tokens.length === 0) {
+        toast.info("No survey links available to download.");
+        return;
+      }
 
-        // Create worksheet and workbook
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
-
-        // Trigger download
-        XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+      // For personalized surveys (share_tokens.length > 1), download Excel
+      if (survey.share_tokens.length > 1) {
+        const workbook = prepareWorkbook(survey);
+        XLSX.writeFile(workbook, `${survey.title}_PersonalizedLinks.xlsx`);
+        toast.success("Personalized survey links downloaded successfully!");
       } else {
-        if (navigator.share) {
-          navigator.share({
-            title: survey.title,
-            text: `Check out this survey: ${survey.title}`,
-            url:
-              window.location.origin +
-              `/survey/${survey.share_tokens[0].token_hash}`,
-          });
-        } else {
-          toast.info("Share feature not available on this device.");
-        }
+        // For public surveys (share_tokens.length == 1), just show info
+        toast.info(
+          "This is a public survey. Use the share button to share the link."
+        );
       }
     } catch (error) {
-      toast.error("Failed to share survey");
+      console.error("Failed to download survey links:", error);
+      toast.error("Failed to download survey links.");
+    }
+  };
+
+  // =======================================================
+  // Function for the SHARE Button
+  // =======================================================
+  const handleShare = async (survey: any) => {
+    try {
+      if (!survey.share_tokens || survey.share_tokens.length === 0) {
+        toast.info("No survey links available to share.");
+        return;
+      }
+
+      // Case 1: Personalized Survey (share_tokens.length > 1) - Share Excel File
+      if (survey.share_tokens.length > 1) {
+        console.log("📊 Personalized survey detected, preparing Excel file...");
+
+        const workbook = prepareWorkbook(survey);
+        const fileName = `${survey.title.replace(
+          /[^a-z0-9]/gi,
+          "_"
+        )}_PersonalizedLinks.xlsx`;
+
+        // Generate Excel file as Blob
+        const excelBuffer = XLSX.write(workbook, {
+          bookType: "xlsx",
+          type: "array",
+        });
+
+        const mimeType =
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const excelBlob = new Blob([excelBuffer], { type: mimeType });
+
+        // Create File object for sharing
+        const fileToShare = new File([excelBlob], fileName, {
+          type: mimeType,
+          lastModified: Date.now(),
+        });
+
+        console.log("📁 File created:", {
+          name: fileName,
+          size: fileToShare.size,
+          type: fileToShare.type,
+        });
+
+        // Try to share the file using Web Share API
+        if (typeof navigator.share === "function") {
+          try {
+            // First check if we can share files
+            if (
+              typeof navigator.canShare === "function" &&
+              navigator.canShare({ files: [fileToShare] })
+            ) {
+              console.log(
+                "📱 Attempting to share Excel file via Web Share API..."
+              );
+
+              await navigator.share({
+                files: [fileToShare],
+                title: `Personalized Survey Links - ${survey.title}`,
+                text: "Personalized survey links for distribution",
+              });
+
+              console.log("✅ Excel file shared successfully");
+              toast.success("Excel file shared successfully!");
+              return;
+            } else {
+              console.log(
+                "⚠️ File sharing not supported, falling back to download"
+              );
+            }
+          } catch (shareError: any) {
+            if (shareError.name === "AbortError") {
+              console.log("ℹ️ User cancelled the share dialog");
+              return; // User cancelled, don't show error or download
+            } else {
+              console.error("❌ Share failed:", shareError);
+              console.log("⚠️ Falling back to download");
+            }
+          }
+        } else {
+          console.log(
+            "⚠️ Web Share API not available, falling back to download"
+          );
+        }
+
+        // Fallback: Download the file
+        console.log("📥 Downloading Excel file...");
+        XLSX.writeFile(workbook, fileName);
+        toast.success(
+          "Excel file downloaded! You can now share it via email or messaging apps."
+        );
+        console.log("✅ Excel file downloaded successfully");
+      }
+      // Case 2: Public Survey (share_tokens.length == 1) - Share Public Link
+      else if (survey.share_tokens.length === 1) {
+        console.log("🔗 Public survey detected, preparing to share link...");
+
+        const publicToken = survey.share_tokens[0];
+        const publicUrl = `${window.location.origin}/survey/${publicToken.token_hash}`;
+
+        // Check if Web Share API is available
+        if (navigator.share) {
+          try {
+            console.log("📱 Attempting to share via Web Share API...");
+            await navigator.share({
+              title: survey.title,
+              text: `Check out this survey: ${survey.title}`,
+              url: publicUrl,
+            });
+            console.log("✅ Share successful");
+            toast.success("Survey link shared successfully!");
+          } catch (shareError: any) {
+            if (shareError.name === "AbortError") {
+              console.log("ℹ️ User cancelled the share dialog");
+              // User cancelled, don't show error
+            } else {
+              console.error("❌ Share failed:", shareError);
+              // Fallback to clipboard
+              await navigator.clipboard.writeText(publicUrl);
+              toast.success("Survey link copied to clipboard!");
+            }
+          }
+        } else {
+          // Web Share API not available, use clipboard
+          console.log(
+            "📋 Web Share API not available, copying to clipboard..."
+          );
+          await navigator.clipboard.writeText(publicUrl);
+          toast.success("Survey link copied to clipboard!");
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ Failed to share survey:", error);
+
+      // Provide specific error messages
+      if (error.name === "NotAllowedError") {
+        toast.error(
+          "Permission denied. Please allow clipboard/share access in your browser settings."
+        );
+      } else if (error.name === "AbortError") {
+        // User dismissed the share dialog - don't show error
+        console.log("ℹ️ Share dialog dismissed by user");
+      } else {
+        toast.error(`Failed to share: ${error.message || "Unknown error"}`);
+      }
     }
   };
 
@@ -423,13 +714,24 @@ export default function Dashboard() {
 
                       {/* Show Share button for DRAFT and SCHEDULED surveys */}
                       {survey.status === "PUBLISHED" &&
-                        survey.share_tokens?.length > 0 && (
+                        survey.share_tokens?.length === 1 && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleShare(survey)}
                           >
                             <Share className="h-4 w-4" />
+                          </Button>
+                        )}
+                      {survey.status === "PUBLISHED" &&
+                        survey.share_tokens?.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            // onClick={() => handleShare(survey)}
+                            onClick={() => handleDownload(survey)}
+                          >
+                            <Download className="h-4 w-4" />
                           </Button>
                         )}
                     </div>
