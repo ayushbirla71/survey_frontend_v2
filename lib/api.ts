@@ -1554,11 +1554,11 @@ export const categoriesApi = {
 // Demo data for testing (fallback when API is not available)
 export const demoData = {
   dashboardStats: {
-    totalSurveys: 24,
+    totalSurveys: 0,
     surveyGrowth: 12,
-    totalResponses: 1842,
+    totalResponses: 0,
     responseGrowth: 8,
-    completionRate: 76,
+    completionRate: 0,
     completionRateGrowth: 3,
     avgResponseTime: 4.2,
     responseTimeImprovement: 12,
