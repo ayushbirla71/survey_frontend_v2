@@ -542,7 +542,7 @@ export const surveyApi = {
     title: string;
     description: string;
     flow_type?: "STATIC" | "INTERACTIVE" | "GAME";
-    survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE";
+    survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT";
     settings?: {
       isAnonymous?: boolean;
       showProgressBar?: boolean;
@@ -551,7 +551,7 @@ export const surveyApi = {
     status?: "DRAFT" | "SCHEDULED" | "PUBLISHED";
     scheduled_date?: string;
     scheduled_type?: "IMMEDIATE" | "SCHEDULED";
-    categoryOfSurvey?: string;
+    surveyCategoryId?: string;
     autoGenerateQuestions?: boolean;
   }): Promise<{ message?: string; survey?: Survey; data: any }> => {
     try {

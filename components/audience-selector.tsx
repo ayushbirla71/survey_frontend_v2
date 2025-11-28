@@ -14,7 +14,14 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Users, Target, Database, RefreshCw, AlertCircle } from "lucide-react";
+import {
+  Users,
+  Target,
+  Database,
+  RefreshCw,
+  AlertCircle,
+  Download,
+} from "lucide-react";
 import { audienceApi, apiWithFallback, demoData } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "react-toastify";
@@ -211,6 +218,27 @@ export default function AudienceSelector({
     }
   };
 
+  const handleDownloadDummyExcel = () => {
+    try {
+      // Prepare worksheet data, header row first
+      const excelData = ["9013kjn9832nsd89sds", "879fgdf990fd7gsd98"];
+      const worksheetData = [
+        ["userUniqueIds"], // header row
+        ...excelData.map((item: any) => [item]),
+      ];
+
+      // Create worksheet and workbook
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+
+      // Trigger download
+      XLSX.writeFile(workbook, "Agent Users List Template.xlsx");
+    } catch (error) {
+      toast.error("Failed to download Excel");
+    }
+  };
+
   return (
     <div>
       {surveySettings.survey_send_by == "AGENT" ? (
@@ -222,7 +250,7 @@ export default function AudienceSelector({
             Please select the Excel File with the user unique Id's list
           </p>
 
-          <div className="mt-2">
+          <div className="mt-2 flex gap-3">
             <label
               htmlFor="excel-upload"
               className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md mt-4"
@@ -237,6 +265,14 @@ export default function AudienceSelector({
               onChange={handleFileChange}
               className="hidden"
             />
+            <Button
+              variant="outline"
+              onClick={() => handleDownloadDummyExcel()}
+              className="h-10 px-4 py-2 rounded-md mt-4"
+            >
+              <Download className="h-4 w-4" />
+              Download Excel Template
+            </Button>
           </div>
           {file && (
             <p className="text-green-500 mt-2">

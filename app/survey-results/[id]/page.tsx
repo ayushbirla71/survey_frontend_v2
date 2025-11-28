@@ -174,7 +174,7 @@ export default function SurveyResults() {
 
   const handleRefresh = () => {
     refetchResults();
-    refetchSummary();
+    // refetchSummary();
   };
 
   // Helpers for grid rendering

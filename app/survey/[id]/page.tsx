@@ -76,6 +76,265 @@ type GKind =
 
 type KindsMap = Record<string, GKind>;
 
+// Grid Question Components
+interface GridQuestionProps {
+  question: any;
+  rows: { id: string; text: string }[];
+  cols: { id: string; text: string }[];
+  answer: any;
+  handleAnswerChange: (questionId: string, value: any) => void;
+}
+
+function MultiChoiceGridQuestion({
+  question,
+  rows,
+  cols,
+  answer,
+  handleAnswerChange,
+}: GridQuestionProps) {
+  const gridAnswer = (answer as Record<string, string>) || {};
+  const [currentRowIndex, setCurrentRowIndex] = useState(0);
+  const totalRows = rows.length;
+
+  // Safety check: ensure rows exist and currentRowIndex is valid
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="w-full p-4 text-slate-600">
+        No rows available for this grid question.
+      </div>
+    );
+  }
+
+  // Ensure currentRowIndex is within bounds
+  const safeRowIndex = Math.min(currentRowIndex, totalRows - 1);
+  const currentRow = rows[safeRowIndex];
+
+  const handleNext = () => {
+    // Check if current row is answered (required validation)
+    if (question.required && !gridAnswer[currentRow.id]) {
+      toast.error("Please select an option for this row before proceeding");
+      return;
+    }
+
+    if (safeRowIndex < totalRows - 1) {
+      setCurrentRowIndex(safeRowIndex + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (safeRowIndex > 0) {
+      setCurrentRowIndex(safeRowIndex - 1);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      {/* Row counter */}
+      <div className="text-sm text-slate-600 mb-4">
+        {safeRowIndex + 1}/{totalRows}
+      </div>
+
+      {/* Navigation buttons */}
+      <div className="flex justify-between items-center mb-6">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handlePrev}
+          disabled={safeRowIndex === 0}
+          className="flex items-center gap-2"
+        >
+          <span>← Prev</span>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleNext}
+          disabled={safeRowIndex === totalRows - 1}
+          className="flex items-center gap-2"
+        >
+          <span>Next →</span>
+        </Button>
+      </div>
+
+      {/* Current row question */}
+      <div className="mb-6">
+        <h3 className="text-lg font-medium text-slate-800 mb-4">
+          {currentRow.text}
+        </h3>
+
+        {/* Column options as buttons */}
+        <RadioGroup
+          value={gridAnswer[currentRow.id] ?? ""}
+          onValueChange={(selectedValue) => {
+            const newGridAnswer = {
+              ...gridAnswer,
+              [currentRow.id]: selectedValue,
+            };
+            handleAnswerChange(question.id, newGridAnswer);
+
+            // Automatically move to next row after selection
+            setTimeout(() => {
+              if (safeRowIndex < totalRows - 1) {
+                setCurrentRowIndex(safeRowIndex + 1);
+              }
+            }, 300); // Small delay for better UX (user sees selection highlight)
+          }}
+          className="flex flex-col gap-3"
+        >
+          {cols.map((c: { id: string; text: string }) => {
+            const cellId = `${question.id}-grid-mc-${currentRow.id}-${c.id}`;
+            const isSelected = gridAnswer[currentRow.id] === c.id;
+
+            return (
+              <label
+                key={c.id}
+                htmlFor={cellId}
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  isSelected
+                    ? "border-yellow-400 bg-yellow-50"
+                    : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                }`}
+              >
+                <RadioGroupItem id={cellId} value={c.id} />
+                <span className="text-sm font-medium text-slate-700">
+                  {c.text}
+                </span>
+              </label>
+            );
+          })}
+        </RadioGroup>
+      </div>
+    </div>
+  );
+}
+
+function CheckboxGridQuestion({
+  question,
+  rows,
+  cols,
+  answer,
+  handleAnswerChange,
+}: GridQuestionProps) {
+  const gridAnswer = (answer as Record<string, string[]>) || {};
+  const [currentRowIndex, setCurrentRowIndex] = useState(0);
+  const totalRows = rows.length;
+
+  // Safety check: ensure rows exist and currentRowIndex is valid
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="w-full p-4 text-slate-600">
+        No rows available for this grid question.
+      </div>
+    );
+  }
+
+  // Ensure currentRowIndex is within bounds
+  const safeRowIndex = Math.min(currentRowIndex, totalRows - 1);
+  const currentRow = rows[safeRowIndex];
+
+  const handleNext = () => {
+    // Check if current row is answered (required validation)
+    if (question.required) {
+      const rowAnswers = gridAnswer[currentRow.id] || [];
+      if (rowAnswers.length === 0) {
+        toast.error(
+          "Please select at least one option for this row before proceeding"
+        );
+        return;
+      }
+    }
+
+    if (safeRowIndex < totalRows - 1) {
+      setCurrentRowIndex(safeRowIndex + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (safeRowIndex > 0) {
+      setCurrentRowIndex(safeRowIndex - 1);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      {/* Row counter */}
+      <div className="text-sm text-slate-600 mb-4">
+        {safeRowIndex + 1}/{totalRows}
+      </div>
+
+      {/* Navigation buttons */}
+      <div className="flex justify-between items-center mb-6">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handlePrev}
+          disabled={safeRowIndex === 0}
+          className="flex items-center gap-2"
+        >
+          <span>← Prev</span>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleNext}
+          disabled={safeRowIndex === totalRows - 1}
+          className="flex items-center gap-2"
+        >
+          <span>Next →</span>
+        </Button>
+      </div>
+
+      {/* Current row question */}
+      <div className="mb-6">
+        <h3 className="text-lg font-medium text-slate-800 mb-4">
+          {currentRow.text}
+        </h3>
+
+        {/* Column options as checkboxes */}
+        <div className="flex flex-col gap-3">
+          {cols.map((c: { id: string; text: string }) => {
+            const cellId = `${question.id}-grid-cb-${currentRow.id}-${c.id}`;
+            const rowAnswers = gridAnswer[currentRow.id] || [];
+            const isChecked = rowAnswers.includes(c.id);
+
+            return (
+              <label
+                key={c.id}
+                htmlFor={cellId}
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  isChecked
+                    ? "border-yellow-400 bg-yellow-50"
+                    : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                }`}
+              >
+                <Checkbox
+                  id={cellId}
+                  checked={isChecked}
+                  onCheckedChange={(checked) => {
+                    const newRowAnswers = checked
+                      ? [...rowAnswers, c.id]
+                      : rowAnswers.filter((id: string) => id !== c.id);
+                    const newGridAnswer = {
+                      ...gridAnswer,
+                      [currentRow.id]: newRowAnswers,
+                    };
+                    handleAnswerChange(question.id, newGridAnswer);
+                  }}
+                />
+                <span className="text-sm font-medium text-slate-700">
+                  {c.text}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Helper functions for question type normalization (from survey-preview.tsx)
 function normKindStr(s?: string): GKind | null {
   if (!s) return null;
@@ -281,6 +540,17 @@ export default function PublicSurveyPage() {
     }));
   };
 
+  // Normalize question kind based on category or infer from options
+  const normalizeKind = (q: Question): GKind => {
+    const byCat = q.categoryId ? kindsMap[q.categoryId] : undefined;
+    if (byCat) return byCat;
+
+    const inferred = inferFromOptions(q);
+    if (inferred) return inferred;
+
+    return "short answer";
+  };
+
   // ✅ NEW: central helper to decide if a question is answered
   const isQuestionAnswered = (question: Question): boolean => {
     const value = answers[question.id];
@@ -299,6 +569,69 @@ export default function PublicSurveyPage() {
 
     // Objects (grids: row -> selected cols OR row -> single col)
     if (typeof value === "object") {
+      const kind = normalizeKind(question);
+
+      // For grid questions, check if ALL rows are answered (if required)
+      if (kind === "multi-choice grid" || kind === "checkbox grid") {
+        // Get the rows for this grid question
+        let rows: { id: string; text: string }[] = [];
+
+        // NEW: Check question-level rowOptions first
+        if (
+          Array.isArray(question.rowOptions) &&
+          question.rowOptions.length > 0
+        ) {
+          rows = question.rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+        // LEGACY: Check options[0].rowOptions
+        else if (
+          question.options &&
+          question.options[0] &&
+          Array.isArray(question.options[0].rowOptions)
+        ) {
+          rows = question.options[0].rowOptions.map((r: any, i: number) => ({
+            id: r.id ?? `r-${i}`,
+            text: r.text ?? `Row ${i + 1}`,
+          }));
+        }
+
+        // If required, ALL rows must be answered
+        if (question.required && rows.length > 0) {
+          const gridAnswer = value as Record<string, string | string[]>;
+
+          // Check if every row has an answer
+          return rows.every((row) => {
+            const rowAnswer = gridAnswer[row.id];
+            if (!rowAnswer) return false;
+
+            // For checkbox grid, check if array has at least one item
+            if (Array.isArray(rowAnswer)) {
+              return rowAnswer.length > 0;
+            }
+
+            // For multi-choice grid, check if string is not empty
+            if (typeof rowAnswer === "string") {
+              return rowAnswer.trim().length > 0;
+            }
+
+            return false;
+          });
+        }
+
+        // If not required, just check if at least one row is answered
+        const entries = Object.values(value);
+        if (entries.length === 0) return false;
+        return entries.some((v) => {
+          if (Array.isArray(v)) return v.length > 0;
+          if (typeof v === "string") return v.trim().length > 0;
+          return v !== null && v !== undefined;
+        });
+      }
+
+      // For other object-type answers
       const entries = Object.values(value);
       if (entries.length === 0) return false;
       return entries.some((v) => {
@@ -403,9 +736,9 @@ export default function PublicSurveyPage() {
       );
       console.log("submitResponse is", submitResponse);
 
-      const result = submitResponse;
+      const result: any = submitResponse;
 
-      if (result.data || result.id) {
+      if (result.data || result?.data?.id) {
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
       } else {
@@ -417,17 +750,6 @@ export default function PublicSurveyPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  // Normalize question kind based on category or infer from options
-  const normalizeKind = (q: Question): GKind => {
-    const byCat = q.categoryId ? kindsMap[q.categoryId] : undefined;
-    if (byCat) return byCat;
-
-    const inferred = inferFromOptions(q);
-    if (inferred) return inferred;
-
-    return "short answer";
   };
 
   const renderQuestionInput = (question: Question) => {
@@ -658,56 +980,14 @@ export default function PublicSurveyPage() {
         }
       }
 
-      const gridAnswer = (answer as Record<string, string>) || {};
-
       return (
-        <div className="overflow-x-auto">
-          <table className="min-w-[480px] border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="px-3 py-2 text-left text-slate-500 font-medium"></th>
-                {cols.map((c: { id: string; text: string }) => (
-                  <th
-                    key={c.id}
-                    className="px-3 py-2 text-slate-700 font-medium text-center"
-                  >
-                    {c.text}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r: { id: string; text: string }) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 text-slate-700">{r.text}</td>
-
-                  {cols.map((c: { id: string; text: string }) => {
-                    const cellId = `${question.id}-grid-mc-${r.id}-${c.id}`;
-                    return (
-                      <td key={c.id} className="px-3 py-2 text-center">
-                        {/* RadioGroup INSIDE the cell, not wrapping the row */}
-                        <RadioGroup
-                          value={gridAnswer[r.id] ?? ""}
-                          onValueChange={(selectedValue) => {
-                            const newGridAnswer = {
-                              ...gridAnswer,
-                              [r.id]: selectedValue,
-                            };
-                            handleAnswerChange(question.id, newGridAnswer);
-                          }}
-                        >
-                          <div key={c.id} className="px-3 py-2 text-center">
-                            <RadioGroupItem id={cellId} value={c.id} />
-                          </div>
-                        </RadioGroup>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MultiChoiceGridQuestion
+          question={question}
+          rows={rows}
+          cols={cols}
+          answer={answer}
+          handleAnswerChange={handleAnswerChange}
+        />
       );
       // return (
       //   <div className="overflow-x-auto">
@@ -805,59 +1085,14 @@ export default function PublicSurveyPage() {
         }
       }
 
-      const gridAnswer = (answer as Record<string, string[]>) || {};
-
       return (
-        <div className="overflow-x-auto">
-          <table className="min-w-[480px] border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="px-3 py-2 text-left text-slate-500 font-medium">
-                  {" "}
-                </th>
-                {cols.map((c: { id: string; text: string }) => (
-                  <th
-                    key={c.id}
-                    className="px-3 py-2 text-slate-700 font-medium text-center"
-                  >
-                    {c.text}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r: { id: string; text: string }) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 text-slate-700">{r.text}</td>
-                  {cols.map((c: { id: string; text: string }) => {
-                    const cellId = `${question.id}-grid-cb-${r.id}-${c.id}`;
-                    const rowAnswers = gridAnswer[r.id] || [];
-                    const isChecked = rowAnswers.includes(c.id);
-
-                    return (
-                      <td key={c.id} className="px-3 py-2 text-center">
-                        <Checkbox
-                          id={cellId}
-                          checked={isChecked}
-                          onCheckedChange={(checked) => {
-                            const newRowAnswers = checked
-                              ? [...rowAnswers, c.id]
-                              : rowAnswers.filter((id: string) => id !== c.id);
-                            const newGridAnswer = {
-                              ...gridAnswer,
-                              [r.id]: newRowAnswers,
-                            };
-                            handleAnswerChange(question.id, newGridAnswer);
-                          }}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CheckboxGridQuestion
+          question={question}
+          rows={rows}
+          cols={cols}
+          answer={answer}
+          handleAnswerChange={handleAnswerChange}
+        />
       );
     }
 
