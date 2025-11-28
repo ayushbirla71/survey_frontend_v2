@@ -37,7 +37,8 @@ interface Question {
     | "EMAIL"
     | "PHONE"
     | "URL"
-    | "NUMBER";
+    | "NUMBER"
+    | "NPS";
   question: string;
   options?: string[];
   required: boolean;
@@ -81,6 +82,7 @@ const getQuestionTypeLabel = (type: string) => {
     PHONE: "Phone Number",
     URL: "URL",
     NUMBER: "Number",
+    NPS: "Net Promoter Score",
   };
   return labels[type] || type;
 };
@@ -103,6 +105,7 @@ const getQuestionTypeIcon = (type: string) => {
     PHONE: "📞",
     URL: "🔗",
     NUMBER: "🔢",
+    NPS: "📈",
   };
   return icons[type] || "❓";
 };

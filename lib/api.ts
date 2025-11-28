@@ -366,7 +366,14 @@ export const questionGenerationApi = {
       questionCount: number;
       questions: Array<{
         id: string;
-        type: "single_choice" | "checkbox" | "text" | "rating" | "yes_no";
+        type:
+          | "single_choice"
+          | "checkbox"
+          | "text"
+          | "rating"
+          | "yes_no"
+          | "number"
+          | "nps";
         question: string;
         options: string[];
         required: boolean;
@@ -1651,6 +1658,8 @@ export const demoData = {
     { id: "60516591-f744-4efd-ae56-58d8e1ca911c", type_name: "checkbox grid" },
     { id: "276364c5-1b96-4b4e-a362-833973532241", type_name: "date" },
     { id: "d16778d4-85bc-4fac-8815-2bb2f1346fd9", type_name: "time" },
+    { id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", type_name: "number" },
+    { id: "f6e5d4c3-b2a1-4f5e-6d7c-8b9a0e1f2a3b", type_name: "nps" },
   ],
 
   audienceStats: {

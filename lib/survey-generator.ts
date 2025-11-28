@@ -1,24 +1,24 @@
 // Update the SurveyData interface to include id
 interface Question {
-    id: string
-    type: string
-    question: string
-    options?: string[]
-    required: boolean
+  id: string;
+  type: string;
+  question: string;
+  options?: string[];
+  required: boolean;
 }
 
 interface SurveyData {
-    id?: string
-    title: string
-    description: string
-    questions: Question[]
+  id?: string;
+  title: string;
+  description: string;
+  questions: Question[];
 }
 
 // Update the function signature and usage
 export function generateSurveyHtml(surveyData: SurveyData): string {
-    const surveyId = surveyData.id || `survey-${Date.now()}`
+  const surveyId = surveyData.id || `survey-${Date.now()}`;
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -430,7 +430,9 @@ export function generateSurveyHtml(surveyData: SurveyData): string {
                 <div class="progress-fill" id="progressFill"></div>
             </div>
             <div class="progress-text">
-                <span class="current-step" id="currentStep">Question 1 of ${surveyData.questions.length}</span>
+                <span class="current-step" id="currentStep">Question 1 of ${
+                  surveyData.questions.length
+                }</span>
                 <span id="progressPercent">0%</span>
             </div>
         </div>
@@ -439,7 +441,15 @@ export function generateSurveyHtml(surveyData: SurveyData): string {
             <div class="error" id="error-message"></div>
             
             <form id="survey-form">
-                ${surveyData.questions.map((question, index) => generateQuestionPageHtml(question, index, surveyData.questions.length)).join("")}
+                ${surveyData.questions
+                  .map((question, index) =>
+                    generateQuestionPageHtml(
+                      question,
+                      index,
+                      surveyData.questions.length
+                    )
+                  )
+                  .join("")}
             </form>
             
             <div class="loading" id="loading">
@@ -768,90 +778,138 @@ export function generateSurveyHtml(surveyData: SurveyData): string {
         });
     </script>
 </body>
-</html>`
+</html>`;
 }
 
-function generateQuestionPageHtml(question: Question, index: number, totalQuestions: number): string {
-    const questionNumber = index + 1
-    const requiredMark = question.required ? '<span class="required">*</span>' : ""
+function generateQuestionPageHtml(
+  question: Question,
+  index: number,
+  totalQuestions: number
+): string {
+  const questionNumber = index + 1;
+  const requiredMark = question.required
+    ? '<span class="required">*</span>'
+    : "";
 
-    let optionsHtml = ""
+  let optionsHtml = "";
 
-    switch (question.type) {
-        case "single_choice":
-            optionsHtml = `
+  switch (question.type) {
+    case "single_choice":
+      optionsHtml = `
         <div class="option-group">
-          ${question.options
-                    ?.map(
-                        (option, optIndex) => `
+          ${
+            question.options
+              ?.map(
+                (option, optIndex) => `
             <div class="option">
-              <input type="radio" id="${question.id}_${optIndex}" name="${question.id}" value="${option}" ${question.required ? "required" : ""}>
+              <input type="radio" id="${question.id}_${optIndex}" name="${
+                  question.id
+                }" value="${option}" ${question.required ? "required" : ""}>
               <label for="${question.id}_${optIndex}">${option}</label>
             </div>
-          `,
-                    )
-                    .join("") || ""
-                }
+          `
+              )
+              .join("") || ""
+          }
         </div>
-      `
-            break
+      `;
+      break;
 
-        case "checkbox":
-            optionsHtml = `
+    case "checkbox":
+      optionsHtml = `
         <div class="option-group">
-          ${question.options
-                    ?.map(
-                        (option, optIndex) => `
+          ${
+            question.options
+              ?.map(
+                (option, optIndex) => `
             <div class="option">
               <input type="checkbox" id="${question.id}_${optIndex}" name="${question.id}" value="${option}">
               <label for="${question.id}_${optIndex}">${option}</label>
             </div>
-          `,
-                    )
-                    .join("") || ""
-                }
+          `
+              )
+              .join("") || ""
+          }
         </div>
-      `
-            break
+      `;
+      break;
 
-        case "text":
-            optionsHtml = `
+    case "text":
+      optionsHtml = `
         <textarea 
           name="${question.id}" 
           class="text-input" 
           placeholder="Please share your thoughts..."
           ${question.required ? "required" : ""}
         ></textarea>
-      `
-            break
+      `;
+      break;
 
-        case "rating":
-            optionsHtml = `
+    case "rating":
+      optionsHtml = `
         <div class="rating-group">
-          ${question.options
-                    ?.map(
-                        (option) => `
+          ${
+            question.options
+              ?.map(
+                (option) => `
             <div class="rating-button" data-rating="${option}">
               ${option}
             </div>
-          `,
-                    )
-                    .join("") || ""
-                }
+          `
+              )
+              .join("") || ""
+          }
         </div>
         <div class="rating-labels">
           <span>Not likely</span>
           <span>Very likely</span>
         </div>
-        <input type="hidden" name="${question.id}" id="${question.id}_hidden" ${question.required ? "required" : ""}>
-      `
-            break
+        <input type="hidden" name="${question.id}" id="${question.id}_hidden" ${
+        question.required ? "required" : ""
+      }>
+      `;
+      break;
 
-        default:
-            optionsHtml = `<p>Unsupported question type: ${question.type}</p>`
-    }
+    case "number":
+      optionsHtml = `
+        <input
+          type="number"
+          name="${question.id}"
+          class="text-input"
+          placeholder="Enter a number..."
+          ${question.required ? "required" : ""}
+        >
+      `;
+      break;
 
-    return `
+    case "nps":
+      optionsHtml = `
+        <div class="rating-group">
+          ${Array.from({ length: 11 }, (_, i) => i)
+            .map(
+              (num) => `
+            <div class="rating-button" data-rating="${num}">
+              ${num}
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+        <div class="rating-labels">
+          <span>Not at all likely</span>
+          <span>Extremely likely</span>
+        </div>
+        <input type="hidden" name="${question.id}" id="${question.id}_hidden" ${
+        question.required ? "required" : ""
+      }>
+      `;
+      break;
+
+    default:
+      optionsHtml = `<p>Unsupported question type: ${question.type}</p>`;
+  }
+
+  return `
     <div class="question-page" id="question-${index}" data-question-id="${question.id}">
       <div class="question-counter">Question ${questionNumber} of ${totalQuestions}</div>
       <div class="question-block">
@@ -859,5 +917,5 @@ function generateQuestionPageHtml(question: Question, index: number, totalQuesti
         ${optionsHtml}
       </div>
     </div>
-  `
+  `;
 }

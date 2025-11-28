@@ -72,7 +72,9 @@ type GKind =
   | "multi-choice grid"
   | "checkbox grid"
   | "date"
-  | "time";
+  | "time"
+  | "number"
+  | "nps";
 
 type KindsMap = Record<string, GKind>;
 
@@ -352,6 +354,8 @@ function normKindStr(s?: string): GKind | null {
   if (k === "checkboxgrid" || k === "gridcheckbox") return "checkbox grid";
   if (k === "date") return "date";
   if (k === "time") return "time";
+  if (k === "number") return "number";
+  if (k === "nps" || k === "netpromoterscore") return "nps";
   return null;
 }
 
@@ -1117,6 +1121,48 @@ export default function PublicSurveyPage() {
           onChange={(e) => handleAnswerChange(question.id, e.target.value)}
           className="max-w-md"
         />
+      );
+    }
+
+    // Number
+    if (kind === "number") {
+      return (
+        <Input
+          type="number"
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          placeholder="Enter a number"
+          className="max-w-md"
+        />
+      );
+    }
+
+    // NPS (Net Promoter Score)
+    if (kind === "nps") {
+      return (
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {Array.from({ length: 11 }, (_, i) => i).map((val) => (
+              <Button
+                key={val}
+                type="button"
+                variant={answer === val ? "default" : "outline"}
+                className={
+                  answer === val
+                    ? "bg-violet-600 hover:bg-violet-700 min-w-[48px]"
+                    : "hover:bg-slate-100 min-w-[48px]"
+                }
+                onClick={() => handleAnswerChange(question.id, val)}
+              >
+                {val}
+              </Button>
+            ))}
+          </div>
+          <div className="flex justify-between text-sm text-slate-600">
+            <span>Not at all likely</span>
+            <span>Extremely likely</span>
+          </div>
+        </div>
       );
     }
 

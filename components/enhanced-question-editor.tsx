@@ -91,23 +91,30 @@ const CATEGORY = {
   RATING: "rating",
   MULTI_CHOICE_GRID: "multi-choice grid",
   CHECKBOX_GRID: "checkbox grid",
+  NUMBER: "number",
+  NPS: "nps",
 } as const;
 
 const isTextEntry = (n: string) =>
-  [CATEGORY.SHORT_ANSWER, CATEGORY.PARAGRAPH].includes(n.toLowerCase());
+  [CATEGORY.SHORT_ANSWER, CATEGORY.PARAGRAPH].includes(n.toLowerCase() as any);
 
 const isOptionsCat = (n: string) =>
   [CATEGORY.MULTIPLE_CHOICE, CATEGORY.CHECKBOXES, CATEGORY.DROPDOWN].includes(
-    n.toLowerCase()
+    n.toLowerCase() as any
   );
 
 const isScaleCat = (n: string) =>
-  [CATEGORY.LINEAR_SCALE, CATEGORY.RATING].includes(n.toLowerCase());
+  [CATEGORY.LINEAR_SCALE, CATEGORY.RATING, CATEGORY.NPS].includes(
+    n.toLowerCase() as any
+  );
 
 const isGridCat = (n: string) =>
   [CATEGORY.MULTI_CHOICE_GRID, CATEGORY.CHECKBOX_GRID].includes(
-    n.toLowerCase()
+    n.toLowerCase() as any
   );
+
+const isNumberCat = (n: string) =>
+  [CATEGORY.NUMBER].includes(n.toLowerCase() as any);
 
 const detectQuestionTypeFromFile = (file: File): QuestionType => {
   const t = file.type.toLowerCase();
@@ -382,6 +389,7 @@ export default function EnhancedQuestionEditor({
                   const showScale = isScaleCat(catName);
                   const showTextPreview = isTextEntry(catName);
                   const showGrid = isGridCat(catName);
+                  const showNumber = isNumberCat(catName);
 
                   return (
                     <Draggable draggableId={q.id} index={index} key={q.id}>
@@ -552,6 +560,23 @@ export default function EnhancedQuestionEditor({
                                 </div>
                               )}
 
+                              {/* Number preview */}
+                              {showNumber && (
+                                <div className="space-y-1">
+                                  <Label>
+                                    Response (user enters at runtime)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    disabled
+                                    placeholder="Enter a number"
+                                  />
+                                  <div className="text-slate-500 text-xs">
+                                    Users will be able to enter numeric values.
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Multiple choice / Checkboxes / Dropdown options */}
                               {showOptions && (
                                 <div className="space-y-2">
@@ -606,82 +631,124 @@ export default function EnhancedQuestionEditor({
                                 </div>
                               )}
 
-                              {/* Linear scale / Rating */}
+                              {/* Linear scale / Rating / NPS */}
                               {showScale && (
                                 <div className="space-y-2">
                                   <Label>
                                     {getCategoryName(
                                       q.categoryId
-                                    ).toLowerCase() === "rating"
+                                    ).toLowerCase() === "nps"
+                                      ? "NPS Scale (0-10)"
+                                      : getCategoryName(
+                                          q.categoryId
+                                        ).toLowerCase() === "rating"
                                       ? "Rating scale"
                                       : "Linear scale"}
                                   </Label>
 
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div className="space-y-1">
-                                      <Label>Min</Label>
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        value={q.options?.[0]?.rangeFrom ?? 1}
-                                        onChange={(e) =>
-                                          setScaleField(
-                                            q.id,
-                                            "rangeFrom",
-                                            Number(e.target.value)
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label>Max</Label>
-                                      <Input
-                                        type="number"
-                                        min={1}
-                                        value={q.options?.[0]?.rangeTo ?? 5}
-                                        onChange={(e) =>
-                                          setScaleField(
-                                            q.id,
-                                            "rangeTo",
-                                            Number(e.target.value)
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label>Bounds labels (optional)</Label>
-                                      <div className="flex gap-2">
-                                        <Input
-                                          placeholder="From label"
-                                          value={
-                                            q.options?.[0]?.fromLabel ?? ""
-                                          }
-                                          onChange={(e) =>
-                                            setScaleField(
-                                              q.id,
-                                              "fromLabel",
-                                              e.target.value || null
-                                            )
-                                          }
-                                        />
-                                        <Input
-                                          placeholder="To label"
-                                          value={q.options?.[0]?.toLabel ?? ""}
-                                          onChange={(e) =>
-                                            setScaleField(
-                                              q.id,
-                                              "toLabel",
-                                              e.target.value || null
-                                            )
-                                          }
-                                        />
+                                  {getCategoryName(
+                                    q.categoryId
+                                  ).toLowerCase() === "nps" ? (
+                                    <div className="space-y-2">
+                                      <div className="flex gap-2 flex-wrap">
+                                        {Array.from(
+                                          { length: 11 },
+                                          (_, i) => i
+                                        ).map((val) => (
+                                          <button
+                                            key={val}
+                                            type="button"
+                                            disabled
+                                            className="min-w-[48px] px-3 py-2 border rounded bg-slate-50 text-slate-400 cursor-not-allowed"
+                                          >
+                                            {val}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <div className="flex justify-between text-sm text-slate-600">
+                                        <span>Not at all likely</span>
+                                        <span>Extremely likely</span>
+                                      </div>
+                                      <div className="text-slate-500 text-xs">
+                                        NPS uses a fixed 0-10 scale. Users will
+                                        see clickable buttons.
                                       </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div className="space-y-1">
+                                          <Label>Min</Label>
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            value={
+                                              q.options?.[0]?.rangeFrom ?? 1
+                                            }
+                                            onChange={(e) =>
+                                              setScaleField(
+                                                q.id,
+                                                "rangeFrom",
+                                                Number(e.target.value)
+                                              )
+                                            }
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label>Max</Label>
+                                          <Input
+                                            type="number"
+                                            min={1}
+                                            value={q.options?.[0]?.rangeTo ?? 5}
+                                            onChange={(e) =>
+                                              setScaleField(
+                                                q.id,
+                                                "rangeTo",
+                                                Number(e.target.value)
+                                              )
+                                            }
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label>
+                                            Bounds labels (optional)
+                                          </Label>
+                                          <div className="flex gap-2">
+                                            <Input
+                                              placeholder="From label"
+                                              value={
+                                                q.options?.[0]?.fromLabel ?? ""
+                                              }
+                                              onChange={(e) =>
+                                                setScaleField(
+                                                  q.id,
+                                                  "fromLabel",
+                                                  e.target.value || null
+                                                )
+                                              }
+                                            />
+                                            <Input
+                                              placeholder="To label"
+                                              value={
+                                                q.options?.[0]?.toLabel ?? ""
+                                              }
+                                              onChange={(e) =>
+                                                setScaleField(
+                                                  q.id,
+                                                  "toLabel",
+                                                  e.target.value || null
+                                                )
+                                              }
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
 
-                                  <div className="text-slate-500 text-xs">
-                                    Tip: Common ranges are 1–5 or 1–10.
-                                  </div>
+                                      <div className="text-slate-500 text-xs">
+                                        Tip: Common ranges are 1–5 or 1–10.
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               )}
 

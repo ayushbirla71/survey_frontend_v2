@@ -571,6 +571,7 @@ export default function GenerateSurvey() {
       PHONE: "TEXT",
       URL: "TEXT",
       NUMBER: "TEXT",
+      NPS: "TEXT",
     };
     return typeMap[questionType] || "TEXT";
   };

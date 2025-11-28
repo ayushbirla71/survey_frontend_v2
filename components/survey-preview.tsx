@@ -63,7 +63,9 @@ type GKind =
   | "multi-choice grid"
   | "checkbox grid"
   | "date"
-  | "time";
+  | "time"
+  | "number"
+  | "nps";
 
 type KindsMap = Record<string, GKind>;
 
@@ -83,6 +85,8 @@ function normKindStr(s?: string): GKind | null {
   if (k === "checkboxesgrid" || k === "gridcheckbox") return "checkbox grid";
   if (k === "date") return "date";
   if (k === "time") return "time";
+  if (k === "number") return "number";
+  if (k === "nps" || k === "netpromoterscore") return "nps";
   return null;
 }
 
@@ -674,6 +678,33 @@ export default function SurveyPreview({
               {/* date/time */}
               {kind === "date" && <Input type="date" disabled />}
               {kind === "time" && <Input type="time" disabled />}
+
+              {/* number */}
+              {kind === "number" && (
+                <Input type="number" placeholder="Enter a number" disabled />
+              )}
+
+              {/* nps */}
+              {kind === "nps" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2 flex-wrap">
+                    {Array.from({ length: 11 }, (_, i) => i).map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        disabled
+                        className="min-w-[48px] px-3 py-2 border rounded hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Not at all likely</span>
+                    <span>Extremely likely</span>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

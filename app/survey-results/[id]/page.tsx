@@ -419,6 +419,90 @@ export default function SurveyResults() {
                     </div>
                   )}
 
+                  {question.type === "number" && (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-violet-600">
+                          {question.average || "N/A"}
+                        </div>
+                        <div className="text-sm text-slate-500">
+                          Average Value
+                        </div>
+                      </div>
+                      {question.data && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.min || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Min</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.median || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Median</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.max || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Max</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {question.type === "nps" && (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-violet-600">
+                          {question.npsScore || "N/A"}
+                        </div>
+                        <div className="text-sm text-slate-500">
+                          Net Promoter Score
+                        </div>
+                      </div>
+                      {question.data && (
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-3 bg-red-50 rounded">
+                            <div className="text-2xl font-bold text-red-600">
+                              {question.data.detractors || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Detractors (0-6)
+                            </div>
+                          </div>
+                          <div className="text-center p-3 bg-yellow-50 rounded">
+                            <div className="text-2xl font-bold text-yellow-600">
+                              {question.data.passives || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Passives (7-8)
+                            </div>
+                          </div>
+                          <div className="text-center p-3 bg-green-50 rounded">
+                            <div className="text-2xl font-bold text-green-600">
+                              {question.data.promoters || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Promoters (9-10)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <BarChart
+                        data={question.distributionData || []}
+                        index="score"
+                        categories={["count"]}
+                        colors={["violet"]}
+                        valueFormatter={(value) => `${value} responses`}
+                        className="h-48"
+                      />
+                    </div>
+                  )}
+
                   {question.type === "grid" && (
                     <div className="space-y-4">
                       {/* Build headers from the grid data */}
