@@ -400,12 +400,20 @@ export default function GenerateSurvey() {
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     if (step === 3) {
       if (surveySettings.survey_send_by == "NONE") {
         // Skip audience step and go directly to preview
         setStep(5);
         return;
+      } else {
+        const updateData = {
+          survey_send_by: surveySettings.survey_send_by,
+        };
+        await updateSurvey({
+          surveyId: createdSurvey.id,
+          surveyData: updateData,
+        });
       }
     }
     if (step === 4) {
