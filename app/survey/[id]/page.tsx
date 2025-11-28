@@ -172,6 +172,13 @@ function MultiChoiceGridQuestion({
               [currentRow.id]: selectedValue,
             };
             handleAnswerChange(question.id, newGridAnswer);
+
+            // Automatically move to next row after selection
+            setTimeout(() => {
+              if (safeRowIndex < totalRows - 1) {
+                setCurrentRowIndex(safeRowIndex + 1);
+              }
+            }, 300); // Small delay for better UX (user sees selection highlight)
           }}
           className="flex flex-col gap-3"
         >
