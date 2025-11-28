@@ -746,7 +746,7 @@ export default function GenerateSurvey() {
             survey_send_by: surveySettings.survey_send_by,
           };
 
-          const result = await updateSurvey({
+          const result: any = await updateSurvey({
             surveyId: editSurveyId!,
             surveyData: updateData,
           });

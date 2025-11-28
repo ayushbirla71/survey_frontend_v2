@@ -736,9 +736,9 @@ export default function PublicSurveyPage() {
       );
       console.log("submitResponse is", submitResponse);
 
-      const result = submitResponse;
+      const result: any = submitResponse;
 
-      if (result.data || result.id) {
+      if (result.data || result?.data?.id) {
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
       } else {
