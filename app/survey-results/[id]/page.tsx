@@ -30,6 +30,22 @@ import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
 import { toast } from "react-toastify";
 
+/**
+ * Question Type Mapping (Updated 2025-11-29)
+ *
+ * The backend API now returns actual question type names instead of mapped UI types.
+ *
+ * Actual Types from API:
+ * - Text Input: "short answer", "paragraph", "number"
+ * - Choice: "multiple choice", "checkboxes", "dropdown"
+ * - Scale: "linear scale", "rating", "nps"
+ * - Grid: "multi-choice grid", "checkbox grid"
+ * - Date/Time: "date", "time"
+ * - File: "file upload"
+ *
+ * See: GET_SURVEY_ANALYTICS_CHANGES.md for full documentation
+ */
+
 export default function SurveyResults() {
   const params = useParams();
   const surveyId = params.id as string;
@@ -71,7 +87,7 @@ export default function SurveyResults() {
         totalResponses: resultsData.stats.totalResponses || 0,
         completionRate: resultsData.stats.completionRate || "0",
         avgTime: 0,
-        npsScore: 0,
+        npsScore: resultsData.stats.npsScore || 0,
       },
       questionResults: resultsData.questionResults || [],
       demographics: {
@@ -353,9 +369,10 @@ export default function SurveyResults() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {(question.type === "single_choice" ||
-                    question.type === "multiple_choice" ||
-                    question.type === "checkbox") && (
+                  {/* Choice types: multiple choice, checkboxes, dropdown */}
+                  {(question.type === "multiple choice" ||
+                    question.type === "checkboxes" ||
+                    question.type === "dropdown") && (
                     <div className="space-y-3">
                       {question.data?.map((item: any, i: number) => (
                         <div
@@ -380,7 +397,9 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "rating" && (
+                  {/* Rating and Linear Scale types */}
+                  {(question.type === "rating" ||
+                    question.type === "linear scale") && (
                     <div className="space-y-4">
                       <div className="text-center">
                         <div className="text-3xl font-bold text-violet-600">
@@ -401,7 +420,9 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "text" && (
+                  {/* Text types: short answer, paragraph */}
+                  {(question.type === "short answer" ||
+                    question.type === "paragraph") && (
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">
                         Recent responses:
@@ -458,7 +479,9 @@ export default function SurveyResults() {
                     <div className="space-y-4">
                       <div className="text-center">
                         <div className="text-4xl font-bold text-violet-600">
-                          {question.npsScore || "N/A"}
+                          {question.npsScore || question.npsScore == 0
+                            ? question.npsScore
+                            : "N/A"}
                         </div>
                         <div className="text-sm text-slate-500">
                           Net Promoter Score
@@ -503,7 +526,9 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "grid" && (
+                  {/* Grid types: multi-choice grid, checkbox grid */}
+                  {(question.type === "multi-choice grid" ||
+                    question.type === "checkbox grid") && (
                     <div className="space-y-4">
                       {/* Build headers from the grid data */}
                       {(() => {
