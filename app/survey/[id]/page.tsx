@@ -1363,11 +1363,11 @@ export default function PublicSurveyPage() {
             <CardTitle className="text-2xl text-white font-bold">
               {"Survey"}
             </CardTitle>
-            {survey?.description && (
+            {/* {survey?.description && (
               <p className="text-violet-100 mt-2 text-sm">
                 {survey.description}
               </p>
-            )}
+            )} */}
           </CardHeader>
 
           <CardContent className="pt-6 pb-8">
@@ -1396,7 +1396,7 @@ export default function PublicSurveyPage() {
               <AnimatedStartButton
                 onComplete={handleStartSurvey}
                 isReady={dataReady && !dataLoadError}
-                fillDuration={1300}
+                fillDuration={1700}
               />
             </div>
 
