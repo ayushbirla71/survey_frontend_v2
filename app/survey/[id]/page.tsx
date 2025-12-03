@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,9 @@ import {
   RefreshCw,
   AlertCircle,
   Star,
+  Shield,
+  Lock,
+  FileText,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import {
@@ -33,6 +36,163 @@ import {
   responseApi,
   shareApi,
 } from "@/lib/api";
+
+// Animated Start Button Component
+interface AnimatedStartButtonProps {
+  onComplete: () => void;
+  isReady: boolean;
+  fillDuration?: number; // in milliseconds
+}
+
+function AnimatedStartButton({
+  onComplete,
+  isReady,
+  fillDuration = 1300,
+}: AnimatedStartButtonProps) {
+  const [fillProgress, setFillProgress] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(true);
+  const animationRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const animate = (timestamp: number) => {
+      if (!startTimeRef.current) {
+        startTimeRef.current = timestamp;
+      }
+
+      const elapsed = timestamp - startTimeRef.current;
+      const progress = Math.min((elapsed / fillDuration) * 100, 100);
+
+      setFillProgress(progress);
+
+      if (progress < 100) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setIsAnimating(false);
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [fillDuration]);
+
+  const isEnabled = !isAnimating && isReady;
+
+  return (
+    <button
+      onClick={() => isEnabled && onComplete()}
+      disabled={!isEnabled}
+      className={`
+        relative overflow-hidden px-12 py-4 rounded-full text-lg font-semibold
+        transition-all duration-300 min-w-[200px]
+        ${
+          isEnabled
+            ? "bg-violet-600 text-white cursor-pointer hover:bg-violet-700 shadow-lg hover:shadow-xl transform hover:scale-105"
+            : "bg-slate-200 text-slate-500 cursor-not-allowed"
+        }
+      `}
+    >
+      {/* Fill animation background */}
+      <div
+        className="absolute inset-0 bg-gradient-to-r from-violet-500 to-violet-600 transition-transform duration-100 ease-linear"
+        style={{
+          transform: `translateX(${fillProgress - 100}%)`,
+          opacity: isAnimating ? 1 : 0,
+        }}
+      />
+
+      {/* Button text */}
+      <span className="relative z-10 flex items-center justify-center gap-2">
+        {isAnimating ? (
+          <>
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            Loading...
+          </>
+        ) : isReady ? (
+          <>
+            Start Survey
+            <ArrowRight className="h-5 w-5" />
+          </>
+        ) : (
+          <>
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            Please wait...
+          </>
+        )}
+      </span>
+    </button>
+  );
+}
+
+// Terms and Conditions Component
+function TermsAndConditions() {
+  return (
+    <div className="space-y-6 text-slate-600 text-sm max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="flex items-start gap-3">
+        <Shield className="h-5 w-5 text-violet-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-slate-800 mb-1">
+            Privacy & Confidentiality
+          </h3>
+          <p>
+            Your responses will be kept strictly confidential. Personal
+            information will not be shared with third parties without your
+            consent.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <Lock className="h-5 w-5 text-violet-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-slate-800 mb-1">Data Security</h3>
+          <p>
+            All data collected is encrypted and stored securely. We implement
+            industry-standard security measures to protect your information.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <FileText className="h-5 w-5 text-violet-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-slate-800 mb-1">
+            Voluntary Participation
+          </h3>
+          <p>
+            Your participation in this survey is completely voluntary. You may
+            skip any questions you prefer not to answer or exit the survey at
+            any time.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <CheckCircle className="h-5 w-5 text-violet-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-slate-800 mb-1">Data Usage</h3>
+          <p>
+            Your responses will be used solely for research and improvement
+            purposes. Aggregated, anonymized data may be used in reports.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs text-slate-500">
+          By clicking "Start Survey", you acknowledge that you have read and
+          understood these terms and consent to participate in this survey under
+          the conditions described above.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 interface Question {
   id: string;
@@ -409,11 +569,15 @@ export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
   const token = params.id as string;
-  // const surveyId = params.id as string;
+
+  // Start page state - show terms and conditions first
+  const [showStartPage, setShowStartPage] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   const [notFoundHeader, setNotFoundHeader] = useState("Survey Not Found");
   const [survey, setSurvey] = useState<Survey | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Changed to false - loading happens during button animation
   const [error, setError] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -422,6 +586,9 @@ export default function PublicSurveyPage() {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [startTime] = useState(Date.now());
   const [kindsMap, setKindsMap] = useState<KindsMap>({});
+
+  // Ref to track if data loading has started
+  const dataLoadingStartedRef = useRef(false);
 
   // Extract category IDs from questions
   const categoryIds = useMemo(() => {
@@ -433,7 +600,7 @@ export default function PublicSurveyPage() {
     return Array.from(set);
   }, [survey]);
 
-  // Fetch category kinds
+  // Fetch category kinds when survey is loaded
   useEffect(() => {
     if (categoryIds.length === 0) return;
 
@@ -458,80 +625,79 @@ export default function PublicSurveyPage() {
     fetchKinds();
   }, [categoryIds.join(",")]);
 
-  // useEffect(() => {
-  //   loadSurvey();
-  // }, [surveyId]);
+  // Load all data when start page mounts (during button animation)
   useEffect(() => {
-    validateSurvey();
+    if (dataLoadingStartedRef.current) return;
+    dataLoadingStartedRef.current = true;
+
+    const loadAllData = async () => {
+      try {
+        // Step 1: Validate token
+        const result = await shareApi.validateShareToken(token);
+        console.log("Validation result is", result);
+
+        if (!result.data) {
+          throw new Error(result.error || "Failed to validate token");
+        }
+
+        const surveyId = result.data.surveyId;
+
+        // Step 2: Load survey and questions in parallel
+        const [surveyData, questionsResponse] = await Promise.all([
+          surveyApi.getSurvey(surveyId),
+          questionApi.getQuestions(surveyId),
+        ]);
+
+        console.log("Questions response:", questionsResponse);
+
+        if (
+          questionsResponse.data &&
+          typeof questionsResponse.data === "object"
+        ) {
+          // Convert the keyed object into an array
+          const questionsArray = Object.values(questionsResponse.data);
+          console.log("Converted Questions Array:", questionsArray);
+
+          // Sort the questions
+          const sortedQuestions = questionsArray.sort(
+            (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0)
+          );
+          console.log("Sorted questions:", sortedQuestions);
+
+          setSurvey({
+            id: surveyData.survey.id,
+            title: surveyData.survey.title,
+            description: surveyData.survey.description,
+            questions: sortedQuestions,
+            settings: surveyData.survey.settings || {},
+          });
+
+          // Mark data as ready
+          setDataReady(true);
+        } else {
+          throw new Error("No questions found for this survey");
+        }
+      } catch (e: any) {
+        console.error("Failed to load survey data:", e);
+        if (e.message?.includes("Token already used.")) {
+          setAlreadySubmitted(true);
+        } else {
+          setNotFoundHeader("Invalid survey link");
+          setDataLoadError(e.message || "Failed to load survey");
+          setError(e.message || "Failed to load survey");
+        }
+      }
+    };
+
+    loadAllData();
   }, [token]);
 
-  const validateSurvey = async () => {
-    try {
-      const result = await shareApi.validateShareToken(token);
-      console.log("Validation result is", result);
-      if (result.data) {
-        loadSurvey(result.data.surveyId);
-      } else {
-        throw new Error(result.error || "Failed to validate token");
-      }
-    } catch (e: any) {
-      console.error("Failed to validate token:", e);
-      if (e.message.includes("Token already used.")) {
-        console.log("Token already used:--------");
-        setAlreadySubmitted(true);
-      } else {
-        console.log("Failed to validate token:--------");
-        setNotFoundHeader("Invalid survey link");
-        setError(e.message || "Failed to validate token");
-      }
-      setLoading(false);
+  // Handle start button click
+  const handleStartSurvey = useCallback(() => {
+    if (dataReady && survey) {
+      setShowStartPage(false);
     }
-  };
-
-  const loadSurvey = async (surveyId: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Use surveyApi.getSurvey() - it's now public (no auth required)
-      const surveyData = await surveyApi.getSurvey(surveyId);
-
-      // Fetch questions for the survey (no auth required)
-      const questionsResponse = await questionApi.getQuestions(surveyId);
-      console.log("Questions response:", questionsResponse);
-
-      if (
-        questionsResponse.data &&
-        typeof questionsResponse.data === "object"
-      ) {
-        // Convert the keyed object into an array
-        const questionsArray = Object.values(questionsResponse.data);
-        console.log("Converted Questions Array:", questionsArray);
-
-        // Sort the questions
-        const sortedQuestions = questionsArray.sort(
-          (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0)
-        );
-        console.log("Sorted questions:", sortedQuestions);
-
-        setSurvey({
-          id: surveyData.survey.id,
-          title: surveyData.survey.title,
-          description: surveyData.survey.description,
-          questions: sortedQuestions,
-          settings: surveyData.survey.settings || {},
-        });
-      } else {
-        throw new Error("No questions found for this survey");
-      }
-    } catch (err: any) {
-      console.error("Error loading survey:", err);
-      // setError(err.message || "Failed to load survey");
-      throw err.message || "Failed to load survey";
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [dataReady, survey]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers((prev) => ({
@@ -738,12 +904,18 @@ export default function PublicSurveyPage() {
 
       const result: any = submitResponse;
 
-      if (result.data || result?.data?.id) {
+      if (result.data || result?.data) {
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
       } else {
         throw new Error("Failed to submit survey");
       }
+      // if (result.data || result?.data?.id) {
+      //   setSubmitted(true);
+      //   toast.success("Survey submitted successfully!");
+      // } else {
+      //   throw new Error("Failed to submit survey");
+      // }
     } catch (err: any) {
       console.error("Error submitting survey:", err);
       toast.error(err.message || "Failed to submit survey");
@@ -1131,17 +1303,7 @@ export default function PublicSurveyPage() {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin text-violet-600 mx-auto mb-4" />
-          <p className="text-slate-600">Loading survey...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Already submitted state
   if (alreadySubmitted) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -1156,7 +1318,6 @@ export default function PublicSurveyPage() {
                 Your can fill out this survey only once.
               </p>
               <Button onClick={() => router.push("/")}>Close</Button>
-              {/* <Button onClick={() => window.close()}>Close</Button> */}
             </div>
           </CardContent>
         </Card>
@@ -1164,7 +1325,8 @@ export default function PublicSurveyPage() {
     );
   }
 
-  if (error || !survey) {
+  // Error state (only show if we have an error AND not showing start page)
+  if ((error || dataLoadError) && !showStartPage) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -1176,12 +1338,89 @@ export default function PublicSurveyPage() {
               </h2>
               <p className="text-slate-600 mb-4">
                 {error ||
+                  dataLoadError ||
                   "The survey you're looking for doesn't exist or has been removed."}
               </p>
               <Button onClick={() => router.push("/")}>Go to Home</Button>
             </div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Start Page with Terms & Conditions
+  if (showStartPage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50 to-slate-100 flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full shadow-xl border-0">
+          <CardHeader className="text-center border-b border-slate-100 bg-gradient-to-r from-violet-600 to-violet-700 rounded-t-lg">
+            <div className="flex justify-center mb-4">
+              <div className="bg-white/20 p-3 rounded-full">
+                <FileText className="h-8 w-8 text-white" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl text-white font-bold">
+              {"Survey"}
+            </CardTitle>
+            {survey?.description && (
+              <p className="text-violet-100 mt-2 text-sm">
+                {survey.description}
+              </p>
+            )}
+          </CardHeader>
+
+          <CardContent className="pt-6 pb-8">
+            {/* Terms and Conditions Section */}
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Shield className="h-5 w-5 text-violet-600" />
+                Terms & Conditions
+              </h3>
+              <TermsAndConditions />
+            </div>
+
+            {/* Error message if data loading failed */}
+            {dataLoadError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-700">
+                  <AlertCircle className="h-5 w-5" />
+                  <span className="font-medium">Unable to load survey</span>
+                </div>
+                <p className="text-red-600 text-sm mt-1">{dataLoadError}</p>
+              </div>
+            )}
+
+            {/* Animated Start Button */}
+            <div className="flex justify-center">
+              <AnimatedStartButton
+                onComplete={handleStartSurvey}
+                isReady={dataReady && !dataLoadError}
+                fillDuration={1300}
+              />
+            </div>
+
+            {/* Estimated time */}
+            {survey && (
+              <p className="text-center text-slate-500 text-sm mt-4">
+                Estimated time:{" "}
+                {Math.max(1, Math.ceil(survey.questions.length * 0.5))} minutes
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Loading fallback (should rarely be shown now)
+  if (loading || !survey) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-violet-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading survey...</p>
+        </div>
       </div>
     );
   }
