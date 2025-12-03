@@ -37,6 +37,9 @@ import {
 import SurveyPreview from "@/components/survey-preview";
 import EnhancedQuestionEditor from "@/components/enhanced-question-editor";
 import AudienceSelector from "@/components/audience-selector";
+import QuotaAudienceSelector, {
+  QuotaAudienceData,
+} from "@/components/quota-audience-selector";
 import Link from "next/link";
 import CodeView from "@/components/code-view";
 import { generateSurveyHtml } from "@/lib/survey-generator";
@@ -49,6 +52,11 @@ import {
   apiWithFallback,
   demoData,
   shareApi,
+  quotaApi,
+  AgeQuota,
+  GenderQuota,
+  LocationQuota,
+  ScreeningQuestion,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
@@ -139,6 +147,21 @@ export default function GenerateSurvey() {
     targetCount: 1,
     dataSource: "default",
   });
+
+  // Quota-based audience state
+  const [quotaAudience, setQuotaAudience] = useState<QuotaAudienceData>({
+    ageQuotas: [],
+    genderQuotas: [],
+    locationQuotas: [],
+    categoryQuotas: [],
+    totalTarget: 100,
+    completedUrl: "",
+    terminatedUrl: "",
+    quotaFullUrl: "",
+    dataSource: "default",
+    screeningQuestions: [],
+  });
+
   const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
@@ -444,6 +467,12 @@ export default function GenerateSurvey() {
 
   const handleAudienceUpdate = (updatedAudience: any) => {
     setAudience(updatedAudience);
+  };
+
+  const handleQuotaAudienceUpdate = (
+    updatedQuotaAudience: QuotaAudienceData
+  ) => {
+    setQuotaAudience(updatedQuotaAudience);
   };
 
   const generatePublicLink = async () => {
@@ -1518,12 +1547,13 @@ export default function GenerateSurvey() {
           {/* Step 4: Target Audience */}
           {step === 4 && (
             <div className="p-8">
-              <AudienceSelector
+              <QuotaAudienceSelector
                 createdSurvey={createdSurvey}
                 surveySettings={surveySettings}
-                audience={audience}
-                onAudienceUpdate={handleAudienceUpdate}
+                quotaAudience={quotaAudience}
+                onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
                 onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                categories={categories || []}
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">

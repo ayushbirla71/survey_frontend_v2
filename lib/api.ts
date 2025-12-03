@@ -130,6 +130,107 @@ export interface ShareToken {
   created_at?: string;
 }
 
+// Quota Management Types
+export type QuotaType = "COUNT" | "PERCENTAGE";
+
+export interface AgeQuota {
+  id?: string;
+  min_age: number;
+  max_age: number;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface GenderQuota {
+  id?: string;
+  gender: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface LocationQuota {
+  id?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface CategoryQuota {
+  id?: string;
+  surveyCategoryId: string;
+  categoryName?: string;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface QuotaConfig {
+  id?: string;
+  surveyId: string;
+  total_target: number;
+  completed_url?: string;
+  terminated_url?: string;
+  quota_full_url?: string;
+  age_quotas?: AgeQuota[];
+  gender_quotas?: GenderQuota[];
+  location_quotas?: LocationQuota[];
+  category_quotas?: CategoryQuota[];
+  screening_questions?: ScreeningQuestion[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface QuotaStatus {
+  surveyId: string;
+  total_target: number;
+  total_completed: number;
+  fill_rate: number;
+  age_quota_status?: Array<AgeQuota & { fill_rate: number }>;
+  gender_quota_status?: Array<GenderQuota & { fill_rate: number }>;
+  location_quota_status?: Array<LocationQuota & { fill_rate: number }>;
+  category_quota_status?: Array<CategoryQuota & { fill_rate: number }>;
+}
+
+export interface ScreeningQuestion {
+  id: string;
+  type: "age" | "gender" | "location" | "category";
+  question_text: string;
+  options: Array<{
+    id: string;
+    label: string;
+    value: string;
+  }>;
+  required: boolean;
+}
+
+export interface QuotaCheckRequest {
+  age?: number;
+  gender?: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+  location?: {
+    country?: string;
+    state?: string;
+    city?: string;
+    postal_code?: string;
+  };
+  categoryId?: string;
+}
+
+export interface QuotaCheckResponse {
+  qualified: boolean;
+  reason?: string;
+  redirect_url?: string;
+}
+
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
@@ -1511,6 +1612,66 @@ export const audienceApi = {
     >
   > => {
     return apiRequest("/api/audience/segments");
+  },
+};
+
+// Quota Management APIs
+export const quotaApi = {
+  // POST /api/quota/surveys/:surveyId/quota - Create quota configuration
+  createQuota: async (
+    surveyId: string,
+    quotaConfig: Omit<
+      QuotaConfig,
+      "id" | "surveyId" | "created_at" | "updated_at"
+    >
+  ): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "POST",
+      body: JSON.stringify(quotaConfig),
+    });
+  },
+
+  // GET /api/quota/surveys/:surveyId/quota - Get quota configuration
+  getQuota: async (surveyId: string): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`);
+  },
+
+  // PUT /api/quota/surveys/:surveyId/quota - Update quota configuration
+  updateQuota: async (
+    surveyId: string,
+    quotaConfig: Partial<QuotaConfig>
+  ): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "PUT",
+      body: JSON.stringify(quotaConfig),
+    });
+  },
+
+  // DELETE /api/quota/surveys/:surveyId/quota - Delete quota configuration
+  deleteQuota: async (
+    surveyId: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "DELETE",
+    });
+  },
+
+  // GET /api/quota/surveys/:surveyId/status - Get quota fill status
+  getQuotaStatus: async (
+    surveyId: string
+  ): Promise<ApiResponse<QuotaStatus>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/status`);
+  },
+
+  // POST /api/quota/:surveyId/check - Check if respondent qualifies
+  checkQuota: async (
+    surveyId: string,
+    respondentData: QuotaCheckRequest
+  ): Promise<ApiResponse<QuotaCheckResponse>> => {
+    return apiRequest(`/api/quota/${surveyId}/check`, {
+      method: "POST",
+      body: JSON.stringify(respondentData),
+    });
   },
 };
 
