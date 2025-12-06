@@ -391,7 +391,7 @@ export default function Dashboard() {
   // Extract surveys from API response and handle empty state
   const surveys = surveysResponse?.surveys || [];
   const totalResponses = surveys.reduce(
-    (sum: number, survey: any) => sum + survey.responses.length,
+    (sum: number, survey: any) => sum + survey?.responses?.length,
     0
   );
   const displayStats = stats || demoData.dashboardStats;
