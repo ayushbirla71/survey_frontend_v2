@@ -37,6 +37,132 @@ import {
   ScreeningQuestion,
   QuotaCheckRequest,
 } from "@/lib/api";
+import {
+  DEFAULT_AGE_GROUPS,
+  DEFAULT_GENDERS,
+  GENDER_LABELS,
+} from "@/components/quota-audience-selector";
+
+// Helper function to regenerate screening questions with ALL options
+// ALWAYS shows all available options regardless of which ones have quotas set
+// Backend will check if selected option qualifies
+const regenerateScreeningQuestionsWithAllOptions = (
+  quotaConfig: QuotaConfig
+): ScreeningQuestion[] => {
+  const questions: ScreeningQuestion[] = [];
+  const savedQuestions = quotaConfig.screening_questions || [];
+
+  // Check if there are any active age quotas
+  const hasActiveAgeQuotas = (quotaConfig.age_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveAgeQuotas) {
+    // Get custom question text if saved, otherwise use default
+    const savedAgeQuestion = savedQuestions.find((sq) => sq.type === "age");
+    // ALWAYS use DEFAULT_AGE_GROUPS to show ALL age options
+    // This ensures proper screening - user can select any age group
+    // Backend will check if their selection qualifies
+    questions.push({
+      id: "screening_age",
+      type: "age",
+      question_text:
+        savedAgeQuestion?.question_text || "What is your age group?",
+      options: DEFAULT_AGE_GROUPS.map((q, idx) => ({
+        id: `age_option_${idx}`,
+        label: q.max_age >= 100 ? `${q.min_age}+` : `${q.min_age}-${q.max_age}`,
+        value: `${q.min_age}-${q.max_age}`,
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any active gender quotas
+  const hasActiveGenderQuotas = (quotaConfig.gender_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveGenderQuotas) {
+    const savedGenderQuestion = savedQuestions.find(
+      (sq) => sq.type === "gender"
+    );
+    // ALWAYS use DEFAULT_GENDERS to show ALL gender options
+    // This ensures proper screening - user can select any gender
+    // Backend will check if their selection qualifies
+    questions.push({
+      id: "screening_gender",
+      type: "gender",
+      question_text:
+        savedGenderQuestion?.question_text || "What is your gender?",
+      options: DEFAULT_GENDERS.map((q, idx) => ({
+        id: `gender_option_${idx}`,
+        label: GENDER_LABELS[q.gender] || q.gender,
+        value: q.gender,
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any active location quotas
+  const hasActiveLocationQuotas = (quotaConfig.location_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveLocationQuotas && quotaConfig.location_quotas) {
+    const savedLocationQuestion = savedQuestions.find(
+      (sq) => sq.type === "location"
+    );
+    questions.push({
+      id: "screening_location",
+      type: "location",
+      question_text:
+        savedLocationQuestion?.question_text || "Where are you located?",
+      options: quotaConfig.location_quotas.map((q, idx) => ({
+        id: `location_option_${idx}`,
+        label:
+          [q.city, q.state, q.country].filter(Boolean).join(", ") || "Unknown",
+        value: JSON.stringify({
+          country: q.country,
+          state: q.state,
+          city: q.city,
+        }),
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any category quotas
+  const activeCategoryQuotas = (quotaConfig.category_quotas || []).filter(
+    (q) => q.surveyCategoryId
+  );
+
+  if (activeCategoryQuotas.length > 0) {
+    const savedCategoryQuestion = savedQuestions.find(
+      (sq) => sq.type === "category"
+    );
+    questions.push({
+      id: "screening_category",
+      type: "category",
+      question_text:
+        savedCategoryQuestion?.question_text ||
+        "Which industry do you work in?",
+      options: activeCategoryQuotas.map((q, idx) => ({
+        id: `category_option_${idx}`,
+        label: q.categoryName || q.surveyCategoryId,
+        value: q.surveyCategoryId,
+      })),
+      required: true,
+    });
+  }
+
+  return questions;
+};
 
 interface Question {
   id: string;
@@ -444,6 +570,7 @@ export default function PublicSurveyPage() {
   const [isQualified, setIsQualified] = useState<boolean | null>(null);
   const [checkingQualification, setCheckingQualification] = useState(false);
   const [surveyIdForQuota, setSurveyIdForQuota] = useState<string | null>(null);
+  const [respondentId, setRespondentId] = useState<string | null>(null);
 
   // Extract category IDs from questions
   const categoryIds = useMemo(() => {
@@ -528,15 +655,15 @@ export default function PublicSurveyPage() {
         const quotaResponse = await quotaApi.getQuota(surveyId);
         if (quotaResponse.data) {
           setQuotaConfig(quotaResponse.data);
-          // Extract screening questions from quota config
-          if (
-            quotaResponse.data.screening_questions &&
-            quotaResponse.data.screening_questions.length > 0
-          ) {
-            setScreeningQuestions(quotaResponse.data.screening_questions);
+          // Regenerate screening questions with ALL options (not just qualifying ones)
+          // This ensures proper screening - users who select non-qualifying options will be filtered out
+          const regeneratedQuestions =
+            regenerateScreeningQuestionsWithAllOptions(quotaResponse.data);
+          if (regeneratedQuestions.length > 0) {
+            setScreeningQuestions(regeneratedQuestions);
             setScreeningPhase(true);
           } else {
-            // No screening questions, skip to main survey
+            // No screening questions needed, skip to main survey
             setScreeningPhase(false);
             setIsQualified(true);
           }
@@ -633,24 +760,31 @@ export default function PublicSurveyPage() {
           // Parse location - could be country, state, or city
           checkRequest.location = { country: answer };
         } else if (sq.type === "category") {
-          checkRequest.categoryId = answer;
+          checkRequest.surveyCategoryId = answer;
         }
       });
 
-      const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+      checkRequest.vendor_respondent_id = token;
 
+      const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+      console.log(">>>>> the value of the CHECK QUOTA RESULT is : ", result);
       if (result.data?.qualified) {
+        setRespondentId(result.data?.respondent_id ?? null);
         setIsQualified(true);
         setScreeningPhase(false);
         toast.success("You qualify for this survey!");
       } else {
-        setIsQualified(false);
         // Redirect to terminated URL if available, otherwise use internal terminated page
+        if (result.data?.status == "QUOTA_FULL") {
+          router.push("/survey/terminated?reason=quota_full");
+          return;
+        }
         if (quotaConfig?.terminated_url) {
           window.location.href = quotaConfig.terminated_url;
         } else {
           router.push("/survey/terminated?reason=not_qualified");
         }
+        setIsQualified(false);
       }
     } catch (err: any) {
       console.error("Error checking qualification:", err);
@@ -879,11 +1013,32 @@ export default function PublicSurveyPage() {
       const submitResponse = await responseApi.submitResponseWithToken(
         responseData
       );
-      console.log("submitResponse is", submitResponse);
+      console.log("submitResponse is", submitResponse.data);
 
       const result: any = submitResponse;
 
-      if (result.data || result?.data?.id) {
+      const response_id = result.data?.response?.id;
+
+      if (result.data || response_id) {
+        // If respondent went through quota checking, mark them as completed
+        if (respondentId && surveyIdForQuota && response_id) {
+          try {
+            const markRespondentCompletedResult =
+              await quotaApi.markRespondentCompleted(
+                surveyIdForQuota,
+                respondentId,
+                response_id
+              );
+            console.log(
+              "markRespondentCompleted is",
+              markRespondentCompletedResult
+            );
+          } catch (markError) {
+            // Log error but don't fail the submission
+            console.error("Error marking respondent completed:", markError);
+          }
+        }
+
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
       } else {

@@ -214,6 +214,7 @@ export interface ScreeningQuestion {
 }
 
 export interface QuotaCheckRequest {
+  vendor_respondent_id?: string;
   age?: number;
   gender?: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
   location?: {
@@ -222,13 +223,16 @@ export interface QuotaCheckRequest {
     city?: string;
     postal_code?: string;
   };
-  categoryId?: string;
+  surveyCategoryId?: string;
 }
 
 export interface QuotaCheckResponse {
   qualified: boolean;
   reason?: string;
   redirect_url?: string;
+  respondent_id?: string;
+  status?: string;
+  message?: string;
 }
 
 // Base API function with error handling and authentication
@@ -1671,6 +1675,30 @@ export const quotaApi = {
     return apiRequest(`/api/quota/${surveyId}/check`, {
       method: "POST",
       body: JSON.stringify(respondentData),
+    });
+  },
+
+  // POST /api/quota/:surveyId/complete - Mark respondent as completed
+  markRespondentCompleted: async (
+    surveyId: string,
+    respondent_id: string,
+    response_id: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, response_id }),
+    });
+  },
+
+  // POST /api/quota/:surveyId/terminate - Mark respondent as terminated
+  markRespondentTerminated: async (
+    surveyId: string,
+    respondent_id: string,
+    reason: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/terminate`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, reason }),
     });
   },
 };

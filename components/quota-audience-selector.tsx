@@ -53,8 +53,8 @@ import { useApi } from "@/hooks/useApi";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 
-// Default age group options
-const DEFAULT_AGE_GROUPS: AgeQuota[] = [
+// Default age group options - exported for reuse in survey page
+export const DEFAULT_AGE_GROUPS: AgeQuota[] = [
   { min_age: 18, max_age: 24, quota_type: "COUNT", target_count: 0 },
   { min_age: 25, max_age: 34, quota_type: "COUNT", target_count: 0 },
   { min_age: 35, max_age: 44, quota_type: "COUNT", target_count: 0 },
@@ -63,16 +63,16 @@ const DEFAULT_AGE_GROUPS: AgeQuota[] = [
   { min_age: 65, max_age: 100, quota_type: "COUNT", target_count: 0 },
 ];
 
-// Default gender options
-const DEFAULT_GENDERS: GenderQuota[] = [
+// Default gender options - exported for reuse in survey page
+export const DEFAULT_GENDERS: GenderQuota[] = [
   { gender: "MALE", quota_type: "COUNT", target_count: 0 },
   { gender: "FEMALE", quota_type: "COUNT", target_count: 0 },
   { gender: "OTHER", quota_type: "COUNT", target_count: 0 },
   { gender: "PREFER_NOT_TO_SAY", quota_type: "COUNT", target_count: 0 },
 ];
 
-// Gender display labels
-const GENDER_LABELS: Record<string, string> = {
+// Gender display labels - exported for reuse in survey page
+export const GENDER_LABELS: Record<string, string> = {
   MALE: "Male",
   FEMALE: "Female",
   OTHER: "Non-binary / Other",
@@ -83,7 +83,7 @@ export interface QuotaAudienceData {
   ageQuotas: AgeQuota[];
   genderQuotas: GenderQuota[];
   locationQuotas: LocationQuota[];
-  categoryQuotas: CategoryQuota[];
+  categoryQuotas: CategoryQuota[]; // Used for industry/category qualification
   totalTarget: number;
   completedUrl?: string;
   terminatedUrl?: string;
@@ -98,7 +98,27 @@ interface QuotaAudienceSelectorProps {
   quotaAudience: QuotaAudienceData;
   onQuotaAudienceUpdate: (quotaAudience: QuotaAudienceData) => void;
   onUserUniqueIdsUpdate: (userUniqueIds: string[]) => void;
+  onValidationError?: (error: string | null) => void;
   categories?: Array<{ id: string; name: string }>;
+  isEditMode?: boolean; // Flag to indicate if we're editing existing survey
+}
+
+// State for expanded quota cards
+interface ExpandedQuotas {
+  age: Record<number, boolean>;
+  gender: Record<number, boolean>;
+  location: Record<number, boolean>;
+  industry: Record<number, boolean>;
+}
+
+// Validation errors interface
+interface QuotaValidationErrors {
+  ageCountSum?: string;
+  agePercentageSum?: string;
+  genderCountSum?: string;
+  genderPercentageSum?: string;
+  locationCountSum?: string;
+  locationPercentageSum?: string;
 }
 
 export default function QuotaAudienceSelector({
@@ -107,7 +127,9 @@ export default function QuotaAudienceSelector({
   quotaAudience,
   onQuotaAudienceUpdate,
   onUserUniqueIdsUpdate,
+  onValidationError,
   categories = [],
+  isEditMode = false,
 }: QuotaAudienceSelectorProps) {
   const [file, setFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState("age");
@@ -118,6 +140,18 @@ export default function QuotaAudienceSelector({
     useState<LocationQuota | null>(null);
   const [showScreeningPreview, setShowScreeningPreview] = useState(false);
 
+  // Track which quota cards are expanded to show target input
+  const [expandedQuotas, setExpandedQuotas] = useState<ExpandedQuotas>({
+    age: {},
+    gender: {},
+    location: {},
+    industry: {},
+  });
+
+  // Validation errors state
+  const [validationErrors, setValidationErrors] =
+    useState<QuotaValidationErrors>({});
+
   // Dialog states for editing
   const [ageDialogOpen, setAgeDialogOpen] = useState(false);
   const [genderDialogOpen, setGenderDialogOpen] = useState(false);
@@ -125,6 +159,21 @@ export default function QuotaAudienceSelector({
   const [screeningDialogOpen, setScreeningDialogOpen] = useState(false);
   const [editingScreeningQuestion, setEditingScreeningQuestion] =
     useState<ScreeningQuestion | null>(null);
+
+  // Validate AGENT mode - check if excel file is uploaded
+  useEffect(() => {
+    if (surveySettings.survey_send_by === "AGENT") {
+      if (!file) {
+        onValidationError?.(
+          "Please upload an Excel file with user IDs for Agent mode"
+        );
+      } else {
+        onValidationError?.(null);
+      }
+    } else {
+      onValidationError?.(null);
+    }
+  }, [file, surveySettings.survey_send_by, onValidationError]);
 
   // Fetch audience statistics from API
   const {
@@ -141,33 +190,52 @@ export default function QuotaAudienceSelector({
 
   const stats = audienceStats || demoData.audienceStats;
 
-  // Initialize with default quotas if empty
+  // State to track if initialization has been done
+  const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Initialize with default quotas only if not in edit mode and quotas are empty
   useEffect(() => {
-    if (quotaAudience.ageQuotas.length === 0) {
+    // Don't initialize if already done or if in edit mode with loaded data
+    if (hasInitialized) return;
+
+    // Check if quotas already have data (from editing or previously set)
+    const hasExistingData =
+      quotaAudience.ageQuotas.length > 0 ||
+      quotaAudience.genderQuotas.length > 0 ||
+      quotaAudience.locationQuotas.length > 0 ||
+      quotaAudience.categoryQuotas.length > 0;
+
+    // Only set defaults if no existing data and not in edit mode
+    if (!hasExistingData && !isEditMode) {
       onQuotaAudienceUpdate({
         ...quotaAudience,
         ageQuotas: DEFAULT_AGE_GROUPS,
         genderQuotas: DEFAULT_GENDERS,
       });
     }
-  }, []);
+
+    setHasInitialized(true);
+  }, [isEditMode, hasInitialized]);
 
   // Generate screening questions based on selected quotas
+  // Show ALL options for proper screening, not just the ones with targets
   const generateScreeningQuestions = useMemo((): ScreeningQuestion[] => {
     const questions: ScreeningQuestion[] = [];
 
-    // Generate age screening question if age quotas have targets
-    const activeAgeQuotas = quotaAudience.ageQuotas.filter(
+    // Check if any age quotas have targets (to determine if we need age screening)
+    const hasActiveAgeQuotas = quotaAudience.ageQuotas.some(
       (q) =>
         (q.target_count && q.target_count > 0) ||
         (q.target_percentage && q.target_percentage > 0)
     );
-    if (activeAgeQuotas.length > 0) {
+    // If there are active age quotas, show ALL age groups for proper screening
+    if (hasActiveAgeQuotas) {
       questions.push({
         id: "screening_age",
         type: "age",
         question_text: "What is your age group?",
-        options: activeAgeQuotas.map((q, idx) => ({
+        // Show all age groups from the configured quotas (includes all DEFAULT_AGE_GROUPS)
+        options: quotaAudience.ageQuotas.map((q, idx) => ({
           id: `age_option_${idx}`,
           label:
             q.max_age >= 100 ? `${q.min_age}+` : `${q.min_age}-${q.max_age}`,
@@ -177,18 +245,20 @@ export default function QuotaAudienceSelector({
       });
     }
 
-    // Generate gender screening question if gender quotas have targets
-    const activeGenderQuotas = quotaAudience.genderQuotas.filter(
+    // Check if any gender quotas have targets
+    const hasActiveGenderQuotas = quotaAudience.genderQuotas.some(
       (q) =>
         (q.target_count && q.target_count > 0) ||
         (q.target_percentage && q.target_percentage > 0)
     );
-    if (activeGenderQuotas.length > 0) {
+    // If there are active gender quotas, show ALL gender options for proper screening
+    if (hasActiveGenderQuotas) {
       questions.push({
         id: "screening_gender",
         type: "gender",
         question_text: "What is your gender?",
-        options: activeGenderQuotas.map((q, idx) => ({
+        // Show all gender options from the configured quotas (includes all DEFAULT_GENDERS)
+        options: quotaAudience.genderQuotas.map((q, idx) => ({
           id: `gender_option_${idx}`,
           label: GENDER_LABELS[q.gender] || q.gender,
           value: q.gender,
@@ -197,18 +267,19 @@ export default function QuotaAudienceSelector({
       });
     }
 
-    // Generate location screening question if location quotas have targets
-    const activeLocationQuotas = quotaAudience.locationQuotas.filter(
+    // Check if any location quotas have targets
+    const hasActiveLocationQuotas = quotaAudience.locationQuotas.some(
       (q) =>
         (q.target_count && q.target_count > 0) ||
         (q.target_percentage && q.target_percentage > 0)
     );
-    if (activeLocationQuotas.length > 0) {
+    // For location, show all configured locations for proper screening
+    if (hasActiveLocationQuotas) {
       questions.push({
         id: "screening_location",
         type: "location",
         question_text: "Where are you located?",
-        options: activeLocationQuotas.map((q, idx) => ({
+        options: quotaAudience.locationQuotas.map((q, idx) => ({
           id: `location_option_${idx}`,
           label:
             [q.city, q.state, q.country].filter(Boolean).join(", ") ||
@@ -223,31 +294,63 @@ export default function QuotaAudienceSelector({
       });
     }
 
+    // Generate category/industry screening question if category quotas exist
+    // For categories, all selected categories are qualifying options
+    const activeCategoryQuotas = (quotaAudience.categoryQuotas || []).filter(
+      (q) => q.surveyCategoryId
+    );
+    if (activeCategoryQuotas.length > 0) {
+      questions.push({
+        id: "screening_category",
+        type: "category",
+        question_text: "Which industry do you work in?",
+        options: activeCategoryQuotas.map((q, idx) => ({
+          id: `category_option_${idx}`,
+          label: q.categoryName || q.surveyCategoryId,
+          value: q.surveyCategoryId,
+        })),
+        required: true,
+      });
+    }
+
     return questions;
   }, [
     quotaAudience.ageQuotas,
     quotaAudience.genderQuotas,
     quotaAudience.locationQuotas,
+    quotaAudience.categoryQuotas,
   ]);
 
   // Update screening questions when quotas change
+  // Always regenerate options from current quota state, only preserve custom question text
   useEffect(() => {
     const existingQuestions = quotaAudience.screeningQuestions;
     const newQuestions = generateScreeningQuestions;
 
-    // Merge: keep custom text from existing questions, update options from generated
+    // Merge: keep custom text from existing questions, but ALWAYS use options from generated
     const mergedQuestions = newQuestions.map((newQ) => {
       const existing = existingQuestions.find((eq) => eq.id === newQ.id);
       if (existing) {
+        // Only keep the custom question_text, always use new options from quota state
         return {
-          ...newQ,
+          id: newQ.id,
+          type: newQ.type,
           question_text: existing.question_text, // Keep custom text
+          options: newQ.options, // ALWAYS use regenerated options (all available options)
+          required: newQ.required,
         };
       }
       return newQ;
     });
 
-    if (JSON.stringify(mergedQuestions) !== JSON.stringify(existingQuestions)) {
+    // Check if options have changed (compare stringified versions)
+    const hasOptionsChanged =
+      JSON.stringify(mergedQuestions.map((q) => q.options)) !==
+      JSON.stringify(existingQuestions.map((q) => q.options));
+    const hasQuestionsChanged =
+      JSON.stringify(mergedQuestions) !== JSON.stringify(existingQuestions);
+
+    if (hasOptionsChanged || hasQuestionsChanged) {
       onQuotaAudienceUpdate({
         ...quotaAudience,
         screeningQuestions: mergedQuestions,
@@ -262,47 +365,18 @@ export default function QuotaAudienceSelector({
       : `${quota.min_age}-${quota.max_age}`;
   };
 
-  // Handle age quota selection toggle
-  const handleAgeQuotaToggle = (index: number) => {
-    const updatedQuotas = [...quotaAudience.ageQuotas];
-    const quota = updatedQuotas[index];
-
-    // Toggle: if has target, clear it; if no target, set default
-    if (
-      (quota.target_count && quota.target_count > 0) ||
-      (quota.target_percentage && quota.target_percentage > 0)
-    ) {
-      updatedQuotas[index] = {
-        ...quota,
-        target_count: 0,
-        target_percentage: 0,
-      };
-    } else {
-      updatedQuotas[index] = { ...quota, target_count: 10 }; // Default target
-    }
-
-    onQuotaAudienceUpdate({ ...quotaAudience, ageQuotas: updatedQuotas });
-  };
-
-  // Handle gender quota selection toggle
-  const handleGenderQuotaToggle = (index: number) => {
-    const updatedQuotas = [...quotaAudience.genderQuotas];
-    const quota = updatedQuotas[index];
-
-    if (
-      (quota.target_count && quota.target_count > 0) ||
-      (quota.target_percentage && quota.target_percentage > 0)
-    ) {
-      updatedQuotas[index] = {
-        ...quota,
-        target_count: 0,
-        target_percentage: 0,
-      };
-    } else {
-      updatedQuotas[index] = { ...quota, target_count: 10 };
-    }
-
-    onQuotaAudienceUpdate({ ...quotaAudience, genderQuotas: updatedQuotas });
+  // Toggle expanded state for a quota card
+  const toggleQuotaExpanded = (
+    type: "age" | "gender" | "location" | "industry",
+    index: number
+  ) => {
+    setExpandedQuotas((prev) => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        [index]: !prev[type][index],
+      },
+    }));
   };
 
   // Handle location quota add
@@ -349,9 +423,131 @@ export default function QuotaAudienceSelector({
     onQuotaAudienceUpdate({ ...quotaAudience, locationQuotas: updatedQuotas });
   };
 
+  // Handle quota type change - sync all quotas of that type and recalculate
+  const handleQuotaTypeChange = (
+    type: "age" | "gender" | "location" | "industry",
+    newQuotaType: QuotaType
+  ) => {
+    const totalTarget = quotaAudience.totalTarget || 100;
+
+    if (type === "age") {
+      const updatedQuotas = quotaAudience.ageQuotas.map((q) => {
+        const currentValue = q.target_count || q.target_percentage || 0;
+        if (newQuotaType === "PERCENTAGE" && q.quota_type === "COUNT") {
+          // Convert count to percentage
+          const percentage =
+            totalTarget > 0
+              ? Math.round((currentValue / totalTarget) * 100)
+              : 0;
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: undefined,
+            target_percentage: percentage,
+          };
+        } else if (newQuotaType === "COUNT" && q.quota_type === "PERCENTAGE") {
+          // Convert percentage to count
+          const count = Math.round((currentValue / 100) * totalTarget);
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: count,
+            target_percentage: undefined,
+          };
+        }
+        return { ...q, quota_type: newQuotaType };
+      });
+      onQuotaAudienceUpdate({ ...quotaAudience, ageQuotas: updatedQuotas });
+    } else if (type === "gender") {
+      const updatedQuotas = quotaAudience.genderQuotas.map((q) => {
+        const currentValue = q.target_count || q.target_percentage || 0;
+        if (newQuotaType === "PERCENTAGE" && q.quota_type === "COUNT") {
+          const percentage =
+            totalTarget > 0
+              ? Math.round((currentValue / totalTarget) * 100)
+              : 0;
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: undefined,
+            target_percentage: percentage,
+          };
+        } else if (newQuotaType === "COUNT" && q.quota_type === "PERCENTAGE") {
+          const count = Math.round((currentValue / 100) * totalTarget);
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: count,
+            target_percentage: undefined,
+          };
+        }
+        return { ...q, quota_type: newQuotaType };
+      });
+      onQuotaAudienceUpdate({ ...quotaAudience, genderQuotas: updatedQuotas });
+    } else if (type === "location") {
+      const updatedQuotas = quotaAudience.locationQuotas.map((q) => {
+        const currentValue = q.target_count || q.target_percentage || 0;
+        if (newQuotaType === "PERCENTAGE" && q.quota_type === "COUNT") {
+          const percentage =
+            totalTarget > 0
+              ? Math.round((currentValue / totalTarget) * 100)
+              : 0;
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: undefined,
+            target_percentage: percentage,
+          };
+        } else if (newQuotaType === "COUNT" && q.quota_type === "PERCENTAGE") {
+          const count = Math.round((currentValue / 100) * totalTarget);
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: count,
+            target_percentage: undefined,
+          };
+        }
+        return { ...q, quota_type: newQuotaType };
+      });
+      onQuotaAudienceUpdate({
+        ...quotaAudience,
+        locationQuotas: updatedQuotas,
+      });
+    } else if (type === "industry") {
+      const updatedQuotas = (quotaAudience.categoryQuotas || []).map((q) => {
+        const currentValue = q.target_count || q.target_percentage || 0;
+        if (newQuotaType === "PERCENTAGE" && q.quota_type === "COUNT") {
+          const percentage =
+            totalTarget > 0
+              ? Math.round((currentValue / totalTarget) * 100)
+              : 0;
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: undefined,
+            target_percentage: percentage,
+          };
+        } else if (newQuotaType === "COUNT" && q.quota_type === "PERCENTAGE") {
+          const count = Math.round((currentValue / 100) * totalTarget);
+          return {
+            ...q,
+            quota_type: newQuotaType,
+            target_count: count,
+            target_percentage: undefined,
+          };
+        }
+        return { ...q, quota_type: newQuotaType };
+      });
+      onQuotaAudienceUpdate({
+        ...quotaAudience,
+        categoryQuotas: updatedQuotas,
+      });
+    }
+  };
+
   // Update quota target value
   const handleQuotaTargetChange = (
-    type: "age" | "gender" | "location",
+    type: "age" | "gender" | "location" | "industry",
     index: number,
     value: number,
     quotaType: QuotaType
@@ -385,6 +581,18 @@ export default function QuotaAudienceSelector({
       onQuotaAudienceUpdate({
         ...quotaAudience,
         locationQuotas: updatedQuotas,
+      });
+    } else if (type === "industry") {
+      const updatedQuotas = [...(quotaAudience.categoryQuotas || [])];
+      updatedQuotas[index] = {
+        ...updatedQuotas[index],
+        quota_type: quotaType,
+        target_count: quotaType === "COUNT" ? value : undefined,
+        target_percentage: quotaType === "PERCENTAGE" ? value : undefined,
+      };
+      onQuotaAudienceUpdate({
+        ...quotaAudience,
+        categoryQuotas: updatedQuotas,
       });
     }
   };
@@ -445,6 +653,139 @@ export default function QuotaAudienceSelector({
       if (q.target_count) total += q.target_count;
     });
     return total;
+  };
+
+  // Validation calculations
+  const calculateQuotaValidation = useMemo(() => {
+    const totalTarget = quotaAudience.totalTarget || 100;
+    const errors: QuotaValidationErrors = {};
+
+    // Age quota validation
+    const ageCountSum = quotaAudience.ageQuotas
+      .filter((q) => q.quota_type === "COUNT" && q.target_count)
+      .reduce((sum, q) => sum + (q.target_count || 0), 0);
+    const agePercentageSum = quotaAudience.ageQuotas
+      .filter((q) => q.quota_type === "PERCENTAGE" && q.target_percentage)
+      .reduce((sum, q) => sum + (q.target_percentage || 0), 0);
+
+    if (ageCountSum > 0 && ageCountSum !== totalTarget) {
+      errors.ageCountSum = `Age quota count sum (${ageCountSum}) must equal Total Responses (${totalTarget})`;
+    }
+    if (agePercentageSum > 0 && agePercentageSum !== 100) {
+      errors.agePercentageSum = `Age quota percentage sum (${agePercentageSum}%) must equal 100%`;
+    }
+
+    // Gender quota validation
+    const genderCountSum = quotaAudience.genderQuotas
+      .filter((q) => q.quota_type === "COUNT" && q.target_count)
+      .reduce((sum, q) => sum + (q.target_count || 0), 0);
+    const genderPercentageSum = quotaAudience.genderQuotas
+      .filter((q) => q.quota_type === "PERCENTAGE" && q.target_percentage)
+      .reduce((sum, q) => sum + (q.target_percentage || 0), 0);
+
+    if (genderCountSum > 0 && genderCountSum !== totalTarget) {
+      errors.genderCountSum = `Gender quota count sum (${genderCountSum}) must equal Total Responses (${totalTarget})`;
+    }
+    if (genderPercentageSum > 0 && genderPercentageSum !== 100) {
+      errors.genderPercentageSum = `Gender quota percentage sum (${genderPercentageSum}%) must equal 100%`;
+    }
+
+    // Location quota validation
+    const locationCountSum = quotaAudience.locationQuotas
+      .filter((q) => q.quota_type === "COUNT" && q.target_count)
+      .reduce((sum, q) => sum + (q.target_count || 0), 0);
+    const locationPercentageSum = quotaAudience.locationQuotas
+      .filter((q) => q.quota_type === "PERCENTAGE" && q.target_percentage)
+      .reduce((sum, q) => sum + (q.target_percentage || 0), 0);
+
+    if (locationCountSum > 0 && locationCountSum !== totalTarget) {
+      errors.locationCountSum = `Location quota count sum (${locationCountSum}) must equal Total Responses (${totalTarget})`;
+    }
+    if (locationPercentageSum > 0 && locationPercentageSum !== 100) {
+      errors.locationPercentageSum = `Location quota percentage sum (${locationPercentageSum}%) must equal 100%`;
+    }
+
+    return {
+      errors,
+      hasErrors: Object.keys(errors).length > 0,
+      sums: {
+        ageCount: ageCountSum,
+        agePercentage: agePercentageSum,
+        genderCount: genderCountSum,
+        genderPercentage: genderPercentageSum,
+        locationCount: locationCountSum,
+        locationPercentage: locationPercentageSum,
+      },
+    };
+  }, [
+    quotaAudience.ageQuotas,
+    quotaAudience.genderQuotas,
+    quotaAudience.locationQuotas,
+    quotaAudience.totalTarget,
+  ]);
+
+  // Update validation errors for parent component
+  useEffect(() => {
+    if (calculateQuotaValidation.hasErrors) {
+      const errorMessages = Object.values(calculateQuotaValidation.errors).join(
+        "; "
+      );
+      setValidationErrors(calculateQuotaValidation.errors);
+      // Only show validation error if quotas have been configured
+      const hasActiveQuotas =
+        quotaAudience.ageQuotas.some(isQuotaActive) ||
+        quotaAudience.genderQuotas.some(isQuotaActive) ||
+        quotaAudience.locationQuotas.length > 0;
+      if (hasActiveQuotas && surveySettings.survey_send_by !== "AGENT") {
+        onValidationError?.(errorMessages);
+      }
+    } else {
+      setValidationErrors({});
+      if (surveySettings.survey_send_by !== "AGENT") {
+        onValidationError?.(null);
+      }
+    }
+  }, [calculateQuotaValidation, surveySettings.survey_send_by]);
+
+  // Handle total target change
+  const handleTotalTargetChange = (newTotal: number) => {
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      totalTarget: newTotal,
+    });
+  };
+
+  // Handle industry/category selection - stores as CategoryQuota in categoryQuotas
+  const handleIndustryToggle = (categoryId: string, categoryName: string) => {
+    const currentCategoryQuotas = quotaAudience.categoryQuotas || [];
+    const isSelected = currentCategoryQuotas.some(
+      (q) => q.surveyCategoryId === categoryId
+    );
+
+    let updatedCategoryQuotas: CategoryQuota[];
+
+    if (isSelected) {
+      // Remove the category
+      updatedCategoryQuotas = currentCategoryQuotas.filter(
+        (q) => q.surveyCategoryId !== categoryId
+      );
+    } else {
+      // Add the category with default quota settings
+      const newCategoryQuota: CategoryQuota = {
+        surveyCategoryId: categoryId,
+        categoryName: categoryName,
+        quota_type: "COUNT" as QuotaType,
+        target_count: 0,
+        target_percentage: 0,
+        current_count: 0,
+      };
+      updatedCategoryQuotas = [...currentCategoryQuotas, newCategoryQuota];
+    }
+
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      categoryQuotas: updatedCategoryQuotas,
+    });
   };
 
   // File handling for AGENT mode
@@ -518,49 +859,54 @@ export default function QuotaAudienceSelector({
   };
 
   // AGENT mode render
-  if (surveySettings.survey_send_by === "AGENT") {
-    return (
-      <div>
-        <h2 className="text-xl font-semibold text-slate-800 mb-2">
-          Agent Mode
-        </h2>
-        <p className="text-slate-500">
-          Please select the Excel File with the user unique Id's list
-        </p>
-        <div className="mt-2 flex gap-3">
-          <label
-            htmlFor="excel-upload"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md mt-4 cursor-pointer"
-          >
-            Upload Excel
-          </label>
-          <input
-            id="excel-upload"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <Button
-            variant="outline"
-            onClick={handleDownloadDummyExcel}
-            className="h-10 px-4 py-2 rounded-md mt-4"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download Excel Template
-          </Button>
-        </div>
-        {file && (
-          <p className="text-green-500 mt-2">
-            File uploaded successfully: {file.name}
-          </p>
-        )}
-      </div>
-    );
-  }
+  // if (surveySettings.survey_send_by === "AGENT") {
+  //   return (
+
+  //   );
+  // }
 
   return (
     <div className="space-y-4">
+      {/* AGENT mode */}
+      {surveySettings.survey_send_by == "AGENT" && (
+        <div>
+          <h2 className="text-xl font-semibold text-slate-800 mb-2">
+            Agent Mode
+          </h2>
+          <p className="text-slate-500">
+            Please select the Excel File with the user unique Id's list
+          </p>
+          <div className="mt-2 flex gap-3">
+            <label
+              htmlFor="excel-upload"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md mt-4 cursor-pointer"
+            >
+              Upload Excel
+            </label>
+            <input
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={handleDownloadDummyExcel}
+              className="h-10 px-4 py-2 rounded-md mt-4"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Excel Template
+            </Button>
+          </div>
+          {file && (
+            <p className="text-green-500 mt-2">
+              File uploaded successfully: {file.name}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mb-4">
         <h2 className="text-xl font-semibold text-slate-800 mb-2">
           Define Target Audience & Quotas
@@ -570,6 +916,60 @@ export default function QuotaAudienceSelector({
           questions will be auto-generated.
         </p>
       </div>
+
+      {/* Total Responses Input */}
+      <Card className="mb-4">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-violet-600" />
+              <Label
+                htmlFor="total-responses"
+                className="text-lg font-semibold"
+              >
+                Total Responses Required
+              </Label>
+            </div>
+            <Input
+              id="total-responses"
+              type="number"
+              className="w-32"
+              value={quotaAudience.totalTarget || 100}
+              onChange={(e) =>
+                handleTotalTargetChange(parseInt(e.target.value) || 100)
+              }
+              min={1}
+            />
+            <span className="text-sm text-slate-500">respondents</span>
+          </div>
+          <p className="text-sm text-slate-500 mt-2">
+            This is the total number of survey responses you want to collect.
+            Quota counts should sum up to this number, or percentages should sum
+            to 100%.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Validation Errors Display */}
+      {calculateQuotaValidation.hasErrors && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-red-800 mb-2">
+                Quota Validation Errors:
+              </p>
+              <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+                {Object.values(calculateQuotaValidation.errors).map(
+                  (error, idx) => (
+                    <li key={idx}>{error}</li>
+                  )
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error Display */}
       {statsError && (
@@ -598,10 +998,11 @@ export default function QuotaAudienceSelector({
         {/* Quota Configuration Tabs */}
         <div className="lg:col-span-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="age">Age Groups</TabsTrigger>
               <TabsTrigger value="gender">Gender</TabsTrigger>
               <TabsTrigger value="location">Location</TabsTrigger>
+              <TabsTrigger value="industry">Industry</TabsTrigger>
             </TabsList>
 
             {/* Age Groups Tab */}
@@ -624,73 +1025,77 @@ export default function QuotaAudienceSelector({
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Click on any age group card to set target quotas
+                  </p>
                   <div className="space-y-3">
                     {quotaAudience.ageQuotas.map((quota, index) => (
                       <div
                         key={index}
-                        className={`p-4 border rounded-lg ${
-                          isQuotaActive(quota)
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors hover:border-violet-400 ${
+                          isQuotaActive(quota) || expandedQuotas.age[index]
                             ? "border-violet-300 bg-violet-50"
-                            : "border-slate-200"
+                            : "border-slate-200 hover:bg-slate-50"
                         }`}
+                        onClick={() => toggleQuotaExpanded("age", index)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <Button
+                            <Badge
                               variant={
                                 isQuotaActive(quota) ? "default" : "outline"
                               }
-                              size="sm"
-                              onClick={() => handleAgeQuotaToggle(index)}
+                              className="text-sm px-3 py-1"
                             >
                               {formatAgeRange(quota)}
-                            </Button>
-                            <span className="text-sm text-slate-500">
-                              {statsLoading ? (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                              ) : (
-                                `${(
-                                  stats?.byAgeGroup[formatAgeRange(quota)] || 0
-                                ).toLocaleString()} available`
-                              )}
-                            </span>
+                            </Badge>
+                            {isQuotaActive(quota) && (
+                              <span className="text-sm text-violet-600 font-medium">
+                                Target:{" "}
+                                {quota.target_count || quota.target_percentage}
+                                {quota.quota_type === "PERCENTAGE" ? "%" : ""}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleEditAgeQuota(index)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditAgeQuota(index);
+                              }}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteAgeQuota(index)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteAgeQuota(index);
+                              }}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </div>
                         </div>
 
-                        {isQuotaActive(quota) && (
-                          <div className="mt-3 flex items-center gap-4">
+                        {(isQuotaActive(quota) ||
+                          expandedQuotas.age[index]) && (
+                          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-4">
                             <div className="flex items-center gap-2">
                               <Label className="text-sm">Type:</Label>
                               <Select
                                 value={quota.quota_type}
-                                onValueChange={(value: QuotaType) =>
-                                  handleQuotaTargetChange(
-                                    "age",
-                                    index,
-                                    quota.target_count ||
-                                      quota.target_percentage ||
-                                      0,
-                                    value
-                                  )
-                                }
+                                onValueChange={(value: QuotaType) => {
+                                  handleQuotaTypeChange("age", value);
+                                }}
                               >
-                                <SelectTrigger className="w-32">
+                                <SelectTrigger
+                                  className="w-32"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -711,6 +1116,7 @@ export default function QuotaAudienceSelector({
                                   quota.target_percentage ||
                                   0
                                 }
+                                onClick={(e) => e.stopPropagation()}
                                 onChange={(e) =>
                                   handleQuotaTargetChange(
                                     "age",
@@ -746,59 +1152,55 @@ export default function QuotaAudienceSelector({
                   <CardTitle className="text-lg">Gender Quotas</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Click on any gender card to set target quotas
+                  </p>
                   <div className="space-y-3">
                     {quotaAudience.genderQuotas.map((quota, index) => (
                       <div
                         key={index}
-                        className={`p-4 border rounded-lg ${
-                          isQuotaActive(quota)
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors hover:border-violet-400 ${
+                          isQuotaActive(quota) || expandedQuotas.gender[index]
                             ? "border-violet-300 bg-violet-50"
-                            : "border-slate-200"
+                            : "border-slate-200 hover:bg-slate-50"
                         }`}
+                        onClick={() => toggleQuotaExpanded("gender", index)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <Button
+                            <Badge
                               variant={
                                 isQuotaActive(quota) ? "default" : "outline"
                               }
-                              size="sm"
-                              onClick={() => handleGenderQuotaToggle(index)}
+                              className="text-sm px-3 py-1"
                             >
                               {GENDER_LABELS[quota.gender]}
-                            </Button>
-                            <span className="text-sm text-slate-500">
-                              {statsLoading ? (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                              ) : (
-                                `${(
-                                  stats?.byGender[
-                                    GENDER_LABELS[quota.gender]
-                                  ] || 0
-                                ).toLocaleString()} available`
-                              )}
-                            </span>
+                            </Badge>
+                            {isQuotaActive(quota) && (
+                              <span className="text-sm text-violet-600 font-medium">
+                                Target:{" "}
+                                {quota.target_count || quota.target_percentage}
+                                {quota.quota_type === "PERCENTAGE" ? "%" : ""}
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {isQuotaActive(quota) && (
-                          <div className="mt-3 flex items-center gap-4">
+                        {(isQuotaActive(quota) ||
+                          expandedQuotas.gender[index]) && (
+                          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-4">
                             <div className="flex items-center gap-2">
                               <Label className="text-sm">Type:</Label>
                               <Select
                                 value={quota.quota_type}
-                                onValueChange={(value: QuotaType) =>
-                                  handleQuotaTargetChange(
-                                    "gender",
-                                    index,
-                                    quota.target_count ||
-                                      quota.target_percentage ||
-                                      0,
-                                    value
-                                  )
-                                }
+                                onValueChange={(value: QuotaType) => {
+                                  handleQuotaTypeChange("gender", value);
+                                }}
                               >
-                                <SelectTrigger className="w-32">
+                                <SelectTrigger
+                                  className="w-32"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -819,6 +1221,7 @@ export default function QuotaAudienceSelector({
                                   quota.target_percentage ||
                                   0
                                 }
+                                onClick={(e) => e.stopPropagation()}
                                 onChange={(e) =>
                                   handleQuotaTargetChange(
                                     "gender",
@@ -912,14 +1315,7 @@ export default function QuotaAudienceSelector({
                               <Select
                                 value={quota.quota_type}
                                 onValueChange={(value: QuotaType) =>
-                                  handleQuotaTargetChange(
-                                    "location",
-                                    index,
-                                    quota.target_count ||
-                                      quota.target_percentage ||
-                                      0,
-                                    value
-                                  )
+                                  handleQuotaTypeChange("location", value)
                                 }
                               >
                                 <SelectTrigger className="w-32">
@@ -965,6 +1361,235 @@ export default function QuotaAudienceSelector({
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Industry Tab */}
+            <TabsContent value="industry" className="space-y-4">
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Database className="h-5 w-5" />
+                    Industry / Category Quotas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Select the industries/categories that qualify respondents
+                    for this survey and set quota targets. Click on a selected
+                    category to configure its quota.
+                  </p>
+
+                  {categories.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <p>No categories available.</p>
+                      <p className="text-sm">
+                        Categories will appear here once loaded.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {categories.map((category) => {
+                        const categoryQuotas =
+                          quotaAudience.categoryQuotas || [];
+                        const quotaIndex = categoryQuotas.findIndex(
+                          (q) => q.surveyCategoryId === category.id
+                        );
+                        const isSelected = quotaIndex >= 0;
+                        const quota = isSelected
+                          ? categoryQuotas[quotaIndex]
+                          : null;
+                        const isExpanded =
+                          isSelected && expandedQuotas.industry[quotaIndex];
+                        const hasTarget =
+                          quota &&
+                          ((quota.target_count && quota.target_count > 0) ||
+                            (quota.target_percentage &&
+                              quota.target_percentage > 0));
+
+                        return (
+                          <div
+                            key={category.id}
+                            className={`p-4 border rounded-lg transition-colors ${
+                              isSelected
+                                ? "border-violet-300 bg-violet-50"
+                                : "border-slate-200 hover:border-violet-400 hover:bg-slate-50 cursor-pointer"
+                            }`}
+                          >
+                            <div
+                              className="flex items-center justify-between cursor-pointer"
+                              onClick={() => {
+                                if (!isSelected) {
+                                  // Add the category
+                                  handleIndustryToggle(
+                                    category.id,
+                                    category.name
+                                  );
+                                } else {
+                                  // Toggle expanded state
+                                  toggleQuotaExpanded("industry", quotaIndex);
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                    isSelected
+                                      ? "bg-violet-600 border-violet-600"
+                                      : "border-slate-300"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleIndustryToggle(
+                                      category.id,
+                                      category.name
+                                    );
+                                  }}
+                                >
+                                  {isSelected && (
+                                    <svg
+                                      className="w-3 h-3 text-white"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={3}
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span
+                                  className={`font-medium ${
+                                    isSelected
+                                      ? "text-violet-700"
+                                      : "text-slate-700"
+                                  }`}
+                                >
+                                  {category.name}
+                                </span>
+                                {hasTarget && quota && (
+                                  <span className="text-sm text-violet-600 font-medium">
+                                    Target:{" "}
+                                    {quota.target_count ||
+                                      quota.target_percentage}
+                                    {quota.quota_type === "PERCENTAGE"
+                                      ? "%"
+                                      : ""}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {isSelected && (
+                                  <Badge
+                                    variant="default"
+                                    className="bg-violet-600"
+                                  >
+                                    {hasTarget ? "Configured" : "Selected"}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Expanded quota controls */}
+                            {isSelected &&
+                              (isExpanded || hasTarget) &&
+                              quota && (
+                                <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-4">
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-sm">Type:</Label>
+                                    <Select
+                                      value={quota.quota_type}
+                                      onValueChange={(value: QuotaType) => {
+                                        handleQuotaTypeChange(
+                                          "industry",
+                                          value
+                                        );
+                                      }}
+                                    >
+                                      <SelectTrigger
+                                        className="w-32"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="COUNT">
+                                          Count
+                                        </SelectItem>
+                                        <SelectItem value="PERCENTAGE">
+                                          Percentage
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-sm">Target:</Label>
+                                    <Input
+                                      type="number"
+                                      className="w-24"
+                                      value={
+                                        quota.target_count ||
+                                        quota.target_percentage ||
+                                        0
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) =>
+                                        handleQuotaTargetChange(
+                                          "industry",
+                                          quotaIndex,
+                                          parseInt(e.target.value) || 0,
+                                          quota.quota_type
+                                        )
+                                      }
+                                      min={0}
+                                      max={
+                                        quota.quota_type === "PERCENTAGE"
+                                          ? 100
+                                          : undefined
+                                      }
+                                    />
+                                    {quota.quota_type === "PERCENTAGE" && (
+                                      <span>%</span>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="ml-auto"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleIndustryToggle(
+                                        category.id,
+                                        category.name
+                                      );
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(quotaAudience.categoryQuotas || []).length > 0 && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-800">
+                        <strong>
+                          {(quotaAudience.categoryQuotas || []).length}
+                        </strong>{" "}
+                        industry/categories selected. Respondents will be asked
+                        to select their industry during screening.
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -1111,7 +1736,7 @@ export default function QuotaAudienceSelector({
 
                   {showScreeningPreview && (
                     <div className="space-y-4 mt-4">
-                      {quotaAudience.screeningQuestions.map((question, idx) => (
+                      {quotaAudience.screeningQuestions.map((question) => (
                         <div
                           key={question.id}
                           className="p-3 bg-slate-50 rounded-lg"
@@ -1136,18 +1761,93 @@ export default function QuotaAudienceSelector({
                           </div>
                           <div className="mt-2">
                             <Label className="text-xs text-slate-500">
-                              Options (auto-generated, not editable):
+                              Options:{" "}
+                              <span className="text-green-600">
+                                Green = Qualifying
+                              </span>{" "}
+                              |{" "}
+                              <span className="text-slate-400">
+                                Gray = Non-qualifying
+                              </span>
                             </Label>
                             <div className="flex flex-wrap gap-1 mt-1">
-                              {question.options.map((opt) => (
-                                <Badge
-                                  key={opt.id}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {opt.label}
-                                </Badge>
-                              ))}
+                              {question.options.map((opt) => {
+                                // Check if this option is a qualifying option (has quota target)
+                                let isQualifying = false;
+                                if (question.type === "age") {
+                                  const ageQuota = quotaAudience.ageQuotas.find(
+                                    (q) =>
+                                      `${q.min_age}-${q.max_age}` === opt.value
+                                  );
+                                  isQualifying = !!(
+                                    ageQuota &&
+                                    ((ageQuota.target_count &&
+                                      ageQuota.target_count > 0) ||
+                                      (ageQuota.target_percentage &&
+                                        ageQuota.target_percentage > 0))
+                                  );
+                                } else if (question.type === "gender") {
+                                  const genderQuota =
+                                    quotaAudience.genderQuotas.find(
+                                      (q) => q.gender === opt.value
+                                    );
+                                  isQualifying = !!(
+                                    genderQuota &&
+                                    ((genderQuota.target_count &&
+                                      genderQuota.target_count > 0) ||
+                                      (genderQuota.target_percentage &&
+                                        genderQuota.target_percentage > 0))
+                                  );
+                                } else if (question.type === "location") {
+                                  const locationQuota =
+                                    quotaAudience.locationQuotas.find((q) => {
+                                      try {
+                                        const parsed = JSON.parse(opt.value);
+                                        return (
+                                          q.country === parsed.country &&
+                                          q.state === parsed.state &&
+                                          q.city === parsed.city
+                                        );
+                                      } catch {
+                                        return false;
+                                      }
+                                    });
+                                  isQualifying = !!(
+                                    locationQuota &&
+                                    ((locationQuota.target_count &&
+                                      locationQuota.target_count > 0) ||
+                                      (locationQuota.target_percentage &&
+                                        locationQuota.target_percentage > 0))
+                                  );
+                                } else if (question.type === "category") {
+                                  const categoryQuota =
+                                    quotaAudience.categoryQuotas.find(
+                                      (q) => q.surveyCategoryId === opt.value
+                                    );
+                                  isQualifying = !!(
+                                    categoryQuota &&
+                                    ((categoryQuota.target_count &&
+                                      categoryQuota.target_count > 0) ||
+                                      (categoryQuota.target_percentage &&
+                                        categoryQuota.target_percentage > 0))
+                                  );
+                                }
+
+                                return (
+                                  <Badge
+                                    key={opt.id}
+                                    variant="outline"
+                                    className={`text-xs ${
+                                      isQualifying
+                                        ? "bg-green-50 border-green-500 text-green-700"
+                                        : "bg-slate-50 border-slate-300 text-slate-400"
+                                    }`}
+                                  >
+                                    {opt.label}
+                                    {isQualifying && " ✓"}
+                                  </Badge>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>
