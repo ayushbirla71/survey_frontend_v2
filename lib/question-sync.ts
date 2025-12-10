@@ -83,10 +83,10 @@ export async function syncSurveyQuestions(
   original: AnyQuestion[],
   current: AnyQuestion[]
 ) {
-  // console.log(">>>>>> the VALUE OF THE ORIGINAL QUESTIONS is : ", original);
-  // console.log(">>>>>> the VALUE OF THE CURRENT QUESTIONS is : ", current);
+  console.log(">>>>>> the VALUE OF THE ORIGINAL QUESTIONS is : ", original);
+  console.log(">>>>>> the VALUE OF THE CURRENT QUESTIONS is : ", current);
   const { toCreate, toUpdate, toDelete } = diffQuestions(original, current);
-  // console.log("toCreate is", toCreate, " and toUpdate is", toUpdate);
+  console.log("toCreate is", toCreate, " and toUpdate is", toUpdate);
 
   // Create
   const createdPairs = await Promise.all(
@@ -115,6 +115,7 @@ export async function syncSurveyQuestions(
       const n = normalize(q, surveyId);
       // question_type typically immutable here; backend update does not accept it
       const { error } = await questionApi.updateQuestion(String(q.id), {
+        question_type: n.question_type,
         question_text: n.question_text,
         options: n.options || [],
         categoryId: n.categoryId,
@@ -122,6 +123,8 @@ export async function syncSurveyQuestions(
         required: n.required,
         rowOptions: n.rowOptions || [],
         columnOptions: n.columnOptions || [],
+        // Send null explicitly when mediaId is null (to clear media in DB)
+        mediaId: n.mediaId,
       });
       if (error) throw new Error(error);
     })

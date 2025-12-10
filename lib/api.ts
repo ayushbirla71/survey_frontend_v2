@@ -235,6 +235,12 @@ export interface QuotaCheckResponse {
   message?: string;
 }
 
+export interface MediaUploadResponse {
+  message: string;
+  status: number;
+  media: any;
+}
+
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
@@ -261,7 +267,6 @@ async function apiRequest<T>(
       signal: controller.signal,
       ...options,
     });
-    console.log("response is", response);
 
     clearTimeout(timeoutId);
 
@@ -837,13 +842,10 @@ export const questionApi = {
   updateQuestion: async (
     questionId: string,
     questionData: {
+      question_type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
       question_text?: string;
       options?: any[];
-      media?: Array<{
-        type: string;
-        url: string;
-        thumbnail_url?: string;
-      }>;
+      mediaId?: string | null;
       categoryId?: string;
       subCategoryId?: string;
       order_index?: number;
@@ -1008,6 +1010,28 @@ export const responseApi = {
     surveyId: string
   ): Promise<ApiResponse<SurveyResponseResult>> => {
     return apiRequest(`/api/responses/surveys/${surveyId}/results`);
+  },
+};
+
+export const mediaUploadApi = {
+  // POST /api/upload/media
+  uploadMedia: async (
+    file: File
+  ): Promise<ApiResponse<MediaUploadResponse>> => {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append("media", file);
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return apiRequest("/api/upload/media", {
+      method: "POST",
+      body: formData,
+      headers,
+    });
   },
 };
 

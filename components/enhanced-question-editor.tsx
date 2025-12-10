@@ -28,16 +28,26 @@ import {
   Draggable,
   DropResult,
 } from "@hello-pangea/dnd";
-import { useApi } from "@/hooks/useApi";
-import { apiWithFallback, categoriesApi, demoData } from "@/lib/api";
+import { useApi, useMutation } from "@/hooks/useApi";
+import {
+  apiWithFallback,
+  categoriesApi,
+  demoData,
+  mediaUploadApi,
+} from "@/lib/api";
+import { toast } from "react-toastify";
 
 type QuestionType = "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
 
 interface MediaPreview {
+  id?: string;
   type: QuestionType;
   url: string;
   thumbnail_url?: string;
+  uploaded_by?: string;
+  created_at?: string;
   mediaId?: string | null;
+  meta?: any;
 }
 
 interface GridOptionText {
@@ -71,7 +81,7 @@ export interface QuestionVM {
   options: OptionPayload[]; // conforms to controller
   rowOptions?: GridOptionText[];
   columnOptions?: GridOptionText[];
-  media?: MediaPreview[]; // preview only
+  mediaAsset?: MediaPreview | null; // preview only
   mediaId?: string | null; // backend id if uploaded
 }
 
@@ -139,6 +149,12 @@ export default function EnhancedQuestionEditor({
     )
   );
 
+  const {
+    mutate: uploadMedia,
+    loading: uploadLoading,
+    error: uploadError,
+  } = useMutation(mediaUploadApi.uploadMedia);
+
   const categories = questionCategories || demoData.question_categories;
 
   const byId = useMemo(
@@ -200,7 +216,21 @@ export default function EnhancedQuestionEditor({
 
       return { ...q, [field]: value };
     });
+    console.log(">>>> the value of the UPDATED is : ", updated);
 
+    onQuestionsUpdate(updated);
+  };
+
+  // Batch update multiple fields at once to avoid stale closure issues
+  const handleQuestionBatchUpdate = (
+    id: string,
+    updates: Partial<QuestionVM>
+  ) => {
+    const updated = questions.map((q) => {
+      if (q.id !== id) return q;
+      return { ...q, ...updates };
+    });
+    console.log(">>>> the value of the BATCH UPDATED is : ", updated);
     onQuestionsUpdate(updated);
   };
 
@@ -310,7 +340,7 @@ export default function EnhancedQuestionEditor({
       required: true,
       categoryId: undefined,
       options: [],
-      media: [],
+      mediaAsset: null,
       mediaId: null,
     };
     onQuestionsUpdate([...questions, newQ]);
@@ -326,7 +356,7 @@ export default function EnhancedQuestionEditor({
       question_text: `${src.question_text} (Copy)`,
       order_index: questions.length,
       options: src.options ? JSON.parse(JSON.stringify(src.options)) : [],
-      media: src.media ? src.media.map((m) => ({ ...m })) : [],
+      mediaAsset: src.mediaAsset ? { ...src.mediaAsset } : null,
       mediaId: src.mediaId ?? null,
     };
     onQuestionsUpdate([...questions, copy]);
@@ -348,26 +378,74 @@ export default function EnhancedQuestionEditor({
     onQuestionsUpdate(reindex(items));
   };
 
+  // helper to reset file input by id
+  const resetFileInput = (qid: string) => {
+    const input = document.getElementById(
+      `media-input-${qid}`
+    ) as HTMLInputElement | null;
+    if (input) {
+      input.value = "";
+    }
+  };
+
   const handleFileSelected = async (qid: string, file: File) => {
+    console.log(">>>>> the value of the QID is : ", qid);
+
     const detected = detectQuestionTypeFromFile(file);
-    const previewUrl = URL.createObjectURL(file);
-    handleQuestionChange(qid, "question_type", detected);
+    console.log(">>>>> the value of the DETECTED is : ", detected);
+
     const q = byId.get(qid);
     if (!q) return;
-    handleQuestionChange(qid, "media", [
-      {
-        type: detected,
-        url: previewUrl,
-        thumbnail_url: detected === "IMAGE" ? previewUrl : undefined,
-      },
-    ]);
-    if (q.mediaId == null) handleQuestionChange(qid, "mediaId", null);
+
+    try {
+      const mediaData: any = await uploadMedia(file);
+      console.log(">>>>> the value of the MEDIA DATA is : ", mediaData);
+
+      const mediaId = mediaData?.data?.media?.id ?? mediaData?.media?.id;
+      const mediaUrl = mediaData?.data?.media?.url ?? mediaData?.media?.url;
+
+      if (!mediaId || !mediaUrl) {
+        throw new Error("Invalid media response");
+      }
+
+      // Use batch update to update all fields at once (avoids stale closure issue)
+      handleQuestionBatchUpdate(qid, {
+        question_type: detected,
+        mediaAsset: {
+          type: detected,
+          url: mediaUrl,
+          thumbnail_url: detected === "IMAGE" ? mediaUrl : undefined,
+          mediaId,
+          meta: {
+            originalname: file.name,
+            size: file.size,
+            mimetype: file.type,
+          },
+        },
+        mediaId: mediaId,
+      });
+
+      toast.success("Media uploaded successfully");
+    } catch (err) {
+      console.log("Error uploading media:", err);
+      // Use batch update for error case as well
+      handleQuestionBatchUpdate(qid, {
+        mediaAsset: null,
+        mediaId: null,
+        question_type: "TEXT",
+      });
+      toast.error("Failed to upload media");
+    }
   };
 
   const clearMedia = (qid: string) => {
-    handleQuestionChange(qid, "media", []);
-    handleQuestionChange(qid, "mediaId", null);
-    handleQuestionChange(qid, "question_type", "TEXT");
+    // Use batch update to clear all media fields at once
+    handleQuestionBatchUpdate(qid, {
+      mediaAsset: null,
+      mediaId: null,
+      question_type: "TEXT",
+    });
+    resetFileInput(qid);
   };
 
   return (
@@ -390,6 +468,7 @@ export default function EnhancedQuestionEditor({
                   const showTextPreview = isTextEntry(catName);
                   const showGrid = isGridCat(catName);
                   const showNumber = isNumberCat(catName);
+                  // console.log(">>>>>> the value of the Q is : ", q);
 
                   return (
                     <Draggable draggableId={q.id} index={index} key={q.id}>
@@ -508,14 +587,20 @@ export default function EnhancedQuestionEditor({
                                 <Label>Media attachment (optional)</Label>
                                 <div className="flex items-center gap-2">
                                   <Input
+                                    id={`media-input-${q.id}`}
                                     type="file"
                                     accept="image/*,video/*,audio/*"
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
-                                      if (file) handleFileSelected(q.id, file);
+                                      if (file) {
+                                        handleFileSelected(q.id, file);
+                                      } else {
+                                        resetFileInput(q.id);
+                                      }
                                     }}
                                   />
-                                  {q.media && q.media.length > 0 ? (
+                                  {/* {q.mediaAsset && q.mediaAsset.length > 0 ? ( */}
+                                  {q.mediaAsset ? (
                                     <Button
                                       variant="ghost"
                                       onClick={() => clearMedia(q.id)}
@@ -525,20 +610,65 @@ export default function EnhancedQuestionEditor({
                                   ) : null}
                                 </div>
 
-                                {q.media && q.media.length > 0 ? (
-                                  <div className="text-green-700 text-sm flex items-center gap-2">
-                                    {q.question_type === "IMAGE" && (
-                                      <ImageIcon className="h-4 w-4" />
-                                    )}
-                                    {q.question_type === "VIDEO" && (
-                                      <VideoIcon className="h-4 w-4" />
-                                    )}
-                                    {q.question_type === "AUDIO" && (
-                                      <Mic className="h-4 w-4" />
-                                    )}
-                                    <span>
-                                      Attached • type: {q.question_type}
-                                    </span>
+                                {/* Media info and preview */}
+                                {q.mediaAsset ? (
+                                  <div className="space-y-3">
+                                    {/* Media info */}
+                                    <div className="text-green-700 text-sm flex items-center gap-2">
+                                      {q.question_type === "IMAGE" && (
+                                        <ImageIcon className="h-4 w-4" />
+                                      )}
+                                      {q.question_type === "VIDEO" && (
+                                        <VideoIcon className="h-4 w-4" />
+                                      )}
+                                      {q.question_type === "AUDIO" && (
+                                        <Mic className="h-4 w-4" />
+                                      )}
+                                      <span
+                                        className="truncate max-w-[300px]"
+                                        title={q.mediaAsset.meta?.originalname}
+                                      >
+                                        {q.mediaAsset.meta?.originalname ||
+                                          "Attached"}{" "}
+                                        • {q.question_type}
+                                      </span>
+                                    </div>
+
+                                    {/* Actual media preview */}
+                                    <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                                      {q.question_type === "IMAGE" && (
+                                        <img
+                                          src={q.mediaAsset.url}
+                                          alt={
+                                            q.mediaAsset.meta?.originalname ||
+                                            "Preview"
+                                          }
+                                          className="max-w-full max-h-[300px] object-contain mx-auto"
+                                        />
+                                      )}
+                                      {q.question_type === "VIDEO" && (
+                                        <video
+                                          src={q.mediaAsset.url}
+                                          controls
+                                          className="max-w-full max-h-[300px] mx-auto"
+                                        >
+                                          Your browser does not support the
+                                          video tag.
+                                        </video>
+                                      )}
+                                      {q.question_type === "AUDIO" && (
+                                        <div className="p-4">
+                                          <audio
+                                            src={q.mediaAsset.url}
+                                            controls
+                                            className="w-full"
+                                          >
+                                            Your browser does not support the
+                                            audio element.
+                                          </audio>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : (
                                   <div className="text-slate-500 text-sm">

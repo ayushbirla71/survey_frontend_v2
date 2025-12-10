@@ -35,6 +35,18 @@ type ApiOption = {
   columnOptions?: { text?: string | null; id?: string }[];
 };
 
+type MediaAsset = {
+  type: string;
+  url: string;
+  thumbnail_url?: string;
+  mediaId?: string | null;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+};
+
 type ApiQuestion = {
   id: string;
   question_text: string;
@@ -50,6 +62,16 @@ type ApiQuestion = {
   rowOptions?: { text?: string | null; id?: string }[];
   columnOptions?: { text?: string | null; id?: string }[];
   allowMultipleInGrid?: boolean;
+
+  // Media attachment
+  mediaAsset?: MediaAsset | null;
+  media?: Array<{
+    id?: string;
+    type: string;
+    url: string;
+    thumbnail_url?: string;
+    meta?: any;
+  }> | null;
 };
 
 type GKind =
@@ -68,6 +90,60 @@ type GKind =
   | "nps";
 
 type KindsMap = Record<string, GKind>;
+
+// Helper to get media from question (handles mediaAsset or media array)
+function getQuestionMedia(q: ApiQuestion): MediaAsset | null {
+  // First check mediaAsset (from frontend editor)
+  if (q.mediaAsset?.url) return q.mediaAsset;
+
+  // Then check media array (from backend)
+  if (q.media && Array.isArray(q.media) && q.media[0]?.url) {
+    const m = q.media[0];
+    return {
+      type: m.type,
+      url: m.url,
+      thumbnail_url: m.thumbnail_url,
+      meta: m.meta,
+    };
+  }
+
+  return null;
+}
+
+// Component to display media in preview
+function QuestionMediaPreview({ media }: { media: MediaAsset | null }) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[300px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[300px] mx-auto"
+        >
+          Your browser does not support the video tag.
+        </video>
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-4">
+          <audio src={media.url} controls className="w-full">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function normKindStr(s?: string): GKind | null {
   if (!s) return null;
@@ -387,6 +463,9 @@ export default function SurveyPreview({
                   </span>
                 ) : null}
               </div>
+
+              {/* Display attached media */}
+              <QuestionMediaPreview media={getQuestionMedia(q)} />
 
               {/* short answer */}
               {kind === "short answer" && (

@@ -324,6 +324,18 @@ const regenerateScreeningQuestionsWithAllOptions = (
   return questions;
 };
 
+interface QuestionMedia {
+  id?: string;
+  url: string;
+  type: string;
+  thumbnail_url?: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
 interface Question {
   id: string;
   question_text: string;
@@ -337,6 +349,7 @@ interface Question {
   rowOptions?: any[];
   columnOptions?: any[];
   allowMultipleInGrid?: boolean;
+  mediaAsset?: QuestionMedia[] | QuestionMedia | null;
 }
 
 interface Survey {
@@ -349,6 +362,50 @@ interface Survey {
     shuffleQuestions?: boolean;
     isAnonymous?: boolean;
   };
+}
+
+// Helper to extract media from question (handles array or single object)
+function getQuestionMedia(question: Question): QuestionMedia | null {
+  if (!question.mediaAsset) return null;
+  if (Array.isArray(question.mediaAsset)) {
+    return question.mediaAsset[0] || null;
+  }
+  return question.mediaAsset;
+}
+
+// Component to render media preview
+function QuestionMediaDisplay({ media }: { media: QuestionMedia | null }) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mb-4 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[400px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[400px] mx-auto"
+        >
+          Your browser does not support the video tag.
+        </video>
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-4">
+          <audio src={media.url} controls className="w-full">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+    </div>
+  );
 }
 
 type GKind =
@@ -739,6 +796,8 @@ export default function PublicSurveyPage() {
   const [surveyIdForQuota, setSurveyIdForQuota] = useState<string | null>(null);
   const [respondentId, setRespondentId] = useState<string | null>(null);
 
+  const hasScreeningQuestions = screeningQuestions.length > 0;
+
   // Extract category IDs from questions
   const categoryIds = useMemo(() => {
     if (!survey) return [];
@@ -812,18 +871,22 @@ export default function PublicSurveyPage() {
             if (regeneratedQuestions.length > 0) {
               setScreeningQuestions(regeneratedQuestions);
               setScreeningPhase(true);
+              setIsQualified(null);
             } else {
               // No screening questions needed, skip to main survey
+              setScreeningQuestions([]);
               setScreeningPhase(false);
               setIsQualified(true);
             }
           } else {
             // No quota config, skip screening
+            setScreeningQuestions([]);
             setScreeningPhase(false);
             setIsQualified(true);
           }
         } catch (quotaErr) {
           console.log("No quota config found, skipping screening:", quotaErr);
+          setScreeningQuestions([]);
           setScreeningPhase(false);
           setIsQualified(true);
         }
@@ -870,12 +933,29 @@ export default function PublicSurveyPage() {
     loadAllData();
   }, [token]);
 
+  // // Handle start button click
+  // const handleStartSurvey = useCallback(() => {
+  //   if (dataReady && survey) {
+  //     setShowStartPage(false);
+  //   }
+  // }, [dataReady, survey]);
   // Handle start button click
-  const handleStartSurvey = useCallback(() => {
-    if (dataReady && survey) {
-      setShowStartPage(false);
+
+  const handleStartSurvey = useCallback(async () => {
+    if (!dataReady || !survey) return;
+
+    // call checkQualification once before letting the user into the survey
+    if (!hasScreeningQuestions && quotaConfig && isQualified !== false) {
+      console.log("No screening questions, checking qualification");
+      await checkQualification();
+      // If quota-full or not qualified, checkQualification will redirect or set isQualified=false
+      if (isQualified == false) {
+        return;
+      }
     }
-  }, [dataReady, survey]);
+
+    setShowStartPage(false);
+  }, [dataReady, survey, hasScreeningQuestions, quotaConfig, isQualified]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers((prev) => ({
@@ -892,55 +972,123 @@ export default function PublicSurveyPage() {
     }));
   };
 
+  // // Check if user qualifies based on screening answers
+  // const checkQualification = async () => {
+  //   if (!surveyIdForQuota) return;
+
+  //   setCheckingQualification(true);
+  //   try {
+  //     // Build the quota check request from screening answers
+  //     const checkRequest: QuotaCheckRequest = {};
+
+  //     // Map screening answers to quota check fields
+  //     screeningQuestions.forEach((sq) => {
+  //       const answer = screeningAnswers[sq.id];
+  //       if (!answer) return;
+
+  //       if (sq.type === "age") {
+  //         // Parse age range from answer (e.g., "18-24")
+  //         const [min, max] = answer.split("-").map(Number);
+  //         checkRequest.age = Math.floor((min + max) / 2); // Use midpoint
+  //       } else if (sq.type === "gender") {
+  //         // Map gender string to enum value
+  //         const genderMap: Record<
+  //           string,
+  //           "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
+  //         > = {
+  //           male: "MALE",
+  //           female: "FEMALE",
+  //           other: "OTHER",
+  //           prefer_not_to_say: "PREFER_NOT_TO_SAY",
+  //         };
+  //         checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
+  //       } else if (sq.type === "location") {
+  //         // Parse location - could be country, state, or city
+  //         checkRequest.location = { country: answer };
+  //       } else if (sq.type === "category") {
+  //         checkRequest.surveyCategoryId = answer;
+  //       }
+  //     });
+
+  //     checkRequest.vendor_respondent_id = token;
+
+  //     const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+  //     console.log(">>>>> the value of the CHECK QUOTA RESULT is : ", result);
+  //     if (result.data?.qualified) {
+  //       setRespondentId(result.data?.respondent_id ?? null);
+  //       setIsQualified(true);
+  //       setScreeningPhase(false);
+  //       toast.success("You qualify for this survey!");
+  //     } else {
+  //       // Redirect to terminated URL if available, otherwise use internal terminated page
+  //       if (result.data?.status == "QUOTA_FULL") {
+  //         router.push("/survey/terminated?reason=quota_full");
+  //         return;
+  //       }
+  //       if (quotaConfig?.terminated_url) {
+  //         window.location.href = quotaConfig.terminated_url;
+  //       } else {
+  //         router.push("/survey/terminated?reason=not_qualified");
+  //       }
+  //       setIsQualified(false);
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Error checking qualification:", err);
+  //     // On error, allow user to proceed (fail open)
+  //     setIsQualified(true);
+  //     setScreeningPhase(false);
+  //   } finally {
+  //     setCheckingQualification(false);
+  //   }
+  // };
   // Check if user qualifies based on screening answers
   const checkQualification = async () => {
     if (!surveyIdForQuota) return;
 
     setCheckingQualification(true);
     try {
-      // Build the quota check request from screening answers
       const checkRequest: QuotaCheckRequest = {};
 
-      // Map screening answers to quota check fields
-      screeningQuestions.forEach((sq) => {
-        const answer = screeningAnswers[sq.id];
-        if (!answer) return;
-
-        if (sq.type === "age") {
-          // Parse age range from answer (e.g., "18-24")
-          const [min, max] = answer.split("-").map(Number);
-          checkRequest.age = Math.floor((min + max) / 2); // Use midpoint
-        } else if (sq.type === "gender") {
-          // Map gender string to enum value
-          const genderMap: Record<
-            string,
-            "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
-          > = {
-            male: "MALE",
-            female: "FEMALE",
-            other: "OTHER",
-            prefer_not_to_say: "PREFER_NOT_TO_SAY",
-          };
-          checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
-        } else if (sq.type === "location") {
-          // Parse location - could be country, state, or city
-          checkRequest.location = { country: answer };
-        } else if (sq.type === "category") {
-          checkRequest.surveyCategoryId = answer;
-        }
-      });
+      // support both with and without screening questions
+      if (hasScreeningQuestions) {
+        screeningQuestions.forEach((sq) => {
+          const answer = screeningAnswers[sq.id];
+          if (!answer) return;
+          if (sq.type === "age") {
+            const [min, max] = answer.split("-").map(Number);
+            checkRequest.age = Math.floor((min + max) / 2);
+          } else if (sq.type === "gender") {
+            const genderMap: Record<
+              string,
+              "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
+            > = {
+              male: "MALE",
+              female: "FEMALE",
+              other: "OTHER",
+              prefer_not_to_say: "PREFER_NOT_TO_SAY",
+            };
+            checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
+          } else if (sq.type === "location") {
+            checkRequest.location = { country: answer };
+          } else if (sq.type === "category") {
+            checkRequest.surveyCategoryId = answer;
+          }
+        });
+      } else {
+        // No screening questions: still call quota API using just vendor_respondent_id
+        // so backend can respond with QUOTA_FULL/qualified based on overall quotas
+      }
 
       checkRequest.vendor_respondent_id = token;
 
       const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
-      console.log(">>>>> the value of the CHECK QUOTA RESULT is : ", result);
+      console.log(">>>> CHECK QUOTA RESULT:", result);
       if (result.data?.qualified) {
         setRespondentId(result.data?.respondent_id ?? null);
         setIsQualified(true);
         setScreeningPhase(false);
         toast.success("You qualify for this survey!");
       } else {
-        // Redirect to terminated URL if available, otherwise use internal terminated page
         if (result.data?.status == "QUOTA_FULL") {
           router.push("/survey/terminated?reason=quota_full");
           return;
@@ -954,7 +1102,6 @@ export default function PublicSurveyPage() {
       }
     } catch (err: any) {
       console.error("Error checking qualification:", err);
-      // On error, allow user to proceed (fail open)
       setIsQualified(true);
       setScreeningPhase(false);
     } finally {
@@ -1186,6 +1333,7 @@ export default function PublicSurveyPage() {
       const response_id = result.data?.response?.id;
 
       if (result.data || response_id) {
+        console.log(">>>>>>> the value of the RESPONSE ID is : ", response_id);
         // If respondent went through quota checking, mark them as completed
         if (respondentId && surveyIdForQuota && response_id) {
           try {
@@ -1972,6 +2120,9 @@ export default function PublicSurveyPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Display attached media */}
+            <QuestionMediaDisplay media={getQuestionMedia(currentQuestion)} />
+
             {renderQuestionInput(currentQuestion)}
 
             {/* Navigation Buttons */}

@@ -153,11 +153,12 @@ export default function GenerateSurvey() {
 
   // Quota-based audience state
   const [quotaAudience, setQuotaAudience] = useState<QuotaAudienceData>({
+    quotaEnabled: false, // Quota disabled by default
     ageQuotas: [],
     genderQuotas: [],
     locationQuotas: [],
     categoryQuotas: [], // Used for industry/category qualification
-    totalTarget: 100,
+    totalTarget: 0, // Default to 0, user must set when enabling quota
     completedUrl: "",
     terminatedUrl: "",
     quotaFullUrl: "",
@@ -203,7 +204,7 @@ export default function GenerateSurvey() {
       demoData.categories
     );
   }, []); // Add empty dependency array to prevent infinite re-renders
-  console.log(">>>>>>>>> the value of the CATEGORIES is  : ", categories);
+  // console.log(">>>>>>>>> the value of the CATEGORIES is  : ", categories);
 
   const {
     mutate: createQuestion,
@@ -315,19 +316,48 @@ export default function GenerateSurvey() {
           ) {
             // Map API questions to component format
             const mappedQuestions = questionsResponse.map(
-              (q: any, index: number) => ({
-                id: q.id || `q${Date.now()}_${index}`,
-                question_type: q.question_type || q.type || "TEXT",
-                question_text: q.question_text || q.question || "",
-                options: q.options || [],
-                rowOptions: q.rowOptions || [],
-                columnOptions: q.columnOptions || [],
-                required: q.required || false,
-                categoryId: q.categoryId || "",
-                order_index: q.order_index || index,
-                // description: q.description || "",
-                // placeholder: q.placeholder || "",
-              })
+              (q: any, index: number) => {
+                // Handle media from backend - could be array or single object
+                let mediaAsset = q.mediaAsset ?? null;
+                let mediaId = q.mediaId ?? null;
+
+                // If backend returns 'media' field (array or object), convert to mediaAsset format
+                if (q.media) {
+                  const mediaItem = Array.isArray(q.media)
+                    ? q.media[0]
+                    : q.media;
+                  if (mediaItem?.url) {
+                    mediaAsset = {
+                      type: (mediaItem.type || "IMAGE").toUpperCase() as
+                        | "TEXT"
+                        | "IMAGE"
+                        | "VIDEO"
+                        | "AUDIO",
+                      url: mediaItem.url,
+                      thumbnail_url: mediaItem.thumbnail_url,
+                      mediaId: mediaItem.id || mediaId,
+                      meta: mediaItem.meta,
+                    };
+                    mediaId = mediaItem.id || mediaId;
+                  }
+                }
+
+                return {
+                  id: q.id ?? `q${Date.now()}_${index}`,
+                  surveyId: q.surveyId,
+                  question_type: q.question_type ?? q.type ?? "TEXT",
+                  question_text: q.question_text ?? q.question ?? "",
+                  options: q.options ?? [],
+                  rowOptions: q.rowOptions ?? [],
+                  columnOptions: q.columnOptions ?? [],
+                  required: q.required ?? false,
+                  categoryId: q.categoryId ?? "",
+                  order_index: q.order_index ?? index,
+                  mediaId,
+                  mediaAsset,
+                  description: q.description ?? "",
+                };
+              }
             );
 
             // console.log("Setting questions:", mappedQuestions);
@@ -388,7 +418,7 @@ export default function GenerateSurvey() {
         // Load quota configuration if exists
         try {
           const quotaResponse = await quotaApi.getQuota(editSurveyId);
-          console.log("Quota response:", quotaResponse);
+          // console.log("Quota response:", quotaResponse);
 
           // Handle both wrapped (quotaResponse.data) and direct response formats
           const quotaConfig = (quotaResponse?.data ||
@@ -402,7 +432,7 @@ export default function GenerateSurvey() {
               quotaConfig.category_quotas ||
               quotaConfig.total_target)
           ) {
-            console.log("Loading quota config:", quotaConfig);
+            // console.log("Loading quota config:", quotaConfig);
 
             // Merge saved age quotas with ALL default age groups
             // This ensures all options are available for screening
@@ -425,7 +455,9 @@ export default function GenerateSurvey() {
               return savedQuota || { ...defaultQuota };
             });
 
+            // If quota data exists in DB, it means quota was enabled
             const loadedQuotaData: QuotaAudienceData = {
+              quotaEnabled: true, // Quota was enabled since data exists
               ageQuotas: mergedAgeQuotas,
               genderQuotas: mergedGenderQuotas,
               locationQuotas: quotaConfig.location_quotas || [],
@@ -987,6 +1019,15 @@ export default function GenerateSurvey() {
         return;
       }
 
+      // console.log(
+      //   ">>>>>>> the value of the ORIGINAL QUESTIONS STEP-2 is : ",
+      //   originalQuestions
+      // );
+      // console.log(
+      //   ">>>>>>> the value of the CURRENT QUESTIONS STEP-2 is : ",
+      //   questions
+      // );
+
       // Persist only on continue: create/update/delete in a single pass
       const updated = await syncSurveyQuestions(
         createdSurvey.id,
@@ -1018,6 +1059,23 @@ export default function GenerateSurvey() {
         return;
       }
 
+      // If quota is not enabled, skip quota saving and proceed
+      if (!quotaAudience.quotaEnabled) {
+        console.log("Quota is disabled, skipping quota configuration");
+        setStep4Loading(false);
+        nextStep();
+        return;
+      }
+
+      // Validate total target when quota is enabled
+      if (!quotaAudience.totalTarget || quotaAudience.totalTarget <= 0) {
+        toast.error(
+          "Total Responses Required is mandatory when quota is enabled"
+        );
+        setStep4Loading(false);
+        return;
+      }
+
       // Helper function to check if a field has changed
       const hasFieldChanged = (current: any, original: any): boolean => {
         return JSON.stringify(current) !== JSON.stringify(original);
@@ -1035,17 +1093,13 @@ export default function GenerateSurvey() {
           (q.target_percentage && q.target_percentage > 0)
       );
 
-      // Check if any quotas or screening questions are configured
-      const hasQuotas =
-        activeAgeQuotas.length > 0 ||
-        activeGenderQuotas.length > 0 ||
-        quotaAudience.locationQuotas.length > 0 ||
-        quotaAudience.categoryQuotas.length > 0 ||
-        quotaAudience.screeningQuestions.length > 0;
-
       // Check if there are any changes from original
       const hasChanges =
         !originalQuotaAudience ||
+        hasFieldChanged(
+          quotaAudience.quotaEnabled,
+          originalQuotaAudience.quotaEnabled
+        ) ||
         hasFieldChanged(
           activeAgeQuotas,
           originalQuotaAudience.ageQuotas?.filter(
@@ -1091,9 +1145,10 @@ export default function GenerateSurvey() {
           originalQuotaAudience.screeningQuestions || []
         );
 
-      console.log("Has quotas:", hasQuotas, "Has changes:", hasChanges);
+      console.log("Quota enabled, Has changes:", hasChanges);
 
-      if (hasQuotas && hasChanges) {
+      // Save quota if enabled and there are changes
+      if (hasChanges) {
         try {
           // Build the quota config object with only the changed fields
           const quotaConfigData: Partial<QuotaConfig> = {};
@@ -1249,7 +1304,7 @@ export default function GenerateSurvey() {
             "Quota configuration could not be saved, but you can continue."
           );
         }
-      } else if (!hasChanges && hasQuotas) {
+      } else if (!hasChanges) {
         console.log(
           "No changes detected in quota configuration, skipping save"
         );
@@ -1864,11 +1919,7 @@ export default function GenerateSurvey() {
                   Back
                 </Button>
                 <Button onClick={nextStep}>
-                  {surveySettings.survey_send_by == "NONE" ? (
-                    <>Continue to Preview & Publish</>
-                  ) : (
-                    <>Continue to Audience</>
-                  )}
+                  Continue to Audience
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
