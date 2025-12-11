@@ -849,15 +849,18 @@ export default function PublicSurveyPage() {
         }
 
         const surveyId = result.data.surveyId;
+        const surveyData = result.data;
+        console.log(">>>> the value of the SURVEY DATA is : ", surveyData);
+
         setSurveyIdForQuota(surveyId);
 
-        // Step 2: Load survey and questions in parallel
-        const [surveyData, questionsResponse] = await Promise.all([
-          surveyApi.getSurvey(surveyId),
-          questionApi.getQuestions(surveyId),
-        ]);
-
-        console.log("Questions response:", questionsResponse);
+        // // Step 2: Load survey and questions in parallel
+        // const [surveyData, questionsResponse] = await Promise.all([
+        //   surveyApi.getSurvey(surveyId),
+        //   questionApi.getQuestions(surveyId),
+        // ]);
+        // console.log("Survey data:", surveyData);
+        // console.log("Questions response:", questionsResponse);
 
         // Fetch quota config for screening questions
         try {
@@ -891,13 +894,9 @@ export default function PublicSurveyPage() {
           setIsQualified(true);
         }
 
-        if (
-          questionsResponse.data &&
-          typeof questionsResponse.data === "object"
-        ) {
-          // Convert the keyed object into an array
-          const questionsArray = Object.values(questionsResponse.data);
-          console.log("Converted Questions Array:", questionsArray);
+        const questionsArray = surveyData.survey.questions;
+        if (questionsArray.length > 0) {
+          console.log("Questions Array:", questionsArray);
 
           // Sort the questions
           const sortedQuestions = questionsArray.sort(

@@ -1981,8 +1981,7 @@ export default function GenerateSurvey() {
                   Preview & Publish Survey
                 </h2>
                 <p className="text-slate-500">
-                  Review your survey before publishing it to{" "}
-                  {audience.targetCount.toLocaleString()} respondents.
+                  Review your survey before publishing.
                 </p>
               </div>
 
