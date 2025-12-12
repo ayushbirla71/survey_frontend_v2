@@ -1,6 +1,27 @@
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
+/**
+ * Export Survey Analytics to Excel
+ *
+ * Updated to support new question types and API response format (2025-11-29)
+ *
+ * Supported Question Types:
+ * - Text Input: "short answer", "paragraph", "number"
+ * - Choice: "multiple choice", "checkboxes", "dropdown"
+ * - Scale: "linear scale", "rating", "nps"
+ * - Grid: "multi-choice grid", "checkbox grid"
+ * - Date/Time: "date", "time"
+ * - File: "file upload"
+ *
+ * Special Handling:
+ * - Number: Exports average, min, median, max statistics
+ * - NPS: Exports NPS score, promoters/passives/detractors percentages
+ * - Overall NPS Score: Average of all NPS questions (in stats)
+ *
+ * See: EXPORT_ANALYTICS_FRONTEND_GUIDE.md for full documentation
+ */
+
 export const exportResponsesToExcel = (
   surveyTitle: string,
   questionResults: any[],
@@ -13,20 +34,41 @@ export const exportResponsesToExcel = (
     ["Total Responses", stats.totalResponses],
     ["Completion Rate (%)", stats.completionRate],
     ["Average Time (mins)", stats.avgTime],
-    ["NPS Score", stats.npsScore],
+    ["Overall NPS Score", stats.npsScore || "N/A"],
     [],
     ["Question", "Type", "Responses", "Stats"],
   ];
 
   questionResults.forEach((q) => {
-    if (q.type === "rating") {
+    // Rating and Linear Scale types
+    if (q.type === "rating" || q.type === "linear scale") {
       analyticsSheetData.push([
         q.question,
         q.type,
         q.responses,
         `Avg: ${q.averageRating}`,
       ]);
-    } else if (q.type === "multiple_choice") {
+    }
+    // NPS type - with detailed breakdown
+    else if (q.type === "nps") {
+      const npsDetails = q.data
+        ? `NPS: ${q.npsScore} | Promoters: ${q.data.promoters}% | Passives: ${q.data.passives}% | Detractors: ${q.data.detractors}%`
+        : `NPS: ${q.npsScore}`;
+      analyticsSheetData.push([q.question, q.type, q.responses, npsDetails]);
+    }
+    // Number type - with statistics
+    else if (q.type === "number") {
+      const numberStats = q.data
+        ? `Avg: ${q.average} | Min: ${q.data.min} | Median: ${q.data.median} | Max: ${q.data.max}`
+        : `Avg: ${q.average}`;
+      analyticsSheetData.push([q.question, q.type, q.responses, numberStats]);
+    }
+    // Choice types: multiple choice, checkboxes, dropdown
+    else if (
+      q.type === "multiple choice" ||
+      q.type === "checkboxes" ||
+      q.type === "dropdown"
+    ) {
       const ans = q.data.map(
         (o: any) => `${o.option}: ${o.count} (${o.percentage}%)`
       );
@@ -36,14 +78,27 @@ export const exportResponsesToExcel = (
         q.responses,
         ans.join(" | "),
       ]);
-    } else if (q.type === "grid") {
+    }
+    // Grid types: multi-choice grid, checkbox grid
+    else if (q.type === "multi-choice grid" || q.type === "checkbox grid") {
       analyticsSheetData.push([
         q.question,
         q.type,
         q.responses,
         "[Grid results in next sheet]",
       ]);
-    } else {
+    }
+    // Text types: short answer, paragraph
+    else if (q.type === "short answer" || q.type === "paragraph") {
+      analyticsSheetData.push([
+        q.question,
+        q.type,
+        q.responses,
+        "[Text responses]",
+      ]);
+    }
+    // Other types (date, time, file upload)
+    else {
       analyticsSheetData.push([q.question, q.type, q.responses, ""]);
     }
   });
@@ -59,17 +114,35 @@ export const exportResponsesToExcel = (
   let qIndex = 1;
 
   questionResults.forEach((q) => {
-    if (["text", "single_choice", "rating"].includes(q.type)) {
+    // Text types: short answer, paragraph, number
+    // Rating types: rating, linear scale, nps
+    // Choice types: multiple choice, dropdown
+    if (
+      [
+        "short answer",
+        "paragraph",
+        "number",
+        "rating",
+        "linear scale",
+        "nps",
+        "multiple choice",
+        "dropdown",
+      ].includes(q.type)
+    ) {
       const key = `q${qIndex}`;
       columnKeys.push(key);
       ioHeaders.push(`Q${qIndex}\n${q.question}`);
-    } else if (q.type === "multiple_choice") {
+    }
+    // Checkboxes type - one column per option
+    else if (q.type === "checkboxes") {
       q.data.forEach((opt: any, i: number) => {
         const key = `q${qIndex}_${i + 1}`;
         columnKeys.push(key);
         ioHeaders.push(`Q${qIndex}_${i + 1}\n${q.question} - ${opt.option}`);
       });
-    } else if (q.type === "grid") {
+    }
+    // Grid types: multi-choice grid, checkbox grid
+    else if (q.type === "multi-choice grid" || q.type === "checkbox grid") {
       q.data.forEach((row: any, r: number) => {
         row.cells.forEach((cell: any, c: number) => {
           const key = `q${qIndex}r${r + 1}c${c + 1}`;
@@ -96,17 +169,35 @@ export const exportResponsesToExcel = (
       let qi = 1;
 
       questionResults.forEach((q) => {
-        if (["text", "single_choice", "rating"].includes(q.type)) {
+        // Text types: short answer, paragraph, number
+        // Rating types: rating, linear scale, nps
+        // Choice types: multiple choice, dropdown
+        if (
+          [
+            "short answer",
+            "paragraph",
+            "number",
+            "rating",
+            "linear scale",
+            "nps",
+            "multiple choice",
+            "dropdown",
+          ].includes(q.type)
+        ) {
           row.push(answerMap.get(q.question) ?? "");
-        } else if (q.type === "multiple_choice") {
-          const ans = answerMap.get(q.question) || "";
+        }
+        // Checkboxes type - one column per option (1/0)
+        else if (q.type === "checkboxes") {
+          const ans = (answerMap.get(q.question) || "") as string;
           const selected = ans.split(",").map((s: any) => s.trim());
 
           q.data.forEach((opt: any) => {
             row.push(selected.includes(opt.option) ? "1" : "0");
           });
-        } else if (q.type === "grid") {
-          const ans = answerMap.get(q.question) || "";
+        }
+        // Grid types: multi-choice grid, checkbox grid
+        else if (q.type === "multi-choice grid" || q.type === "checkbox grid") {
+          const ans = (answerMap.get(q.question) || "") as string;
           const pairs = ans.split(";").map((s: string) => s.trim());
 
           q.data.forEach((rowItem: any) =>

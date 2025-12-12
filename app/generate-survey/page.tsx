@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,6 +38,11 @@ import {
 import SurveyPreview from "@/components/survey-preview";
 import EnhancedQuestionEditor from "@/components/enhanced-question-editor";
 import AudienceSelector from "@/components/audience-selector";
+import QuotaAudienceSelector, {
+  QuotaAudienceData,
+  DEFAULT_AGE_GROUPS,
+  DEFAULT_GENDERS,
+} from "@/components/quota-audience-selector";
 import Link from "next/link";
 import CodeView from "@/components/code-view";
 import { generateSurveyHtml } from "@/lib/survey-generator";
@@ -49,6 +55,12 @@ import {
   apiWithFallback,
   demoData,
   shareApi,
+  quotaApi,
+  AgeQuota,
+  GenderQuota,
+  LocationQuota,
+  ScreeningQuestion,
+  QuotaConfig,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
@@ -76,6 +88,12 @@ type QuestionWithOptions = {
 
 type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
 
+interface PublicSurveySettings {
+  isResultPublic: boolean;
+  autoReloadOnSubmit: boolean;
+  requireTermsAndConditions: boolean;
+}
+
 interface SurveySettings {
   flow_type: "STATIC";
   survey_send_by: SurveySendByType;
@@ -83,6 +101,8 @@ interface SurveySettings {
   showProgressBar: boolean;
   shuffleQuestions: boolean;
   allowMultipleSubmissions: boolean;
+  // Public survey advanced settings
+  publicSettings?: PublicSurveySettings;
 }
 
 interface ShareToken {
@@ -129,6 +149,11 @@ export default function GenerateSurvey() {
     showProgressBar: true,
     shuffleQuestions: false,
     allowMultipleSubmissions: false,
+    publicSettings: {
+      isResultPublic: false,
+      autoReloadOnSubmit: false,
+      requireTermsAndConditions: true,
+    },
   });
   const [audience, setAudience] = useState({
     ageGroups: [],
@@ -139,6 +164,22 @@ export default function GenerateSurvey() {
     targetCount: 1,
     dataSource: "default",
   });
+
+  // Quota-based audience state
+  const [quotaAudience, setQuotaAudience] = useState<QuotaAudienceData>({
+    quotaEnabled: false, // Quota disabled by default
+    ageQuotas: [],
+    genderQuotas: [],
+    locationQuotas: [],
+    categoryQuotas: [], // Used for industry/category qualification
+    totalTarget: 0, // Default to 0, user must set when enabling quota
+    completedUrl: "",
+    terminatedUrl: "",
+    quotaFullUrl: "",
+    dataSource: "default",
+    screeningQuestions: [],
+  });
+
   const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
@@ -159,8 +200,12 @@ export default function GenerateSurvey() {
   // Step-wise loading states
   const [step1Loading, setStep1Loading] = useState(false);
   const [step2Loading, setStep2Loading] = useState(false);
+  const [step4Loading, setStep4Loading] = useState(false);
   const [publishLoadingOverlay, setPublishLoadingOverlay] = useState(false);
   const [excelData, setExcelData] = useState<ShareToken[] | null>(null);
+  const [quotaValidationError, setQuotaValidationError] = useState<
+    string | null
+  >(null);
 
   // API calls
   const {
@@ -173,6 +218,7 @@ export default function GenerateSurvey() {
       demoData.categories
     );
   }, []); // Add empty dependency array to prevent infinite re-renders
+  // console.log(">>>>>>>>> the value of the CATEGORIES is  : ", categories);
 
   const {
     mutate: createQuestion,
@@ -267,6 +313,12 @@ export default function GenerateSurvey() {
           showProgressBar: true,
           shuffleQuestions: false,
           allowMultipleSubmissions: false,
+          // Load public settings from backend if available
+          publicSettings: (survey as any).settings || {
+            isResultPublic: false,
+            autoReloadOnSubmit: false,
+            requireTermsAndConditions: true,
+          },
         });
 
         // Load questions for the survey
@@ -284,19 +336,48 @@ export default function GenerateSurvey() {
           ) {
             // Map API questions to component format
             const mappedQuestions = questionsResponse.map(
-              (q: any, index: number) => ({
-                id: q.id || `q${Date.now()}_${index}`,
-                question_type: q.question_type || q.type || "TEXT",
-                question_text: q.question_text || q.question || "",
-                options: q.options || [],
-                rowOptions: q.rowOptions || [],
-                columnOptions: q.columnOptions || [],
-                required: q.required || false,
-                categoryId: q.categoryId || "",
-                order_index: q.order_index || index,
-                // description: q.description || "",
-                // placeholder: q.placeholder || "",
-              })
+              (q: any, index: number) => {
+                // Handle media from backend - could be array or single object
+                let mediaAsset = q.mediaAsset ?? null;
+                let mediaId = q.mediaId ?? null;
+
+                // If backend returns 'media' field (array or object), convert to mediaAsset format
+                if (q.media) {
+                  const mediaItem = Array.isArray(q.media)
+                    ? q.media[0]
+                    : q.media;
+                  if (mediaItem?.url) {
+                    mediaAsset = {
+                      type: (mediaItem.type || "IMAGE").toUpperCase() as
+                        | "TEXT"
+                        | "IMAGE"
+                        | "VIDEO"
+                        | "AUDIO",
+                      url: mediaItem.url,
+                      thumbnail_url: mediaItem.thumbnail_url,
+                      mediaId: mediaItem.id || mediaId,
+                      meta: mediaItem.meta,
+                    };
+                    mediaId = mediaItem.id || mediaId;
+                  }
+                }
+
+                return {
+                  id: q.id ?? `q${Date.now()}_${index}`,
+                  surveyId: q.surveyId,
+                  question_type: q.question_type ?? q.type ?? "TEXT",
+                  question_text: q.question_text ?? q.question ?? "",
+                  options: q.options ?? [],
+                  rowOptions: q.rowOptions ?? [],
+                  columnOptions: q.columnOptions ?? [],
+                  required: q.required ?? false,
+                  categoryId: q.categoryId ?? "",
+                  order_index: q.order_index ?? index,
+                  mediaId,
+                  mediaAsset,
+                  description: q.description ?? "",
+                };
+              }
             );
 
             // console.log("Setting questions:", mappedQuestions);
@@ -353,6 +434,71 @@ export default function GenerateSurvey() {
           surveyCategoryId: survey.surveyCategoryId,
           autoGenerateQuestions: survey.autoGenerateQuestions,
         });
+
+        // Load quota configuration if exists
+        try {
+          const quotaResponse = await quotaApi.getQuota(editSurveyId);
+          // console.log("Quota response:", quotaResponse);
+
+          // Handle both wrapped (quotaResponse.data) and direct response formats
+          const quotaConfig = (quotaResponse?.data ||
+            quotaResponse) as QuotaConfig;
+
+          if (
+            quotaConfig &&
+            (quotaConfig.age_quotas ||
+              quotaConfig.gender_quotas ||
+              quotaConfig.location_quotas ||
+              quotaConfig.category_quotas ||
+              quotaConfig.total_target)
+          ) {
+            // console.log("Loading quota config:", quotaConfig);
+
+            // Merge saved age quotas with ALL default age groups
+            // This ensures all options are available for screening
+            const savedAgeQuotas = quotaConfig.age_quotas || [];
+            const mergedAgeQuotas = DEFAULT_AGE_GROUPS.map((defaultQuota) => {
+              const savedQuota = savedAgeQuotas.find(
+                (sq) =>
+                  sq.min_age === defaultQuota.min_age &&
+                  sq.max_age === defaultQuota.max_age
+              );
+              return savedQuota || { ...defaultQuota };
+            });
+
+            // Merge saved gender quotas with ALL default genders
+            const savedGenderQuotas = quotaConfig.gender_quotas || [];
+            const mergedGenderQuotas = DEFAULT_GENDERS.map((defaultQuota) => {
+              const savedQuota = savedGenderQuotas.find(
+                (sq) => sq.gender === defaultQuota.gender
+              );
+              return savedQuota || { ...defaultQuota };
+            });
+
+            // If quota data exists in DB, it means quota was enabled
+            const loadedQuotaData: QuotaAudienceData = {
+              quotaEnabled: true, // Quota was enabled since data exists
+              ageQuotas: mergedAgeQuotas,
+              genderQuotas: mergedGenderQuotas,
+              locationQuotas: quotaConfig.location_quotas || [],
+              categoryQuotas: quotaConfig.category_quotas || [],
+              totalTarget: quotaConfig.total_target || 100,
+              completedUrl: quotaConfig.completed_url || "",
+              terminatedUrl: quotaConfig.terminated_url || "",
+              quotaFullUrl: quotaConfig.quota_full_url || "",
+              dataSource: "default",
+              screeningQuestions: quotaConfig.screening_questions || [],
+            };
+            setQuotaAudience(loadedQuotaData);
+            // Store original quota data for change detection
+            setOriginalQuotaAudience(
+              JSON.parse(JSON.stringify(loadedQuotaData))
+            );
+          }
+        } catch (quotaError) {
+          console.warn("Could not load quota configuration:", quotaError);
+          // Continue without quota data - user can configure it manually
+        }
       } catch (error) {
         console.error("Error loading survey:", error);
         setLoadError("Failed to load survey data. Please try again.");
@@ -402,19 +548,26 @@ export default function GenerateSurvey() {
 
   const nextStep = async () => {
     if (step === 3) {
-      if (surveySettings.survey_send_by == "NONE") {
-        // Skip audience step and go directly to preview
-        setStep(5);
-        return;
-      } else {
-        const updateData = {
-          survey_send_by: surveySettings.survey_send_by,
-        };
-        await updateSurvey({
-          surveyId: createdSurvey.id,
-          surveyData: updateData,
-        });
+      // if (surveySettings.survey_send_by == "NONE") {
+      //   // Skip audience step and go directly to preview
+      //   setStep(4);
+      //   return;
+      // } else {
+      const updateData: any = {
+        survey_send_by: surveySettings.survey_send_by,
+      };
+      // Include public settings if survey is public
+      if (
+        surveySettings.survey_send_by === "NONE" &&
+        surveySettings.publicSettings
+      ) {
+        updateData.settings = surveySettings.publicSettings;
       }
+      await updateSurvey({
+        surveyId: createdSurvey.id,
+        surveyData: updateData,
+      });
+      // }
     }
     if (step === 4) {
       // Generate HTML when moving to the preview step
@@ -430,11 +583,11 @@ export default function GenerateSurvey() {
 
   const prevStep = () => {
     // Handle back navigation properly
-    if (step === 5 && surveySettings.survey_send_by === "NONE") {
-      // If on preview and survey_sent_by is NONE, go back to settings (step 3)
-      setStep(3);
-      return;
-    }
+    // if (step === 5 && surveySettings.survey_send_by === "NONE") {
+    //   // If on preview and survey_sent_by is NONE, go back to settings (step 3)
+    //   setStep(3);
+    //   return;
+    // }
     setStep(step - 1);
   };
 
@@ -444,6 +597,17 @@ export default function GenerateSurvey() {
 
   const handleAudienceUpdate = (updatedAudience: any) => {
     setAudience(updatedAudience);
+  };
+
+  // State to track original quota data for change detection
+  const [originalQuotaAudience, setOriginalQuotaAudience] =
+    useState<QuotaAudienceData | null>(null);
+
+  const handleQuotaAudienceUpdate = (
+    updatedQuotaAudience: QuotaAudienceData
+  ) => {
+    setQuotaAudience(updatedQuotaAudience);
+    // No auto-save - quota will be saved on "Continue to Preview" button click
   };
 
   const generatePublicLink = async () => {
@@ -571,6 +735,7 @@ export default function GenerateSurvey() {
       PHONE: "TEXT",
       URL: "TEXT",
       NUMBER: "TEXT",
+      NPS: "TEXT",
     };
     return typeMap[questionType] || "TEXT";
   };
@@ -738,13 +903,20 @@ export default function GenerateSurvey() {
         if (hasSurveyDataChanged()) {
           console.log("Changes detected, calling update API");
           // Update existing survey
-          const updateData = {
+          const updateData: any = {
             title: title,
             description: description,
             autoGenerateQuestions: autoGenerateQuestions,
             flow_type: surveySettings.flow_type,
             survey_send_by: surveySettings.survey_send_by,
           };
+          // Include public settings if survey is public
+          if (
+            surveySettings.survey_send_by === "NONE" &&
+            surveySettings.publicSettings
+          ) {
+            updateData.settings = surveySettings.publicSettings;
+          }
 
           const result: any = await updateSurvey({
             surveyId: editSurveyId!,
@@ -803,7 +975,7 @@ export default function GenerateSurvey() {
         // Move to next step regardless of whether update was made
         nextStep();
       } else {
-        const surveyData = {
+        const surveyData: any = {
           title: title,
           description: description,
           flow_type: surveySettings.flow_type,
@@ -811,6 +983,13 @@ export default function GenerateSurvey() {
           surveyCategoryId: surveyCategoryId,
           autoGenerateQuestions: autoGenerateQuestions,
         };
+        // Include public settings if survey is public
+        if (
+          surveySettings.survey_send_by === "NONE" &&
+          surveySettings.publicSettings
+        ) {
+          surveyData.settings = surveySettings.publicSettings;
+        }
         // Create new survey
         const result = await createSurvey(surveyData);
         // console.log("Create result:", result);
@@ -881,6 +1060,15 @@ export default function GenerateSurvey() {
         return;
       }
 
+      // console.log(
+      //   ">>>>>>> the value of the ORIGINAL QUESTIONS STEP-2 is : ",
+      //   originalQuestions
+      // );
+      // console.log(
+      //   ">>>>>>> the value of the CURRENT QUESTIONS STEP-2 is : ",
+      //   questions
+      // );
+
       // Persist only on continue: create/update/delete in a single pass
       const updated = await syncSurveyQuestions(
         createdSurvey.id,
@@ -901,6 +1089,275 @@ export default function GenerateSurvey() {
       toast.error(error.message || "Failed to save questions");
     } finally {
       setStep2Loading(false);
+    }
+  };
+
+  const handleStep4Continue = async () => {
+    setStep4Loading(true);
+    try {
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      // If quota is not enabled, skip quota saving and proceed
+      if (!quotaAudience.quotaEnabled) {
+        console.log("Quota is disabled, skipping quota configuration");
+        setStep4Loading(false);
+        nextStep();
+        return;
+      }
+
+      // Validate total target when quota is enabled
+      if (!quotaAudience.totalTarget || quotaAudience.totalTarget <= 0) {
+        toast.error(
+          "Total Responses Required is mandatory when quota is enabled"
+        );
+        setStep4Loading(false);
+        return;
+      }
+
+      // Helper function to check if a field has changed
+      const hasFieldChanged = (current: any, original: any): boolean => {
+        return JSON.stringify(current) !== JSON.stringify(original);
+      };
+
+      // Filter active quotas (with target > 0)
+      const activeAgeQuotas = quotaAudience.ageQuotas.filter(
+        (q) =>
+          (q.target_count && q.target_count > 0) ||
+          (q.target_percentage && q.target_percentage > 0)
+      );
+      const activeGenderQuotas = quotaAudience.genderQuotas.filter(
+        (q) =>
+          (q.target_count && q.target_count > 0) ||
+          (q.target_percentage && q.target_percentage > 0)
+      );
+
+      // Check if there are any changes from original
+      const hasChanges =
+        !originalQuotaAudience ||
+        hasFieldChanged(
+          quotaAudience.quotaEnabled,
+          originalQuotaAudience.quotaEnabled
+        ) ||
+        hasFieldChanged(
+          activeAgeQuotas,
+          originalQuotaAudience.ageQuotas?.filter(
+            (q) =>
+              (q.target_count && q.target_count > 0) ||
+              (q.target_percentage && q.target_percentage > 0)
+          ) || []
+        ) ||
+        hasFieldChanged(
+          activeGenderQuotas,
+          originalQuotaAudience.genderQuotas?.filter(
+            (q) =>
+              (q.target_count && q.target_count > 0) ||
+              (q.target_percentage && q.target_percentage > 0)
+          ) || []
+        ) ||
+        hasFieldChanged(
+          quotaAudience.locationQuotas,
+          originalQuotaAudience.locationQuotas || []
+        ) ||
+        hasFieldChanged(
+          quotaAudience.categoryQuotas,
+          originalQuotaAudience.categoryQuotas || []
+        ) ||
+        hasFieldChanged(
+          quotaAudience.totalTarget,
+          originalQuotaAudience.totalTarget
+        ) ||
+        hasFieldChanged(
+          quotaAudience.completedUrl,
+          originalQuotaAudience.completedUrl
+        ) ||
+        hasFieldChanged(
+          quotaAudience.terminatedUrl,
+          originalQuotaAudience.terminatedUrl
+        ) ||
+        hasFieldChanged(
+          quotaAudience.quotaFullUrl,
+          originalQuotaAudience.quotaFullUrl
+        ) ||
+        hasFieldChanged(
+          quotaAudience.screeningQuestions,
+          originalQuotaAudience.screeningQuestions || []
+        );
+
+      console.log("Quota enabled, Has changes:", hasChanges);
+
+      // Save quota if enabled and there are changes
+      if (hasChanges) {
+        try {
+          // Build the quota config object with only the changed fields
+          const quotaConfigData: Partial<QuotaConfig> = {};
+
+          // Always include these fields for proper update
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              activeAgeQuotas,
+              originalQuotaAudience.ageQuotas?.filter(
+                (q) =>
+                  (q.target_count && q.target_count > 0) ||
+                  (q.target_percentage && q.target_percentage > 0)
+              ) || []
+            )
+          ) {
+            quotaConfigData.age_quotas = activeAgeQuotas;
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              activeGenderQuotas,
+              originalQuotaAudience.genderQuotas?.filter(
+                (q) =>
+                  (q.target_count && q.target_count > 0) ||
+                  (q.target_percentage && q.target_percentage > 0)
+              ) || []
+            )
+          ) {
+            quotaConfigData.gender_quotas = activeGenderQuotas;
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.locationQuotas,
+              originalQuotaAudience.locationQuotas || []
+            )
+          ) {
+            quotaConfigData.location_quotas = quotaAudience.locationQuotas;
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.categoryQuotas,
+              originalQuotaAudience.categoryQuotas || []
+            )
+          ) {
+            // Only send required fields to backend (exclude categoryName and current_count)
+            quotaConfigData.category_quotas = quotaAudience.categoryQuotas.map(
+              (q) => ({
+                surveyCategoryId: q.surveyCategoryId,
+                quota_type: q.quota_type,
+                target_count: q.target_count,
+                target_percentage: q.target_percentage,
+              })
+            );
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.totalTarget,
+              originalQuotaAudience.totalTarget
+            )
+          ) {
+            quotaConfigData.total_target = quotaAudience.totalTarget;
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.completedUrl,
+              originalQuotaAudience.completedUrl
+            )
+          ) {
+            quotaConfigData.completed_url = quotaAudience.completedUrl || "";
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.terminatedUrl,
+              originalQuotaAudience.terminatedUrl
+            )
+          ) {
+            quotaConfigData.terminated_url = quotaAudience.terminatedUrl || "";
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.quotaFullUrl,
+              originalQuotaAudience.quotaFullUrl
+            )
+          ) {
+            quotaConfigData.quota_full_url = quotaAudience.quotaFullUrl || "";
+          }
+
+          if (
+            !originalQuotaAudience ||
+            hasFieldChanged(
+              quotaAudience.screeningQuestions,
+              originalQuotaAudience.screeningQuestions || []
+            )
+          ) {
+            quotaConfigData.screening_questions =
+              quotaAudience.screeningQuestions;
+          }
+
+          console.log("Saving changed quota fields:", quotaConfigData);
+
+          // Try to update existing quota, if fails create new one
+          try {
+            await quotaApi.updateQuota(createdSurvey.id, quotaConfigData);
+            console.log("Quota config updated successfully");
+          } catch (updateErr: any) {
+            // If update fails (likely 404), try creating with full data
+            console.log(
+              "Update failed, trying to create quota config:",
+              updateErr
+            );
+            // Only send required fields for category_quotas (exclude categoryName and current_count)
+            const fullQuotaData = {
+              age_quotas: activeAgeQuotas,
+              gender_quotas: activeGenderQuotas,
+              location_quotas: quotaAudience.locationQuotas,
+              category_quotas: quotaAudience.categoryQuotas.map((q) => ({
+                surveyCategoryId: q.surveyCategoryId,
+                quota_type: q.quota_type,
+                target_count: q.target_count,
+                target_percentage: q.target_percentage,
+              })),
+              total_target: quotaAudience.totalTarget,
+              completed_url: quotaAudience.completedUrl || "",
+              terminated_url: quotaAudience.terminatedUrl || "",
+              quota_full_url: quotaAudience.quotaFullUrl || "",
+              screening_questions: quotaAudience.screeningQuestions,
+            };
+            await quotaApi.createQuota(createdSurvey.id, fullQuotaData);
+            console.log("Quota config created successfully");
+          }
+
+          // Update original quota data after successful save
+          setOriginalQuotaAudience(JSON.parse(JSON.stringify(quotaAudience)));
+          toast.success("Quota configuration saved successfully");
+        } catch (quotaErr: any) {
+          console.error("Error saving quota config:", quotaErr);
+          // Don't block navigation if quota save fails, just warn
+          toast.warning(
+            "Quota configuration could not be saved, but you can continue."
+          );
+        }
+      } else if (!hasChanges) {
+        console.log(
+          "No changes detected in quota configuration, skipping save"
+        );
+      }
+
+      // Move to next step (Preview & Publish)
+      nextStep();
+    } catch (error: any) {
+      console.error("Error in step 4:", error);
+      toast.error(error.message || "Failed to process quota configuration");
+    } finally {
+      setStep4Loading(false);
     }
   };
 
@@ -1436,6 +1893,127 @@ export default function GenerateSurvey() {
                   </div>
                 </div>
 
+                {/* Advanced Options for Public Survey */}
+                {surveySettings.survey_send_by === "NONE" && (
+                  <div className="mt-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                      Advanced Options (Public Survey)
+                    </h3>
+                    <div className="space-y-4">
+                      {/* Survey Results Public Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="isResultPublic"
+                            className="text-sm font-medium"
+                          >
+                            Survey Results are Public
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Anyone with the link can view survey results
+                          </p>
+                        </div>
+                        <Switch
+                          id="isResultPublic"
+                          checked={
+                            surveySettings.publicSettings?.isResultPublic ??
+                            false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic: checked,
+                                autoReloadOnSubmit:
+                                  prev.publicSettings?.autoReloadOnSubmit ??
+                                  false,
+                                requireTermsAndConditions:
+                                  prev.publicSettings
+                                    ?.requireTermsAndConditions ?? false,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      {/* Auto Reload on Submit Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="autoReloadOnSubmit"
+                            className="text-sm font-medium"
+                          >
+                            Auto Reload After Submission
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Survey URL automatically reloads when user submits
+                            the response
+                          </p>
+                        </div>
+                        <Switch
+                          id="autoReloadOnSubmit"
+                          checked={
+                            surveySettings.publicSettings?.autoReloadOnSubmit ??
+                            false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic:
+                                  prev.publicSettings?.isResultPublic ?? false,
+                                autoReloadOnSubmit: checked,
+                                requireTermsAndConditions:
+                                  prev.publicSettings
+                                    ?.requireTermsAndConditions ?? false,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      {/* Terms and Conditions Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="requireTermsAndConditions"
+                            className="text-sm font-medium"
+                          >
+                            Require Terms & Conditions
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Show terms and conditions page before starting the
+                            survey
+                          </p>
+                        </div>
+                        <Switch
+                          id="requireTermsAndConditions"
+                          checked={
+                            surveySettings.publicSettings
+                              ?.requireTermsAndConditions ?? false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic:
+                                  prev.publicSettings?.isResultPublic ?? false,
+                                autoReloadOnSubmit:
+                                  prev.publicSettings?.autoReloadOnSubmit ??
+                                  false,
+                                requireTermsAndConditions: checked,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* <div className="space-y-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -1503,11 +2081,7 @@ export default function GenerateSurvey() {
                   Back
                 </Button>
                 <Button onClick={nextStep}>
-                  {surveySettings.survey_send_by == "NONE" ? (
-                    <>Continue to Preview & Publish</>
-                  ) : (
-                    <>Continue to Audience</>
-                  )}
+                  Continue to Audience
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -1517,22 +2091,45 @@ export default function GenerateSurvey() {
           {/* Step 4: Target Audience */}
           {step === 4 && (
             <div className="p-8">
-              <AudienceSelector
+              <QuotaAudienceSelector
                 createdSurvey={createdSurvey}
                 surveySettings={surveySettings}
-                audience={audience}
-                onAudienceUpdate={handleAudienceUpdate}
+                quotaAudience={quotaAudience}
+                onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
                 onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                categories={categories || []}
+                onValidationError={setQuotaValidationError}
+                isEditMode={isEditMode}
               />
+
+              {quotaValidationError && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5" />
+                  {quotaValidationError}
+                </div>
+              )}
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
                 <Button variant="outline" onClick={prevStep}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
-                <Button onClick={nextStep}>
-                  Continue to Preview
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button
+                  onClick={handleStep4Continue}
+                  disabled={!!quotaValidationError || step4Loading}
+                  title={quotaValidationError || undefined}
+                >
+                  {step4Loading ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      Continue to Preview & Publish
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -1546,8 +2143,7 @@ export default function GenerateSurvey() {
                   Preview & Publish Survey
                 </h2>
                 <p className="text-slate-500">
-                  Review your survey before publishing it to{" "}
-                  {audience.targetCount.toLocaleString()} respondents.
+                  Review your survey before publishing.
                 </p>
               </div>
 

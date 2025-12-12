@@ -35,6 +35,10 @@ import {
   categoriesApi,
   responseApi,
   shareApi,
+  quotaApi,
+  QuotaConfig,
+  ScreeningQuestion,
+  QuotaCheckRequest,
 } from "@/lib/api";
 
 // Animated Start Button Component
@@ -193,12 +197,178 @@ function TermsAndConditions() {
     </div>
   );
 }
+import {
+  DEFAULT_AGE_GROUPS,
+  DEFAULT_GENDERS,
+  GENDER_LABELS,
+} from "@/components/quota-audience-selector";
+
+// Helper function to regenerate screening questions with ALL options
+// ALWAYS shows all available options regardless of which ones have quotas set
+// Backend will check if selected option qualifies
+const regenerateScreeningQuestionsWithAllOptions = (
+  quotaConfig: QuotaConfig
+): ScreeningQuestion[] => {
+  const questions: ScreeningQuestion[] = [];
+  const savedQuestions = quotaConfig.screening_questions || [];
+
+  // Check if there are any active age quotas
+  const hasActiveAgeQuotas = (quotaConfig.age_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveAgeQuotas) {
+    // Get custom question text if saved, otherwise use default
+    const savedAgeQuestion = savedQuestions.find((sq) => sq.type === "age");
+    // ALWAYS use DEFAULT_AGE_GROUPS to show ALL age options
+    // This ensures proper screening - user can select any age group
+    // Backend will check if their selection qualifies
+    questions.push({
+      id: "screening_age",
+      type: "age",
+      question_text:
+        savedAgeQuestion?.question_text || "What is your age group?",
+      options: DEFAULT_AGE_GROUPS.map((q, idx) => ({
+        id: `age_option_${idx}`,
+        label: q.max_age >= 100 ? `${q.min_age}+` : `${q.min_age}-${q.max_age}`,
+        value: `${q.min_age}-${q.max_age}`,
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any active gender quotas
+  const hasActiveGenderQuotas = (quotaConfig.gender_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveGenderQuotas) {
+    const savedGenderQuestion = savedQuestions.find(
+      (sq) => sq.type === "gender"
+    );
+    // ALWAYS use DEFAULT_GENDERS to show ALL gender options
+    // This ensures proper screening - user can select any gender
+    // Backend will check if their selection qualifies
+    questions.push({
+      id: "screening_gender",
+      type: "gender",
+      question_text:
+        savedGenderQuestion?.question_text || "What is your gender?",
+      options: DEFAULT_GENDERS.map((q, idx) => ({
+        id: `gender_option_${idx}`,
+        label: GENDER_LABELS[q.gender] || q.gender,
+        value: q.gender,
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any active location quotas
+  const hasActiveLocationQuotas = (quotaConfig.location_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
+  );
+
+  if (hasActiveLocationQuotas && quotaConfig.location_quotas) {
+    const savedLocationQuestion = savedQuestions.find(
+      (sq) => sq.type === "location"
+    );
+    questions.push({
+      id: "screening_location",
+      type: "location",
+      question_text:
+        savedLocationQuestion?.question_text || "Where are you located?",
+      options: quotaConfig.location_quotas.map((q, idx) => ({
+        id: `location_option_${idx}`,
+        label:
+          [q.city, q.state, q.country].filter(Boolean).join(", ") || "Unknown",
+        value: JSON.stringify({
+          country: q.country,
+          state: q.state,
+          city: q.city,
+        }),
+      })),
+      required: true,
+    });
+  }
+
+  // Check if there are any category quotas
+  const activeCategoryQuotas = (quotaConfig.category_quotas || []).filter(
+    (q) => q.surveyCategoryId
+  );
+
+  if (activeCategoryQuotas.length > 0) {
+    const savedCategoryQuestion = savedQuestions.find(
+      (sq) => sq.type === "category"
+    );
+    questions.push({
+      id: "screening_category",
+      type: "category",
+      question_text:
+        savedCategoryQuestion?.question_text ||
+        "Which industry do you work in?",
+      options: activeCategoryQuotas.map((q, idx) => ({
+        id: `category_option_${idx}`,
+        label: q.categoryName || q.surveyCategoryId,
+        value: q.surveyCategoryId,
+      })),
+      required: true,
+    });
+  }
+
+  return questions;
+};
+
+interface QuestionMedia {
+  id?: string;
+  url: string;
+  type: string;
+  thumbnail_url?: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+interface OptionMedia {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+interface QuestionOption {
+  id?: string;
+  text?: string;
+  mediaId?: string | null;
+  mediaAsset?: OptionMedia | null;
+  // Scale properties
+  rangeFrom?: number | null;
+  rangeTo?: number | null;
+  fromLabel?: string | null;
+  toLabel?: string | null;
+  icon?: string | null;
+  // Grid properties
+  rowOptions?: { text?: string | null; id?: string }[];
+  columnOptions?: { text?: string | null; id?: string }[];
+  rowQuestionOptionId?: string | null;
+  columnQuestionOptionId?: string | null;
+}
 
 interface Question {
   id: string;
   question_text: string;
   question_type: string;
-  options: any[];
+  options: QuestionOption[];
   required: boolean;
   order_index: number;
   categoryId?: string;
@@ -207,6 +377,7 @@ interface Question {
   rowOptions?: any[];
   columnOptions?: any[];
   allowMultipleInGrid?: boolean;
+  mediaAsset?: QuestionMedia[] | QuestionMedia | null;
 }
 
 interface Survey {
@@ -214,11 +385,93 @@ interface Survey {
   title: string;
   description?: string;
   questions: Question[];
-  settings?: {
+  settings: {
     showProgressBar?: boolean;
     shuffleQuestions?: boolean;
     isAnonymous?: boolean;
+    isResultPublic: boolean;
+    autoReloadOnSubmit: boolean;
+    requireTermsAndConditions: boolean;
   };
+}
+
+// Helper to extract media from question (handles array or single object)
+function getQuestionMedia(question: Question): QuestionMedia | null {
+  if (!question.mediaAsset) return null;
+  if (Array.isArray(question.mediaAsset)) {
+    return question.mediaAsset[0] || null;
+  }
+  return question.mediaAsset;
+}
+
+// Component to render media preview
+function QuestionMediaDisplay({ media }: { media: QuestionMedia | null }) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mb-4 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[400px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[400px] mx-auto"
+        >
+          Your browser does not support the video tag.
+        </video>
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-4">
+          <audio src={media.url} controls className="w-full">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Component to render option media preview (smaller version)
+function OptionMediaDisplay({
+  media,
+}: {
+  media: OptionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[200px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[100px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[100px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 type GKind =
@@ -232,7 +485,9 @@ type GKind =
   | "multi-choice grid"
   | "checkbox grid"
   | "date"
-  | "time";
+  | "time"
+  | "number"
+  | "nps";
 
 type KindsMap = Record<string, GKind>;
 
@@ -512,6 +767,8 @@ function normKindStr(s?: string): GKind | null {
   if (k === "checkboxgrid" || k === "gridcheckbox") return "checkbox grid";
   if (k === "date") return "date";
   if (k === "time") return "time";
+  if (k === "number") return "number";
+  if (k === "nps" || k === "netpromoterscore") return "nps";
   return null;
 }
 
@@ -590,6 +847,24 @@ export default function PublicSurveyPage() {
   // Ref to track if data loading has started
   const dataLoadingStartedRef = useRef(false);
 
+  // Screening questions state
+  const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
+  const [screeningQuestions, setScreeningQuestions] = useState<
+    ScreeningQuestion[]
+  >([]);
+  const [screeningAnswers, setScreeningAnswers] = useState<
+    Record<string, string>
+  >({});
+  const [currentScreeningIndex, setCurrentScreeningIndex] = useState(0);
+  const [screeningPhase, setScreeningPhase] = useState(true); // Start with screening
+  const [isQualified, setIsQualified] = useState<boolean | null>(null);
+  const [checkingQualification, setCheckingQualification] = useState(false);
+  const [surveyIdForQuota, setSurveyIdForQuota] = useState<string | null>(null);
+  const [respondentId, setRespondentId] = useState<string | null>(null);
+  const [shouldAutoRestart, setShouldAutoRestart] = useState(false);
+
+  const hasScreeningQuestions = screeningQuestions.length > 0;
+
   // Extract category IDs from questions
   const categoryIds = useMemo(() => {
     if (!survey) return [];
@@ -641,22 +916,57 @@ export default function PublicSurveyPage() {
         }
 
         const surveyId = result.data.surveyId;
+        const surveyData = result.data;
+        console.log(">>>> the value of the SURVEY DATA is : ", surveyData);
+        if (surveyData.survey.settings?.autoReloadOnSubmit) {
+          setShouldAutoRestart(true);
+        }
 
-        // Step 2: Load survey and questions in parallel
-        const [surveyData, questionsResponse] = await Promise.all([
-          surveyApi.getSurvey(surveyId),
-          questionApi.getQuestions(surveyId),
-        ]);
+        setSurveyIdForQuota(surveyId);
 
-        console.log("Questions response:", questionsResponse);
+        // // Step 2: Load survey and questions in parallel
+        // const [surveyData, questionsResponse] = await Promise.all([
+        //   surveyApi.getSurvey(surveyId),
+        //   questionApi.getQuestions(surveyId),
+        // ]);
+        // console.log("Survey data:", surveyData);
+        // console.log("Questions response:", questionsResponse);
 
-        if (
-          questionsResponse.data &&
-          typeof questionsResponse.data === "object"
-        ) {
-          // Convert the keyed object into an array
-          const questionsArray = Object.values(questionsResponse.data);
-          console.log("Converted Questions Array:", questionsArray);
+        // Fetch quota config for screening questions
+        try {
+          const quotaResponse = await quotaApi.getQuota(surveyId);
+          if (quotaResponse.data) {
+            setQuotaConfig(quotaResponse.data);
+            // Regenerate screening questions with ALL options (not just qualifying ones)
+            // This ensures proper screening - users who select non-qualifying options will be filtered out
+            const regeneratedQuestions =
+              regenerateScreeningQuestionsWithAllOptions(quotaResponse.data);
+            if (regeneratedQuestions.length > 0) {
+              setScreeningQuestions(regeneratedQuestions);
+              setScreeningPhase(true);
+              setIsQualified(null);
+            } else {
+              // No screening questions needed, skip to main survey
+              setScreeningQuestions([]);
+              setScreeningPhase(false);
+              setIsQualified(true);
+            }
+          } else {
+            // No quota config, skip screening
+            setScreeningQuestions([]);
+            setScreeningPhase(false);
+            setIsQualified(true);
+          }
+        } catch (quotaErr) {
+          console.log("No quota config found, skipping screening:", quotaErr);
+          setScreeningQuestions([]);
+          setScreeningPhase(false);
+          setIsQualified(true);
+        }
+
+        const questionsArray = surveyData.survey.questions;
+        if (questionsArray.length > 0) {
+          console.log("Questions Array:", questionsArray);
 
           // Sort the questions
           const sortedQuestions = questionsArray.sort(
@@ -692,18 +1002,203 @@ export default function PublicSurveyPage() {
     loadAllData();
   }, [token]);
 
+  // // Handle start button click
+  // const handleStartSurvey = useCallback(() => {
+  //   if (dataReady && survey) {
+  //     setShowStartPage(false);
+  //   }
+  // }, [dataReady, survey]);
   // Handle start button click
-  const handleStartSurvey = useCallback(() => {
-    if (dataReady && survey) {
-      setShowStartPage(false);
+
+  const handleStartSurvey = useCallback(async () => {
+    if (!dataReady || !survey) return;
+
+    // call checkQualification once before letting the user into the survey
+    if (!hasScreeningQuestions && quotaConfig && isQualified !== false) {
+      console.log("No screening questions, checking qualification");
+      await checkQualification();
+      // If quota-full or not qualified, checkQualification will redirect or set isQualified=false
+      if (isQualified == false) {
+        return;
+      }
     }
-  }, [dataReady, survey]);
+
+    setShowStartPage(false);
+  }, [dataReady, survey, hasScreeningQuestions, quotaConfig, isQualified]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers((prev) => ({
       ...prev,
       [questionId]: value,
     }));
+  };
+
+  // Handle screening question answer change
+  const handleScreeningAnswerChange = (questionId: string, value: string) => {
+    setScreeningAnswers((prev) => ({
+      ...prev,
+      [questionId]: value,
+    }));
+  };
+
+  // // Check if user qualifies based on screening answers
+  // const checkQualification = async () => {
+  //   if (!surveyIdForQuota) return;
+
+  //   setCheckingQualification(true);
+  //   try {
+  //     // Build the quota check request from screening answers
+  //     const checkRequest: QuotaCheckRequest = {};
+
+  //     // Map screening answers to quota check fields
+  //     screeningQuestions.forEach((sq) => {
+  //       const answer = screeningAnswers[sq.id];
+  //       if (!answer) return;
+
+  //       if (sq.type === "age") {
+  //         // Parse age range from answer (e.g., "18-24")
+  //         const [min, max] = answer.split("-").map(Number);
+  //         checkRequest.age = Math.floor((min + max) / 2); // Use midpoint
+  //       } else if (sq.type === "gender") {
+  //         // Map gender string to enum value
+  //         const genderMap: Record<
+  //           string,
+  //           "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
+  //         > = {
+  //           male: "MALE",
+  //           female: "FEMALE",
+  //           other: "OTHER",
+  //           prefer_not_to_say: "PREFER_NOT_TO_SAY",
+  //         };
+  //         checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
+  //       } else if (sq.type === "location") {
+  //         // Parse location - could be country, state, or city
+  //         checkRequest.location = { country: answer };
+  //       } else if (sq.type === "category") {
+  //         checkRequest.surveyCategoryId = answer;
+  //       }
+  //     });
+
+  //     checkRequest.vendor_respondent_id = token;
+
+  //     const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+  //     console.log(">>>>> the value of the CHECK QUOTA RESULT is : ", result);
+  //     if (result.data?.qualified) {
+  //       setRespondentId(result.data?.respondent_id ?? null);
+  //       setIsQualified(true);
+  //       setScreeningPhase(false);
+  //       toast.success("You qualify for this survey!");
+  //     } else {
+  //       // Redirect to terminated URL if available, otherwise use internal terminated page
+  //       if (result.data?.status == "QUOTA_FULL") {
+  //         router.push("/survey/terminated?reason=quota_full");
+  //         return;
+  //       }
+  //       if (quotaConfig?.terminated_url) {
+  //         window.location.href = quotaConfig.terminated_url;
+  //       } else {
+  //         router.push("/survey/terminated?reason=not_qualified");
+  //       }
+  //       setIsQualified(false);
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Error checking qualification:", err);
+  //     // On error, allow user to proceed (fail open)
+  //     setIsQualified(true);
+  //     setScreeningPhase(false);
+  //   } finally {
+  //     setCheckingQualification(false);
+  //   }
+  // };
+  // Check if user qualifies based on screening answers
+  const checkQualification = async () => {
+    if (!surveyIdForQuota) return;
+
+    setCheckingQualification(true);
+    try {
+      const checkRequest: QuotaCheckRequest = {};
+
+      // support both with and without screening questions
+      if (hasScreeningQuestions) {
+        screeningQuestions.forEach((sq) => {
+          const answer = screeningAnswers[sq.id];
+          if (!answer) return;
+          if (sq.type === "age") {
+            const [min, max] = answer.split("-").map(Number);
+            checkRequest.age = Math.floor((min + max) / 2);
+          } else if (sq.type === "gender") {
+            const genderMap: Record<
+              string,
+              "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
+            > = {
+              male: "MALE",
+              female: "FEMALE",
+              other: "OTHER",
+              prefer_not_to_say: "PREFER_NOT_TO_SAY",
+            };
+            checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
+          } else if (sq.type === "location") {
+            checkRequest.location = { country: answer };
+          } else if (sq.type === "category") {
+            checkRequest.surveyCategoryId = answer;
+          }
+        });
+      } else {
+        // No screening questions: still call quota API using just vendor_respondent_id
+        // so backend can respond with QUOTA_FULL/qualified based on overall quotas
+      }
+
+      checkRequest.vendor_respondent_id = token;
+
+      const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+      console.log(">>>> CHECK QUOTA RESULT:", result);
+      if (result.data?.qualified) {
+        setRespondentId(result.data?.respondent_id ?? null);
+        setIsQualified(true);
+        setScreeningPhase(false);
+        toast.success("You qualify for this survey!");
+      } else {
+        if (result.data?.status == "QUOTA_FULL") {
+          router.push("/survey/terminated?reason=quota_full");
+          return;
+        }
+        if (quotaConfig?.terminated_url) {
+          window.location.href = quotaConfig.terminated_url;
+        } else {
+          router.push("/survey/terminated?reason=not_qualified");
+        }
+        setIsQualified(false);
+      }
+    } catch (err: any) {
+      console.error("Error checking qualification:", err);
+      setIsQualified(true);
+      setScreeningPhase(false);
+    } finally {
+      setCheckingQualification(false);
+    }
+  };
+
+  // Navigate screening questions
+  const nextScreeningQuestion = () => {
+    if (currentScreeningIndex < screeningQuestions.length - 1) {
+      setCurrentScreeningIndex((prev) => prev + 1);
+    } else {
+      // All screening questions answered, check qualification
+      checkQualification();
+    }
+  };
+
+  const prevScreeningQuestion = () => {
+    if (currentScreeningIndex > 0) {
+      setCurrentScreeningIndex((prev) => prev - 1);
+    }
+  };
+
+  // Check if current screening question is answered
+  const isCurrentScreeningAnswered = () => {
+    if (screeningQuestions.length === 0) return false;
+    const currentQuestion = screeningQuestions[currentScreeningIndex];
+    return !!screeningAnswers[currentQuestion?.id];
   };
 
   // Normalize question kind based on category or infer from options
@@ -837,6 +1332,19 @@ export default function PublicSurveyPage() {
     }
   };
 
+  const resetSurveyState = () => {
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setSubmitted(false);
+    setSubmitting(false);
+
+    // Only reset screening if you want the user to repeat it
+    setScreeningAnswers({});
+    setCurrentScreeningIndex(0);
+
+    // DO NOT TOUCH: surveySettings, survey, quotaConfig, etc.
+  };
+
   const handleSubmit = async () => {
     if (!survey) return;
 
@@ -900,13 +1408,41 @@ export default function PublicSurveyPage() {
       const submitResponse = await responseApi.submitResponseWithToken(
         responseData
       );
-      console.log("submitResponse is", submitResponse);
+      console.log("submitResponse is", submitResponse.data);
 
       const result: any = submitResponse;
 
-      if (result.data || result?.data) {
+      const response_id = result.data?.response?.id;
+
+      if (result.data || response_id) {
+        console.log(">>>>>>> the value of the RESPONSE ID is : ", response_id);
+        // If respondent went through quota checking, mark them as completed
+        if (respondentId && surveyIdForQuota && response_id) {
+          try {
+            const markRespondentCompletedResult =
+              await quotaApi.markRespondentCompleted(
+                surveyIdForQuota,
+                respondentId,
+                response_id
+              );
+            console.log(
+              "markRespondentCompleted is",
+              markRespondentCompletedResult
+            );
+          } catch (markError) {
+            // Log error but don't fail the submission
+            console.error("Error marking respondent completed:", markError);
+          }
+        }
+
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
+
+        if (shouldAutoRestart) {
+          setTimeout(() => {
+            resetSurveyState(); // <-- NEW helper function (next step)
+          }, 2000);
+        }
       } else {
         throw new Error("Failed to submit survey");
       }
@@ -972,11 +1508,18 @@ export default function PublicSurveyPage() {
         <RadioGroup
           value={answer || ""}
           onValueChange={(value) => handleAnswerChange(question.id, value)}
+          className="space-y-3"
         >
-          {textOptions.map((option: any, idx: number) => (
-            <div key={idx} className="flex items-center space-x-2">
-              <RadioGroupItem value={option.id} id={`${question.id}-${idx}`} />
-              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+          {textOptions.map((option: QuestionOption, idx: number) => (
+            <div key={idx}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem
+                  value={option.id || String(idx)}
+                  id={`${question.id}-${idx}`}
+                />
+                <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+              </div>
+              <OptionMediaDisplay media={option.mediaAsset} />
             </div>
           ))}
         </RadioGroup>
@@ -990,26 +1533,29 @@ export default function PublicSurveyPage() {
 
       return (
         <div className="space-y-3">
-          {textOptions.map((option: any, idx: number) => (
-            <div key={idx} className="flex items-center space-x-2">
-              <Checkbox
-                id={`${question.id}-${idx}`}
-                checked={currentAnswers.includes(option.id)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    handleAnswerChange(question.id, [
-                      ...currentAnswers,
-                      option.id,
-                    ]);
-                  } else {
-                    handleAnswerChange(
-                      question.id,
-                      currentAnswers.filter((a: string) => a !== option.id)
-                    );
-                  }
-                }}
-              />
-              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+          {textOptions.map((option: QuestionOption, idx: number) => (
+            <div key={idx}>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${question.id}-${idx}`}
+                  checked={currentAnswers.includes(option.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      handleAnswerChange(question.id, [
+                        ...currentAnswers,
+                        option.id,
+                      ]);
+                    } else {
+                      handleAnswerChange(
+                        question.id,
+                        currentAnswers.filter((a: string) => a !== option.id)
+                      );
+                    }
+                  }}
+                />
+                <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+              </div>
+              <OptionMediaDisplay media={option.mediaAsset} />
             </div>
           ))}
         </div>
@@ -1292,6 +1838,48 @@ export default function PublicSurveyPage() {
       );
     }
 
+    // Number
+    if (kind === "number") {
+      return (
+        <Input
+          type="number"
+          value={answer || ""}
+          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+          placeholder="Enter a number"
+          className="max-w-md"
+        />
+      );
+    }
+
+    // NPS (Net Promoter Score)
+    if (kind === "nps") {
+      return (
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {Array.from({ length: 11 }, (_, i) => i).map((val) => (
+              <Button
+                key={val}
+                type="button"
+                variant={answer === val ? "default" : "outline"}
+                className={
+                  answer === val
+                    ? "bg-violet-600 hover:bg-violet-700 min-w-[48px]"
+                    : "hover:bg-slate-100 min-w-[48px]"
+                }
+                onClick={() => handleAnswerChange(question.id, val)}
+              >
+                {val}
+              </Button>
+            ))}
+          </div>
+          <div className="flex justify-between text-sm text-slate-600">
+            <span>Not at all likely</span>
+            <span>Extremely likely</span>
+          </div>
+        </div>
+      );
+    }
+
     // Default fallback
     return (
       <Input
@@ -1303,7 +1891,17 @@ export default function PublicSurveyPage() {
     );
   };
 
-  // Already submitted state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-violet-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading survey...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (alreadySubmitted) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -1448,6 +2046,131 @@ export default function PublicSurveyPage() {
     );
   }
 
+  // Show not qualified message if user doesn't qualify
+  if (isQualified === false) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                Thank You for Your Interest
+              </h2>
+              <p className="text-slate-600 mb-6">
+                Unfortunately, you don't qualify for this survey based on the
+                screening criteria. We appreciate your time and interest.
+              </p>
+              <Button onClick={() => router.push("/")}>Close</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show screening questions phase
+  if (screeningPhase && screeningQuestions.length > 0) {
+    const currentScreeningQuestion = screeningQuestions[currentScreeningIndex];
+    const screeningProgress =
+      ((currentScreeningIndex + 1) / screeningQuestions.length) * 100;
+
+    return (
+      <div className="min-h-screen bg-slate-50 py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          {/* Screening Header */}
+          <Card className="mb-6">
+            <CardHeader className="border-b border-slate-200 bg-amber-50">
+              <CardTitle className="text-xl text-amber-900">
+                Screening Questions
+              </CardTitle>
+              <p className="text-slate-600 mt-1 text-sm">
+                Please answer these questions to see if you qualify for this
+                survey.
+              </p>
+            </CardHeader>
+          </Card>
+
+          {/* Progress Bar */}
+          <div className="mb-6">
+            <div className="flex justify-between text-sm text-slate-600 mb-2">
+              <span>
+                Question {currentScreeningIndex + 1} of{" "}
+                {screeningQuestions.length}
+              </span>
+              <span>{Math.round(screeningProgress)}% complete</span>
+            </div>
+            <Progress value={screeningProgress} className="h-2" />
+          </div>
+
+          {/* Screening Question Card */}
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <Label className="text-lg font-medium text-slate-800">
+                  {currentScreeningQuestion.question_text}
+                </Label>
+
+                <RadioGroup
+                  value={screeningAnswers[currentScreeningQuestion.id] || ""}
+                  onValueChange={(value) =>
+                    handleScreeningAnswerChange(
+                      currentScreeningQuestion.id,
+                      value
+                    )
+                  }
+                  className="space-y-3"
+                >
+                  {currentScreeningQuestion.options.map((option) => (
+                    <div
+                      key={option.id}
+                      className="flex items-center space-x-3"
+                    >
+                      <RadioGroupItem value={option.value} id={option.id} />
+                      <Label htmlFor={option.id} className="cursor-pointer">
+                        {option.label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Navigation */}
+          <div className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={prevScreeningQuestion}
+              disabled={currentScreeningIndex === 0}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              onClick={nextScreeningQuestion}
+              disabled={!isCurrentScreeningAnswered() || checkingQualification}
+            >
+              {checkingQualification ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Checking...
+                </>
+              ) : currentScreeningIndex === screeningQuestions.length - 1 ? (
+                "Submit & Check Qualification"
+              ) : (
+                <>
+                  Next
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const currentQuestion = survey.questions[currentQuestionIndex];
   // Progress based on completed questions (starts at 0%)
   // const progress = (currentQuestionIndex / survey.questions.length) * 100;
@@ -1495,6 +2218,9 @@ export default function PublicSurveyPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Display attached media */}
+            <QuestionMediaDisplay media={getQuestionMedia(currentQuestion)} />
+
             {renderQuestionInput(currentQuestion)}
 
             {/* Navigation Buttons */}

@@ -23,15 +23,146 @@ import {
 import Link from "next/link";
 import { BarChart, LineChart, PieChart } from "@/components/ui/chart";
 import { surveyResults } from "@/lib/assist-data";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { surveyResultsApi, apiWithFallback, responseApi } from "@/lib/api";
 import { useApi, usePaginatedApi } from "@/hooks/useApi";
 import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
 import { toast } from "react-toastify";
+import { ImageIcon, Video as VideoIcon, Mic } from "lucide-react";
+
+// Media types for questions and options
+interface QuestionMedia {
+  id?: string;
+  url: string;
+  type: string;
+  thumbnail_url?: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+interface OptionMedia {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+// Component to render question media preview (small version for results)
+function QuestionMediaPreview({
+  media,
+}: {
+  media: QuestionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-2 mb-3 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[300px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[150px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[150px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Component to render option media preview (smaller version)
+function OptionMediaPreview({
+  media,
+}: {
+  media: OptionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="ml-2 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[80px] inline-block align-middle">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[50px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          className="max-w-full max-h-[50px] mx-auto"
+          muted
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-1 flex items-center justify-center">
+          <Mic className="h-4 w-4 text-slate-500" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper to extract media from question result
+function getQuestionMedia(question: any): QuestionMedia | null {
+  if (!question) return null;
+  // Check mediaAsset first (frontend format)
+  if (question.mediaAsset) {
+    if (Array.isArray(question.mediaAsset)) {
+      return question.mediaAsset[0] || null;
+    }
+    return question.mediaAsset;
+  }
+  // Check media field (backend format)
+  if (question.media) {
+    if (Array.isArray(question.media)) {
+      return question.media[0] || null;
+    }
+    return question.media;
+  }
+  return null;
+}
+
+/**
+ * Question Type Mapping (Updated 2025-11-29)
+ *
+ * The backend API now returns actual question type names instead of mapped UI types.
+ *
+ * Actual Types from API:
+ * - Text Input: "short answer", "paragraph", "number"
+ * - Choice: "multiple choice", "checkboxes", "dropdown"
+ * - Scale: "linear scale", "rating", "nps"
+ * - Grid: "multi-choice grid", "checkbox grid"
+ * - Date/Time: "date", "time"
+ * - File: "file upload"
+ *
+ * See: GET_SURVEY_ANALYTICS_CHANGES.md for full documentation
+ */
 
 export default function SurveyResults() {
   const params = useParams();
+  const router = useRouter();
   const surveyId = params.id as string;
 
   const [exportExcelLoading, setExportExcelLoading] = useState(false);
@@ -48,7 +179,7 @@ export default function SurveyResults() {
   } = useApi(() => {
     return responseApi.getSurveyResults(surveyId);
   }, [surveyId]);
-  // console.log("Results data is", resultsData);
+  console.log("Results data is", resultsData);
   // console.log(">>> Results Error is", resultsError);
 
   // const {
@@ -62,7 +193,14 @@ export default function SurveyResults() {
 
   // Use API data if available, otherwise use demo data
   let survey = null;
-  if (resultsData) {
+  if (resultsData && resultsData.isPublic === false) {
+    window.location.href = "/auth/login";
+    return;
+  } else if (resultsData) {
+    console.log(
+      ">>>>>>>>>>>>>>>>>>>>>>>>>>>> the value of the SURVEY DATA is >: ",
+      resultsData
+    );
     // Transform new API response to match old format
     survey = {
       title: resultsData.title || "Survey",
@@ -71,7 +209,7 @@ export default function SurveyResults() {
         totalResponses: resultsData.stats.totalResponses || 0,
         completionRate: resultsData.stats.completionRate || "0",
         avgTime: 0,
-        npsScore: 0,
+        npsScore: resultsData.stats.npsScore || 0,
       },
       questionResults: resultsData.questionResults || [],
       demographics: {
@@ -353,16 +491,24 @@ export default function SurveyResults() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {(question.type === "single_choice" ||
-                    question.type === "multiple_choice" ||
-                    question.type === "checkbox") && (
+                  {/* Display question media if present */}
+                  <QuestionMediaPreview media={getQuestionMedia(question)} />
+
+                  {/* Choice types: multiple choice, checkboxes, dropdown */}
+                  {(question.type === "multiple choice" ||
+                    question.type === "checkboxes" ||
+                    question.type === "dropdown") && (
                     <div className="space-y-3">
                       {question.data?.map((item: any, i: number) => (
                         <div
                           key={i}
                           className="flex items-center justify-between"
                         >
-                          <span className="text-sm">{item.option}</span>
+                          <div className="flex items-center">
+                            <span className="text-sm">{item.option}</span>
+                            {/* Display option media if present */}
+                            <OptionMediaPreview media={item.mediaAsset} />
+                          </div>
                           <div className="flex items-center gap-2">
                             <Progress
                               value={item.percentage}
@@ -380,7 +526,9 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "rating" && (
+                  {/* Rating and Linear Scale types */}
+                  {(question.type === "rating" ||
+                    question.type === "linear scale") && (
                     <div className="space-y-4">
                       <div className="text-center">
                         <div className="text-3xl font-bold text-violet-600">
@@ -401,7 +549,9 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "text" && (
+                  {/* Text types: short answer, paragraph */}
+                  {(question.type === "short answer" ||
+                    question.type === "paragraph") && (
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">
                         Recent responses:
@@ -419,7 +569,95 @@ export default function SurveyResults() {
                     </div>
                   )}
 
-                  {question.type === "grid" && (
+                  {question.type === "number" && (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-violet-600">
+                          {question.average || "N/A"}
+                        </div>
+                        <div className="text-sm text-slate-500">
+                          Average Value
+                        </div>
+                      </div>
+                      {question.data && (
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.min || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Min</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.median || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Median</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {question.data.max || "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500">Max</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {question.type === "nps" && (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-violet-600">
+                          {question.npsScore || question.npsScore == 0
+                            ? question.npsScore
+                            : "N/A"}
+                        </div>
+                        <div className="text-sm text-slate-500">
+                          Net Promoter Score
+                        </div>
+                      </div>
+                      {question.data && (
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-3 bg-red-50 rounded">
+                            <div className="text-2xl font-bold text-red-600">
+                              {question.data.detractors || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Detractors (0-6)
+                            </div>
+                          </div>
+                          <div className="text-center p-3 bg-yellow-50 rounded">
+                            <div className="text-2xl font-bold text-yellow-600">
+                              {question.data.passives || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Passives (7-8)
+                            </div>
+                          </div>
+                          <div className="text-center p-3 bg-green-50 rounded">
+                            <div className="text-2xl font-bold text-green-600">
+                              {question.data.promoters || 0}%
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Promoters (9-10)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <BarChart
+                        data={question.distributionData || []}
+                        index="score"
+                        categories={["count"]}
+                        colors={["violet"]}
+                        valueFormatter={(value) => `${value} responses`}
+                        className="h-48"
+                      />
+                    </div>
+                  )}
+
+                  {/* Grid types: multi-choice grid, checkbox grid */}
+                  {(question.type === "multi-choice grid" ||
+                    question.type === "checkbox grid") && (
                     <div className="space-y-4">
                       {/* Build headers from the grid data */}
                       {(() => {

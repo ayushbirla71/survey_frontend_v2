@@ -104,6 +104,7 @@ export interface SurveyResponse {
 }
 
 export interface SurveyResponseResult {
+  isPublic: boolean;
   title: string;
   description: string;
   individualResponses: any[];
@@ -128,6 +129,117 @@ export interface ShareToken {
   expires_at?: string;
   used?: boolean;
   created_at?: string;
+}
+
+// Quota Management Types
+export type QuotaType = "COUNT" | "PERCENTAGE";
+
+export interface AgeQuota {
+  id?: string;
+  min_age: number;
+  max_age: number;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface GenderQuota {
+  id?: string;
+  gender: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface LocationQuota {
+  id?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface CategoryQuota {
+  id?: string;
+  surveyCategoryId: string;
+  categoryName?: string;
+  quota_type: QuotaType;
+  target_count?: number;
+  target_percentage?: number;
+  current_count?: number;
+}
+
+export interface QuotaConfig {
+  id?: string;
+  surveyId: string;
+  total_target: number;
+  completed_url?: string;
+  terminated_url?: string;
+  quota_full_url?: string;
+  age_quotas?: AgeQuota[];
+  gender_quotas?: GenderQuota[];
+  location_quotas?: LocationQuota[];
+  category_quotas?: CategoryQuota[];
+  screening_questions?: ScreeningQuestion[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface QuotaStatus {
+  surveyId: string;
+  total_target: number;
+  total_completed: number;
+  fill_rate: number;
+  age_quota_status?: Array<AgeQuota & { fill_rate: number }>;
+  gender_quota_status?: Array<GenderQuota & { fill_rate: number }>;
+  location_quota_status?: Array<LocationQuota & { fill_rate: number }>;
+  category_quota_status?: Array<CategoryQuota & { fill_rate: number }>;
+}
+
+export interface ScreeningQuestion {
+  id: string;
+  type: "age" | "gender" | "location" | "category";
+  question_text: string;
+  options: Array<{
+    id: string;
+    label: string;
+    value: string;
+  }>;
+  required: boolean;
+}
+
+export interface QuotaCheckRequest {
+  vendor_respondent_id?: string;
+  age?: number;
+  gender?: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+  location?: {
+    country?: string;
+    state?: string;
+    city?: string;
+    postal_code?: string;
+  };
+  surveyCategoryId?: string;
+}
+
+export interface QuotaCheckResponse {
+  qualified: boolean;
+  reason?: string;
+  redirect_url?: string;
+  respondent_id?: string;
+  status?: string;
+  message?: string;
+}
+
+export interface MediaUploadResponse {
+  message: string;
+  status: number;
+  media: any;
 }
 
 // Base API function with error handling and authentication
@@ -156,7 +268,6 @@ async function apiRequest<T>(
       signal: controller.signal,
       ...options,
     });
-    console.log("response is", response);
 
     clearTimeout(timeoutId);
 
@@ -366,7 +477,14 @@ export const questionGenerationApi = {
       questionCount: number;
       questions: Array<{
         id: string;
-        type: "single_choice" | "checkbox" | "text" | "rating" | "yes_no";
+        type:
+          | "single_choice"
+          | "checkbox"
+          | "text"
+          | "rating"
+          | "yes_no"
+          | "number"
+          | "nps";
         question: string;
         options: string[];
         required: boolean;
@@ -725,13 +843,10 @@ export const questionApi = {
   updateQuestion: async (
     questionId: string,
     questionData: {
+      question_type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO";
       question_text?: string;
       options?: any[];
-      media?: Array<{
-        type: string;
-        url: string;
-        thumbnail_url?: string;
-      }>;
+      mediaId?: string | null;
       categoryId?: string;
       subCategoryId?: string;
       order_index?: number;
@@ -896,6 +1011,28 @@ export const responseApi = {
     surveyId: string
   ): Promise<ApiResponse<SurveyResponseResult>> => {
     return apiRequest(`/api/responses/surveys/${surveyId}/results`);
+  },
+};
+
+export const mediaUploadApi = {
+  // POST /api/upload/media
+  uploadMedia: async (
+    file: File
+  ): Promise<ApiResponse<MediaUploadResponse>> => {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append("media", file);
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return apiRequest("/api/upload/media", {
+      method: "POST",
+      body: formData,
+      headers,
+    });
   },
 };
 
@@ -1507,6 +1644,90 @@ export const audienceApi = {
   },
 };
 
+// Quota Management APIs
+export const quotaApi = {
+  // POST /api/quota/surveys/:surveyId/quota - Create quota configuration
+  createQuota: async (
+    surveyId: string,
+    quotaConfig: Omit<
+      QuotaConfig,
+      "id" | "surveyId" | "created_at" | "updated_at"
+    >
+  ): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "POST",
+      body: JSON.stringify(quotaConfig),
+    });
+  },
+
+  // GET /api/quota/surveys/:surveyId/quota - Get quota configuration
+  getQuota: async (surveyId: string): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`);
+  },
+
+  // PUT /api/quota/surveys/:surveyId/quota - Update quota configuration
+  updateQuota: async (
+    surveyId: string,
+    quotaConfig: Partial<QuotaConfig>
+  ): Promise<ApiResponse<QuotaConfig>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "PUT",
+      body: JSON.stringify(quotaConfig),
+    });
+  },
+
+  // DELETE /api/quota/surveys/:surveyId/quota - Delete quota configuration
+  deleteQuota: async (
+    surveyId: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
+      method: "DELETE",
+    });
+  },
+
+  // GET /api/quota/surveys/:surveyId/status - Get quota fill status
+  getQuotaStatus: async (
+    surveyId: string
+  ): Promise<ApiResponse<QuotaStatus>> => {
+    return apiRequest(`/api/quota/surveys/${surveyId}/status`);
+  },
+
+  // POST /api/quota/:surveyId/check - Check if respondent qualifies
+  checkQuota: async (
+    surveyId: string,
+    respondentData: QuotaCheckRequest
+  ): Promise<ApiResponse<QuotaCheckResponse>> => {
+    return apiRequest(`/api/quota/${surveyId}/check`, {
+      method: "POST",
+      body: JSON.stringify(respondentData),
+    });
+  },
+
+  // POST /api/quota/:surveyId/complete - Mark respondent as completed
+  markRespondentCompleted: async (
+    surveyId: string,
+    respondent_id: string,
+    response_id: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, response_id }),
+    });
+  },
+
+  // POST /api/quota/:surveyId/terminate - Mark respondent as terminated
+  markRespondentTerminated: async (
+    surveyId: string,
+    respondent_id: string,
+    reason: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/terminate`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, reason }),
+    });
+  },
+};
+
 // Categories API
 export const categoriesApi = {
   // GET /api/categories
@@ -1651,6 +1872,8 @@ export const demoData = {
     { id: "60516591-f744-4efd-ae56-58d8e1ca911c", type_name: "checkbox grid" },
     { id: "276364c5-1b96-4b4e-a362-833973532241", type_name: "date" },
     { id: "d16778d4-85bc-4fac-8815-2bb2f1346fd9", type_name: "time" },
+    { id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", type_name: "number" },
+    { id: "f6e5d4c3-b2a1-4f5e-6d7c-8b9a0e1f2a3b", type_name: "nps" },
   ],
 
   audienceStats: {

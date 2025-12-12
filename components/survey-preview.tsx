@@ -18,10 +18,21 @@ import { Star } from "lucide-react";
 
 type GridLabel = { id?: string; text: string };
 
+type OptionMediaAsset = {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+};
+
 type ApiOption = {
   id?: string;
   text?: string | null;
   mediaId?: string | null;
+  mediaAsset?: OptionMediaAsset | null;
   questionId?: string;
   rowQuestionOptionId?: string | null;
   columnQuestionOptionId?: string | null;
@@ -33,6 +44,18 @@ type ApiOption = {
   // NEW: grid shape coming from API
   rowOptions?: { text?: string | null; id?: string }[];
   columnOptions?: { text?: string | null; id?: string }[];
+};
+
+type MediaAsset = {
+  type: string;
+  url: string;
+  thumbnail_url?: string;
+  mediaId?: string | null;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
 };
 
 type ApiQuestion = {
@@ -50,6 +73,16 @@ type ApiQuestion = {
   rowOptions?: { text?: string | null; id?: string }[];
   columnOptions?: { text?: string | null; id?: string }[];
   allowMultipleInGrid?: boolean;
+
+  // Media attachment
+  mediaAsset?: MediaAsset | null;
+  media?: Array<{
+    id?: string;
+    type: string;
+    url: string;
+    thumbnail_url?: string;
+    meta?: any;
+  }> | null;
 };
 
 type GKind =
@@ -63,9 +96,100 @@ type GKind =
   | "multi-choice grid"
   | "checkbox grid"
   | "date"
-  | "time";
+  | "time"
+  | "number"
+  | "nps";
 
 type KindsMap = Record<string, GKind>;
+
+// Helper to get media from question (handles mediaAsset or media array)
+function getQuestionMedia(q: ApiQuestion): MediaAsset | null {
+  // First check mediaAsset (from frontend editor)
+  if (q.mediaAsset?.url) return q.mediaAsset;
+
+  // Then check media array (from backend)
+  if (q.media && Array.isArray(q.media) && q.media[0]?.url) {
+    const m = q.media[0];
+    return {
+      type: m.type,
+      url: m.url,
+      thumbnail_url: m.thumbnail_url,
+      meta: m.meta,
+    };
+  }
+
+  return null;
+}
+
+// Component to display media in preview
+function QuestionMediaPreview({ media }: { media: MediaAsset | null }) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[300px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[300px] mx-auto"
+        >
+          Your browser does not support the video tag.
+        </video>
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-4">
+          <audio src={media.url} controls className="w-full">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Smaller component for option media preview
+function OptionMediaPreview({
+  media,
+}: {
+  media: OptionMediaAsset | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[200px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[100px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[100px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function normKindStr(s?: string): GKind | null {
   if (!s) return null;
@@ -83,6 +207,8 @@ function normKindStr(s?: string): GKind | null {
   if (k === "checkboxesgrid" || k === "gridcheckbox") return "checkbox grid";
   if (k === "date") return "date";
   if (k === "time") return "time";
+  if (k === "number") return "number";
+  if (k === "nps" || k === "netpromoterscore") return "nps";
   return null;
 }
 
@@ -384,6 +510,9 @@ export default function SurveyPreview({
                 ) : null}
               </div>
 
+              {/* Display attached media */}
+              <QuestionMediaPreview media={getQuestionMedia(q)} />
+
               {/* short answer */}
               {kind === "short answer" && (
                 <Input placeholder="Short answer text" disabled />
@@ -400,18 +529,21 @@ export default function SurveyPreview({
 
               {/* multiple choice */}
               {kind === "multiple choice" && (
-                <RadioGroup className="space-y-2">
+                <RadioGroup className="space-y-3">
                   {(opts.length
                     ? opts.filter((o) => (o.text ?? "").trim().length > 0)
                     : []
                   ).map((o, i) => {
                     const id = `${q.id}-mc-${o.id ?? i}`;
                     return (
-                      <div className="flex items-center space-x-2" key={id}>
-                        <RadioGroupItem id={id} value={String(i)} disabled />
-                        <Label htmlFor={id} className="text-slate-700">
-                          {o.text}
-                        </Label>
+                      <div key={id}>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem id={id} value={String(i)} disabled />
+                          <Label htmlFor={id} className="text-slate-700">
+                            {o.text}
+                          </Label>
+                        </div>
+                        <OptionMediaPreview media={o.mediaAsset} />
                       </div>
                     );
                   })}
@@ -653,18 +785,21 @@ export default function SurveyPreview({
 
               {/* basic checkboxes (non-grid) */}
               {kind === "checkboxes" && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {(opts.length
                     ? opts.filter((o) => (o.text ?? "").trim().length > 0)
                     : []
                   ).map((o, i) => {
                     const id = `${q.id}-cb-${o.id ?? i}`;
                     return (
-                      <div className="flex items-center space-x-2" key={id}>
-                        <Checkbox id={id} disabled />
-                        <Label htmlFor={id} className="text-slate-700">
-                          {o.text}
-                        </Label>
+                      <div key={id}>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id={id} disabled />
+                          <Label htmlFor={id} className="text-slate-700">
+                            {o.text}
+                          </Label>
+                        </div>
+                        <OptionMediaPreview media={o.mediaAsset} />
                       </div>
                     );
                   })}
@@ -674,6 +809,33 @@ export default function SurveyPreview({
               {/* date/time */}
               {kind === "date" && <Input type="date" disabled />}
               {kind === "time" && <Input type="time" disabled />}
+
+              {/* number */}
+              {kind === "number" && (
+                <Input type="number" placeholder="Enter a number" disabled />
+              )}
+
+              {/* nps */}
+              {kind === "nps" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2 flex-wrap">
+                    {Array.from({ length: 11 }, (_, i) => i).map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        disabled
+                        className="min-w-[48px] px-3 py-2 border rounded hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Not at all likely</span>
+                    <span>Extremely likely</span>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
