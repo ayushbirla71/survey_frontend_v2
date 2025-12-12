@@ -3,7 +3,6 @@
 // Custom React hooks for API calls
 import { useState, useEffect } from "react";
 import { authApi, type ApiResponse, type PaginatedResponse } from "@/lib/api";
-import { useRouter } from "next/navigation";
 
 // Generic hook for API calls - Updated for new API structure
 export function useApi<T>(
@@ -14,8 +13,6 @@ export function useApi<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const router = useRouter();
-
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -23,7 +20,7 @@ export function useApi<T>(
 
       const response = await apiCall();
 
-      if (response.data !== undefined) {
+      if (response.data) {
         setData(response.data);
       } else {
         setError(response.error || "Failed to fetch data");

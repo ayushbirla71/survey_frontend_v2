@@ -104,6 +104,7 @@ export interface SurveyResponse {
 }
 
 export interface SurveyResponseResult {
+  isPublic: boolean;
   title: string;
   description: string;
   individualResponses: any[];

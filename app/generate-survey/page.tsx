@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft,
   ArrowRight,
@@ -87,6 +88,12 @@ type QuestionWithOptions = {
 
 type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
 
+interface PublicSurveySettings {
+  isResultPublic: boolean;
+  autoReloadOnSubmit: boolean;
+  requireTermsAndConditions: boolean;
+}
+
 interface SurveySettings {
   flow_type: "STATIC";
   survey_send_by: SurveySendByType;
@@ -94,6 +101,8 @@ interface SurveySettings {
   showProgressBar: boolean;
   shuffleQuestions: boolean;
   allowMultipleSubmissions: boolean;
+  // Public survey advanced settings
+  publicSettings?: PublicSurveySettings;
 }
 
 interface ShareToken {
@@ -140,6 +149,11 @@ export default function GenerateSurvey() {
     showProgressBar: true,
     shuffleQuestions: false,
     allowMultipleSubmissions: false,
+    publicSettings: {
+      isResultPublic: false,
+      autoReloadOnSubmit: false,
+      requireTermsAndConditions: true,
+    },
   });
   const [audience, setAudience] = useState({
     ageGroups: [],
@@ -299,6 +313,12 @@ export default function GenerateSurvey() {
           showProgressBar: true,
           shuffleQuestions: false,
           allowMultipleSubmissions: false,
+          // Load public settings from backend if available
+          publicSettings: (survey as any).settings || {
+            isResultPublic: false,
+            autoReloadOnSubmit: false,
+            requireTermsAndConditions: true,
+          },
         });
 
         // Load questions for the survey
@@ -533,9 +553,16 @@ export default function GenerateSurvey() {
       //   setStep(4);
       //   return;
       // } else {
-      const updateData = {
+      const updateData: any = {
         survey_send_by: surveySettings.survey_send_by,
       };
+      // Include public settings if survey is public
+      if (
+        surveySettings.survey_send_by === "NONE" &&
+        surveySettings.publicSettings
+      ) {
+        updateData.settings = surveySettings.publicSettings;
+      }
       await updateSurvey({
         surveyId: createdSurvey.id,
         surveyData: updateData,
@@ -876,13 +903,20 @@ export default function GenerateSurvey() {
         if (hasSurveyDataChanged()) {
           console.log("Changes detected, calling update API");
           // Update existing survey
-          const updateData = {
+          const updateData: any = {
             title: title,
             description: description,
             autoGenerateQuestions: autoGenerateQuestions,
             flow_type: surveySettings.flow_type,
             survey_send_by: surveySettings.survey_send_by,
           };
+          // Include public settings if survey is public
+          if (
+            surveySettings.survey_send_by === "NONE" &&
+            surveySettings.publicSettings
+          ) {
+            updateData.settings = surveySettings.publicSettings;
+          }
 
           const result: any = await updateSurvey({
             surveyId: editSurveyId!,
@@ -941,7 +975,7 @@ export default function GenerateSurvey() {
         // Move to next step regardless of whether update was made
         nextStep();
       } else {
-        const surveyData = {
+        const surveyData: any = {
           title: title,
           description: description,
           flow_type: surveySettings.flow_type,
@@ -949,6 +983,13 @@ export default function GenerateSurvey() {
           surveyCategoryId: surveyCategoryId,
           autoGenerateQuestions: autoGenerateQuestions,
         };
+        // Include public settings if survey is public
+        if (
+          surveySettings.survey_send_by === "NONE" &&
+          surveySettings.publicSettings
+        ) {
+          surveyData.settings = surveySettings.publicSettings;
+        }
         // Create new survey
         const result = await createSurvey(surveyData);
         // console.log("Create result:", result);
@@ -1851,6 +1892,127 @@ export default function GenerateSurvey() {
                     </Select>
                   </div>
                 </div>
+
+                {/* Advanced Options for Public Survey */}
+                {surveySettings.survey_send_by === "NONE" && (
+                  <div className="mt-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                      Advanced Options (Public Survey)
+                    </h3>
+                    <div className="space-y-4">
+                      {/* Survey Results Public Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="isResultPublic"
+                            className="text-sm font-medium"
+                          >
+                            Survey Results are Public
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Anyone with the link can view survey results
+                          </p>
+                        </div>
+                        <Switch
+                          id="isResultPublic"
+                          checked={
+                            surveySettings.publicSettings?.isResultPublic ??
+                            false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic: checked,
+                                autoReloadOnSubmit:
+                                  prev.publicSettings?.autoReloadOnSubmit ??
+                                  false,
+                                requireTermsAndConditions:
+                                  prev.publicSettings
+                                    ?.requireTermsAndConditions ?? false,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      {/* Auto Reload on Submit Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="autoReloadOnSubmit"
+                            className="text-sm font-medium"
+                          >
+                            Auto Reload After Submission
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Survey URL automatically reloads when user submits
+                            the response
+                          </p>
+                        </div>
+                        <Switch
+                          id="autoReloadOnSubmit"
+                          checked={
+                            surveySettings.publicSettings?.autoReloadOnSubmit ??
+                            false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic:
+                                  prev.publicSettings?.isResultPublic ?? false,
+                                autoReloadOnSubmit: checked,
+                                requireTermsAndConditions:
+                                  prev.publicSettings
+                                    ?.requireTermsAndConditions ?? false,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      {/* Terms and Conditions Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="requireTermsAndConditions"
+                            className="text-sm font-medium"
+                          >
+                            Require Terms & Conditions
+                          </Label>
+                          <p className="text-xs text-slate-500">
+                            Show terms and conditions page before starting the
+                            survey
+                          </p>
+                        </div>
+                        <Switch
+                          id="requireTermsAndConditions"
+                          checked={
+                            surveySettings.publicSettings
+                              ?.requireTermsAndConditions ?? false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSurveySettings((prev) => ({
+                              ...prev,
+                              publicSettings: {
+                                ...prev.publicSettings,
+                                isResultPublic:
+                                  prev.publicSettings?.isResultPublic ?? false,
+                                autoReloadOnSubmit:
+                                  prev.publicSettings?.autoReloadOnSubmit ??
+                                  false,
+                                requireTermsAndConditions: checked,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* <div className="space-y-4">
                   <div className="flex items-center space-x-2">

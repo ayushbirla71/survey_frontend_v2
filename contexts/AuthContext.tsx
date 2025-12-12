@@ -42,7 +42,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Public routes that don't require authentication
   const publicRoutes = ["/auth/login", "/auth/admin-signup"];
-  const publicRoutePrefixes = ["/survey/"]; // anything starting with /survey/ is public
+  const publicRoutePrefixes = ["/survey/", "/survey-results/"]; // anything starting with /survey/ is public
   // ✅ Check if the route is public
 
   // 🔹 Auth routes = only login/signup

@@ -14,7 +14,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   // Routes that don't need the sidebar (auth pages)
   const authRoutes = ["/auth/login", "/auth/admin-signup"];
-  const authRoutesPrefixes = ["/survey/"];
+  const authRoutesPrefixes = ["/survey/", "/survey-results/"];
   const isAuthRoute =
     authRoutes.includes(pathname) ||
     authRoutesPrefixes.some((prefix) => pathname.startsWith(prefix));

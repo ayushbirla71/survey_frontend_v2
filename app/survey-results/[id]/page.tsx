@@ -23,7 +23,7 @@ import {
 import Link from "next/link";
 import { BarChart, LineChart, PieChart } from "@/components/ui/chart";
 import { surveyResults } from "@/lib/assist-data";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { surveyResultsApi, apiWithFallback, responseApi } from "@/lib/api";
 import { useApi, usePaginatedApi } from "@/hooks/useApi";
 import { useEffect, useState } from "react";
@@ -162,6 +162,7 @@ function getQuestionMedia(question: any): QuestionMedia | null {
 
 export default function SurveyResults() {
   const params = useParams();
+  const router = useRouter();
   const surveyId = params.id as string;
 
   const [exportExcelLoading, setExportExcelLoading] = useState(false);
@@ -178,7 +179,7 @@ export default function SurveyResults() {
   } = useApi(() => {
     return responseApi.getSurveyResults(surveyId);
   }, [surveyId]);
-  // console.log("Results data is", resultsData);
+  console.log("Results data is", resultsData);
   // console.log(">>> Results Error is", resultsError);
 
   // const {
@@ -192,7 +193,14 @@ export default function SurveyResults() {
 
   // Use API data if available, otherwise use demo data
   let survey = null;
-  if (resultsData) {
+  if (resultsData && resultsData.isPublic === false) {
+    window.location.href = "/auth/login";
+    return;
+  } else if (resultsData) {
+    console.log(
+      ">>>>>>>>>>>>>>>>>>>>>>>>>>>> the value of the SURVEY DATA is >: ",
+      resultsData
+    );
     // Transform new API response to match old format
     survey = {
       title: resultsData.title || "Survey",

@@ -385,10 +385,13 @@ interface Survey {
   title: string;
   description?: string;
   questions: Question[];
-  settings?: {
+  settings: {
     showProgressBar?: boolean;
     shuffleQuestions?: boolean;
     isAnonymous?: boolean;
+    isResultPublic: boolean;
+    autoReloadOnSubmit: boolean;
+    requireTermsAndConditions: boolean;
   };
 }
 
@@ -858,6 +861,7 @@ export default function PublicSurveyPage() {
   const [checkingQualification, setCheckingQualification] = useState(false);
   const [surveyIdForQuota, setSurveyIdForQuota] = useState<string | null>(null);
   const [respondentId, setRespondentId] = useState<string | null>(null);
+  const [shouldAutoRestart, setShouldAutoRestart] = useState(false);
 
   const hasScreeningQuestions = screeningQuestions.length > 0;
 
@@ -914,6 +918,9 @@ export default function PublicSurveyPage() {
         const surveyId = result.data.surveyId;
         const surveyData = result.data;
         console.log(">>>> the value of the SURVEY DATA is : ", surveyData);
+        if (surveyData.survey.settings?.autoReloadOnSubmit) {
+          setShouldAutoRestart(true);
+        }
 
         setSurveyIdForQuota(surveyId);
 
@@ -1325,6 +1332,19 @@ export default function PublicSurveyPage() {
     }
   };
 
+  const resetSurveyState = () => {
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setSubmitted(false);
+    setSubmitting(false);
+
+    // Only reset screening if you want the user to repeat it
+    setScreeningAnswers({});
+    setCurrentScreeningIndex(0);
+
+    // DO NOT TOUCH: surveySettings, survey, quotaConfig, etc.
+  };
+
   const handleSubmit = async () => {
     if (!survey) return;
 
@@ -1417,6 +1437,12 @@ export default function PublicSurveyPage() {
 
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
+
+        if (shouldAutoRestart) {
+          setTimeout(() => {
+            resetSurveyState(); // <-- NEW helper function (next step)
+          }, 2000);
+        }
       } else {
         throw new Error("Failed to submit survey");
       }
