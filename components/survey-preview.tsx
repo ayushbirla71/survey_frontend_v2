@@ -18,10 +18,21 @@ import { Star } from "lucide-react";
 
 type GridLabel = { id?: string; text: string };
 
+type OptionMediaAsset = {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+};
+
 type ApiOption = {
   id?: string;
   text?: string | null;
   mediaId?: string | null;
+  mediaAsset?: OptionMediaAsset | null;
   questionId?: string;
   rowQuestionOptionId?: string | null;
   columnQuestionOptionId?: string | null;
@@ -139,6 +150,41 @@ function QuestionMediaPreview({ media }: { media: MediaAsset | null }) {
           <audio src={media.url} controls className="w-full">
             Your browser does not support the audio element.
           </audio>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Smaller component for option media preview
+function OptionMediaPreview({
+  media,
+}: {
+  media: OptionMediaAsset | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[200px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[100px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[100px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
         </div>
       )}
     </div>
@@ -483,18 +529,21 @@ export default function SurveyPreview({
 
               {/* multiple choice */}
               {kind === "multiple choice" && (
-                <RadioGroup className="space-y-2">
+                <RadioGroup className="space-y-3">
                   {(opts.length
                     ? opts.filter((o) => (o.text ?? "").trim().length > 0)
                     : []
                   ).map((o, i) => {
                     const id = `${q.id}-mc-${o.id ?? i}`;
                     return (
-                      <div className="flex items-center space-x-2" key={id}>
-                        <RadioGroupItem id={id} value={String(i)} disabled />
-                        <Label htmlFor={id} className="text-slate-700">
-                          {o.text}
-                        </Label>
+                      <div key={id}>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem id={id} value={String(i)} disabled />
+                          <Label htmlFor={id} className="text-slate-700">
+                            {o.text}
+                          </Label>
+                        </div>
+                        <OptionMediaPreview media={o.mediaAsset} />
                       </div>
                     );
                   })}
@@ -736,18 +785,21 @@ export default function SurveyPreview({
 
               {/* basic checkboxes (non-grid) */}
               {kind === "checkboxes" && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {(opts.length
                     ? opts.filter((o) => (o.text ?? "").trim().length > 0)
                     : []
                   ).map((o, i) => {
                     const id = `${q.id}-cb-${o.id ?? i}`;
                     return (
-                      <div className="flex items-center space-x-2" key={id}>
-                        <Checkbox id={id} disabled />
-                        <Label htmlFor={id} className="text-slate-700">
-                          {o.text}
-                        </Label>
+                      <div key={id}>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id={id} disabled />
+                          <Label htmlFor={id} className="text-slate-700">
+                            {o.text}
+                          </Label>
+                        </div>
+                        <OptionMediaPreview media={o.mediaAsset} />
                       </div>
                     );
                   })}

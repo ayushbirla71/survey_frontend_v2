@@ -55,10 +55,21 @@ interface GridOptionText {
   mediaId?: string | null;
 }
 
+interface OptionMediaAsset {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
 interface OptionPayload {
   id?: string;
   text?: string;
   mediaId?: string | null;
+  mediaAsset?: OptionMediaAsset | null; // for preview
   // scale
   rangeFrom?: number | null;
   rangeTo?: number | null;
@@ -253,6 +264,72 @@ export default function EnhancedQuestionEditor({
     if (!q) return;
     const next = (q.options || []).map((opt, i) =>
       i === idx ? { ...opt, text } : opt
+    );
+    handleQuestionChange(qid, "options", next);
+  };
+
+  // Option media upload handler
+  const handleOptionFileSelected = async (
+    qid: string,
+    optIdx: number,
+    file: File
+  ) => {
+    const q = byId.get(qid);
+    if (!q) return;
+
+    // Determine media type from file
+    let detected: "IMAGE" | "VIDEO" | "AUDIO" = "IMAGE";
+    if (file.type.startsWith("video/")) detected = "VIDEO";
+    else if (file.type.startsWith("audio/")) detected = "AUDIO";
+
+    try {
+      toast.info(`Uploading ${file.name}...`);
+      const mediaData: any = await uploadMedia(file);
+
+      const mediaId = mediaData?.data?.media?.id ?? mediaData?.media?.id;
+      const mediaUrl = mediaData?.data?.media?.url ?? mediaData?.media?.url;
+
+      if (!mediaUrl) {
+        toast.error("Upload failed: No URL returned");
+        return;
+      }
+
+      // Update the specific option with media
+      // Auto-fill option text if empty (Option 1, Option 2, etc.)
+      const next = (q.options || []).map((opt, i) =>
+        i === optIdx
+          ? {
+              ...opt,
+              // Auto-fill text if empty when media is uploaded
+              text:
+                (opt.text ?? "").trim() === "" ? `Option ${i + 1}` : opt.text,
+              mediaId: mediaId,
+              mediaAsset: {
+                type: detected,
+                url: mediaUrl,
+                meta: {
+                  originalname: file.name,
+                  size: file.size,
+                  mimetype: file.type,
+                },
+              },
+            }
+          : opt
+      );
+      handleQuestionChange(qid, "options", next);
+      toast.success("Option media uploaded successfully!");
+    } catch (err: any) {
+      console.error("Option media upload error:", err);
+      toast.error(err?.message || "Failed to upload option media");
+    }
+  };
+
+  // Clear option media
+  const clearOptionMedia = (qid: string, optIdx: number) => {
+    const q = byId.get(qid);
+    if (!q) return;
+    const next = (q.options || []).map((opt, i) =>
+      i === optIdx ? { ...opt, mediaId: null, mediaAsset: null } : opt
     );
     handleQuestionChange(qid, "options", next);
   };
@@ -722,33 +799,132 @@ export default function EnhancedQuestionEditor({
                                     </Button>
                                   </div>
 
-                                  <div className="space-y-2">
+                                  <div className="space-y-3">
                                     {(q.options || []).map((opt, idx) => (
-                                      <div
-                                        key={idx}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <Input
-                                          value={opt?.text ?? ""}
-                                          onChange={(e) =>
-                                            setOptionText(
-                                              q.id,
-                                              idx,
-                                              e.target.value
-                                            )
-                                          }
-                                          placeholder={`Option ${idx + 1}`}
-                                        />
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          title="Remove option"
-                                          onClick={() =>
-                                            removeOption(q.id, idx)
-                                          }
-                                        >
-                                          <Trash2 className="h-4 w-4 text-red-600" />
-                                        </Button>
+                                      <div key={idx} className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            value={opt?.text ?? ""}
+                                            onChange={(e) =>
+                                              setOptionText(
+                                                q.id,
+                                                idx,
+                                                e.target.value
+                                              )
+                                            }
+                                            placeholder={`Option ${idx + 1}`}
+                                            className="flex-1"
+                                          />
+                                          {/* Media upload button for option */}
+                                          <input
+                                            type="file"
+                                            accept="image/*,video/*,audio/*"
+                                            id={`option-media-${q.id}-${idx}`}
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                handleOptionFileSelected(
+                                                  q.id,
+                                                  idx,
+                                                  file
+                                                );
+                                              }
+                                              e.target.value = "";
+                                            }}
+                                          />
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Add media to option"
+                                            onClick={() => {
+                                              document
+                                                .getElementById(
+                                                  `option-media-${q.id}-${idx}`
+                                                )
+                                                ?.click();
+                                            }}
+                                            className="hover:bg-violet-50"
+                                          >
+                                            <ImageIcon className="h-4 w-4 text-slate-500" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Remove option"
+                                            onClick={() =>
+                                              removeOption(q.id, idx)
+                                            }
+                                          >
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </div>
+
+                                        {/* Option media preview */}
+                                        {opt.mediaAsset && (
+                                          <div className="ml-0 pl-2 border-l-2 border-violet-200">
+                                            <div className="flex items-center gap-2 text-sm text-green-700 mb-2">
+                                              {opt.mediaAsset.type ===
+                                                "IMAGE" && (
+                                                <ImageIcon className="h-4 w-4" />
+                                              )}
+                                              {opt.mediaAsset.type ===
+                                                "VIDEO" && (
+                                                <VideoIcon className="h-4 w-4" />
+                                              )}
+                                              {opt.mediaAsset.type ===
+                                                "AUDIO" && (
+                                                <Mic className="h-4 w-4" />
+                                              )}
+                                              <span className="truncate max-w-[200px]">
+                                                {opt.mediaAsset.meta
+                                                  ?.originalname || "Media"}
+                                              </span>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-2 text-red-600 hover:text-red-700"
+                                                onClick={() =>
+                                                  clearOptionMedia(q.id, idx)
+                                                }
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                            <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                                              {opt.mediaAsset.type ===
+                                                "IMAGE" && (
+                                                <img
+                                                  src={opt.mediaAsset.url}
+                                                  alt={
+                                                    opt.mediaAsset.meta
+                                                      ?.originalname ||
+                                                    "Option image"
+                                                  }
+                                                  className="max-w-full max-h-[150px] object-contain mx-auto"
+                                                />
+                                              )}
+                                              {opt.mediaAsset.type ===
+                                                "VIDEO" && (
+                                                <video
+                                                  src={opt.mediaAsset.url}
+                                                  controls
+                                                  className="max-w-full max-h-[150px] mx-auto"
+                                                />
+                                              )}
+                                              {opt.mediaAsset.type ===
+                                                "AUDIO" && (
+                                                <div className="p-2">
+                                                  <audio
+                                                    src={opt.mediaAsset.url}
+                                                    controls
+                                                    className="w-full"
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     ))}
 

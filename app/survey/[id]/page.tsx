@@ -336,11 +336,39 @@ interface QuestionMedia {
   };
 }
 
+interface OptionMedia {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+interface QuestionOption {
+  id?: string;
+  text?: string;
+  mediaId?: string | null;
+  mediaAsset?: OptionMedia | null;
+  // Scale properties
+  rangeFrom?: number | null;
+  rangeTo?: number | null;
+  fromLabel?: string | null;
+  toLabel?: string | null;
+  icon?: string | null;
+  // Grid properties
+  rowOptions?: { text?: string | null; id?: string }[];
+  columnOptions?: { text?: string | null; id?: string }[];
+  rowQuestionOptionId?: string | null;
+  columnQuestionOptionId?: string | null;
+}
+
 interface Question {
   id: string;
   question_text: string;
   question_type: string;
-  options: any[];
+  options: QuestionOption[];
   required: boolean;
   order_index: number;
   categoryId?: string;
@@ -402,6 +430,41 @@ function QuestionMediaDisplay({ media }: { media: QuestionMedia | null }) {
           <audio src={media.url} controls className="w-full">
             Your browser does not support the audio element.
           </audio>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Component to render option media preview (smaller version)
+function OptionMediaDisplay({
+  media,
+}: {
+  media: OptionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[200px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[100px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[100px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
         </div>
       )}
     </div>
@@ -1419,11 +1482,18 @@ export default function PublicSurveyPage() {
         <RadioGroup
           value={answer || ""}
           onValueChange={(value) => handleAnswerChange(question.id, value)}
+          className="space-y-3"
         >
-          {textOptions.map((option: any, idx: number) => (
-            <div key={idx} className="flex items-center space-x-2">
-              <RadioGroupItem value={option.id} id={`${question.id}-${idx}`} />
-              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+          {textOptions.map((option: QuestionOption, idx: number) => (
+            <div key={idx}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem
+                  value={option.id || String(idx)}
+                  id={`${question.id}-${idx}`}
+                />
+                <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+              </div>
+              <OptionMediaDisplay media={option.mediaAsset} />
             </div>
           ))}
         </RadioGroup>
@@ -1437,26 +1507,29 @@ export default function PublicSurveyPage() {
 
       return (
         <div className="space-y-3">
-          {textOptions.map((option: any, idx: number) => (
-            <div key={idx} className="flex items-center space-x-2">
-              <Checkbox
-                id={`${question.id}-${idx}`}
-                checked={currentAnswers.includes(option.id)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    handleAnswerChange(question.id, [
-                      ...currentAnswers,
-                      option.id,
-                    ]);
-                  } else {
-                    handleAnswerChange(
-                      question.id,
-                      currentAnswers.filter((a: string) => a !== option.id)
-                    );
-                  }
-                }}
-              />
-              <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+          {textOptions.map((option: QuestionOption, idx: number) => (
+            <div key={idx}>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${question.id}-${idx}`}
+                  checked={currentAnswers.includes(option.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      handleAnswerChange(question.id, [
+                        ...currentAnswers,
+                        option.id,
+                      ]);
+                    } else {
+                      handleAnswerChange(
+                        question.id,
+                        currentAnswers.filter((a: string) => a !== option.id)
+                      );
+                    }
+                  }}
+                />
+                <Label htmlFor={`${question.id}-${idx}`}>{option.text}</Label>
+              </div>
+              <OptionMediaDisplay media={option.mediaAsset} />
             </div>
           ))}
         </div>

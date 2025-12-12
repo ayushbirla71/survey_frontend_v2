@@ -29,6 +29,120 @@ import { useApi, usePaginatedApi } from "@/hooks/useApi";
 import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
 import { toast } from "react-toastify";
+import { ImageIcon, Video as VideoIcon, Mic } from "lucide-react";
+
+// Media types for questions and options
+interface QuestionMedia {
+  id?: string;
+  url: string;
+  type: string;
+  thumbnail_url?: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+interface OptionMedia {
+  type: "IMAGE" | "VIDEO" | "AUDIO";
+  url: string;
+  meta?: {
+    originalname?: string;
+    size?: number;
+    mimetype?: string;
+  };
+}
+
+// Component to render question media preview (small version for results)
+function QuestionMediaPreview({
+  media,
+}: {
+  media: QuestionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="mt-2 mb-3 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[300px]">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Question image"}
+          className="max-w-full max-h-[150px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          controls
+          className="max-w-full max-h-[150px] mx-auto"
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-2">
+          <audio src={media.url} controls className="w-full h-8" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Component to render option media preview (smaller version)
+function OptionMediaPreview({
+  media,
+}: {
+  media: OptionMedia | null | undefined;
+}) {
+  if (!media || !media.url) return null;
+
+  const mediaType = (media.type || "").toUpperCase();
+
+  return (
+    <div className="ml-2 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[80px] inline-block align-middle">
+      {mediaType === "IMAGE" && (
+        <img
+          src={media.url}
+          alt={media.meta?.originalname || "Option image"}
+          className="max-w-full max-h-[50px] object-contain mx-auto"
+        />
+      )}
+      {mediaType === "VIDEO" && (
+        <video
+          src={media.url}
+          className="max-w-full max-h-[50px] mx-auto"
+          muted
+        />
+      )}
+      {mediaType === "AUDIO" && (
+        <div className="p-1 flex items-center justify-center">
+          <Mic className="h-4 w-4 text-slate-500" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper to extract media from question result
+function getQuestionMedia(question: any): QuestionMedia | null {
+  if (!question) return null;
+  // Check mediaAsset first (frontend format)
+  if (question.mediaAsset) {
+    if (Array.isArray(question.mediaAsset)) {
+      return question.mediaAsset[0] || null;
+    }
+    return question.mediaAsset;
+  }
+  // Check media field (backend format)
+  if (question.media) {
+    if (Array.isArray(question.media)) {
+      return question.media[0] || null;
+    }
+    return question.media;
+  }
+  return null;
+}
 
 /**
  * Question Type Mapping (Updated 2025-11-29)
@@ -369,6 +483,9 @@ export default function SurveyResults() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {/* Display question media if present */}
+                  <QuestionMediaPreview media={getQuestionMedia(question)} />
+
                   {/* Choice types: multiple choice, checkboxes, dropdown */}
                   {(question.type === "multiple choice" ||
                     question.type === "checkboxes" ||
@@ -379,7 +496,11 @@ export default function SurveyResults() {
                           key={i}
                           className="flex items-center justify-between"
                         >
-                          <span className="text-sm">{item.option}</span>
+                          <div className="flex items-center">
+                            <span className="text-sm">{item.option}</span>
+                            {/* Display option media if present */}
+                            <OptionMediaPreview media={item.mediaAsset} />
+                          </div>
                           <div className="flex items-center gap-2">
                             <Progress
                               value={item.percentage}
