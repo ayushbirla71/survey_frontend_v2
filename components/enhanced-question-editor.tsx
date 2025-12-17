@@ -94,12 +94,17 @@ export interface QuestionVM {
   columnOptions?: GridOptionText[];
   mediaAsset?: MediaPreview | null; // preview only
   mediaId?: string | null; // backend id if uploaded
+  // ranking config lives HERE
+  allow_partial_rank?: boolean;
+  min_rank_required?: number;
+  max_rank_allowed?: number;
 }
 
 interface QuestionEditorProps {
   questions: QuestionVM[];
   onQuestionsUpdate: (questions: QuestionVM[]) => void;
   survey: { id: string };
+  questionCategories: any[];
 }
 
 const CATEGORY = {
@@ -114,15 +119,19 @@ const CATEGORY = {
   CHECKBOX_GRID: "checkbox grid",
   NUMBER: "number",
   NPS: "nps",
+  RANKING: "ranking",
 } as const;
 
 const isTextEntry = (n: string) =>
   [CATEGORY.SHORT_ANSWER, CATEGORY.PARAGRAPH].includes(n.toLowerCase() as any);
 
 const isOptionsCat = (n: string) =>
-  [CATEGORY.MULTIPLE_CHOICE, CATEGORY.CHECKBOXES, CATEGORY.DROPDOWN].includes(
-    n.toLowerCase() as any
-  );
+  [
+    CATEGORY.MULTIPLE_CHOICE,
+    CATEGORY.CHECKBOXES,
+    CATEGORY.DROPDOWN,
+    CATEGORY.RANKING,
+  ].includes(n.toLowerCase() as any);
 
 const isScaleCat = (n: string) =>
   [CATEGORY.LINEAR_SCALE, CATEGORY.RATING, CATEGORY.NPS].includes(
@@ -137,6 +146,8 @@ const isGridCat = (n: string) =>
 const isNumberCat = (n: string) =>
   [CATEGORY.NUMBER].includes(n.toLowerCase() as any);
 
+const isRankingCat = (n: string) => n.toLowerCase() === CATEGORY.RANKING;
+
 const detectQuestionTypeFromFile = (file: File): QuestionType => {
   const t = file.type.toLowerCase();
   if (t.startsWith("image/")) return "IMAGE";
@@ -149,16 +160,17 @@ export default function EnhancedQuestionEditor({
   questions,
   onQuestionsUpdate,
   survey,
+  questionCategories,
 }: QuestionEditorProps) {
-  console.log("^^^^^ Questions is", questions);
+  // console.log("^^^^^ Questions is", questions);
   const [focusedQuestion, setFocusedQuestion] = useState<string | null>(null);
 
-  const { data: questionCategories } = useApi(() =>
-    apiWithFallback(
-      () => categoriesApi.getQuestionCategories(),
-      demoData.question_categories
-    )
-  );
+  // const { data: questionCategories } = useApi(() =>
+  //   apiWithFallback(
+  //     () => categoriesApi.getQuestionCategories(),
+  //     demoData.question_categories
+  //   )
+  // );
 
   const {
     mutate: uploadMedia,
@@ -180,6 +192,33 @@ export default function EnhancedQuestionEditor({
     if (!categoryId) return "";
     const c = (categories as any[])?.find((cat) => cat.id === categoryId);
     return c ? String(c.type_name).trim() : String(categoryId);
+  };
+
+  const normalizeRanking = (q: QuestionVM): QuestionVM => {
+    if (!isRankingCat(getCategoryName(q.categoryId))) return q;
+
+    const optionCount = q.options?.length ?? 0;
+
+    if (q.min_rank_required && q.min_rank_required > optionCount) {
+      toast.warn("Can't select Min Rank more than options.");
+    }
+    const min = Math.max(
+      1,
+      Math.min(q.min_rank_required ?? 1, optionCount || 1)
+    );
+
+    if (q.max_rank_allowed && q.max_rank_allowed > optionCount) {
+      toast.warn("Can't select Max Rank more than options.");
+    }
+    const max = q.allow_partial_rank
+      ? Math.min(q.max_rank_allowed ?? 1, optionCount || 1)
+      : optionCount || 1;
+
+    return {
+      ...q,
+      min_rank_required: min,
+      max_rank_allowed: Math.max(min, max),
+    };
   };
 
   const handleQuestionChange = <K extends keyof QuestionVM>(
@@ -222,6 +261,19 @@ export default function EnhancedQuestionEditor({
         } else {
           next.options = [];
         }
+
+        // ranking defaults
+        if (catName === CATEGORY.RANKING) {
+          next.allow_partial_rank = true;
+          next.min_rank_required = 1;
+          next.max_rank_allowed = 1;
+        } else {
+          // cleanup if switching away
+          delete next.allow_partial_rank;
+          delete next.min_rank_required;
+          delete next.max_rank_allowed;
+        }
+
         return next;
       }
 
@@ -241,7 +293,6 @@ export default function EnhancedQuestionEditor({
       if (q.id !== id) return q;
       return { ...q, ...updates };
     });
-    console.log(">>>> the value of the BATCH UPDATED is : ", updated);
     onQuestionsUpdate(updated);
   };
 
@@ -249,14 +300,27 @@ export default function EnhancedQuestionEditor({
   const addOption = (qid: string) => {
     const q = byId.get(qid);
     if (!q) return;
-    handleQuestionChange(qid, "options", [...(q.options || []), { text: "" }]);
+    const updated = {
+      ...q,
+      options: [...(q.options || []), { text: "" }],
+    };
+
+    onQuestionsUpdate(
+      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x))
+    );
   };
 
   const removeOption = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
-    const next = (q.options || []).filter((_, i) => i !== idx);
-    handleQuestionChange(qid, "options", next);
+    const updated = {
+      ...q,
+      options: q.options.filter((_, i) => i !== idx),
+    };
+
+    onQuestionsUpdate(
+      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x))
+    );
   };
 
   const setOptionText = (qid: string, idx: number, text: string) => {
@@ -545,6 +609,7 @@ export default function EnhancedQuestionEditor({
                   const showTextPreview = isTextEntry(catName);
                   const showGrid = isGridCat(catName);
                   const showNumber = isNumberCat(catName);
+                  const showRanking = isRankingCat(catName);
                   // console.log(">>>>>> the value of the Q is : ", q);
 
                   return (
@@ -1176,6 +1241,84 @@ export default function EnhancedQuestionEditor({
                                     multi‑choice grid, or multiple per row for
                                     checkbox grid.
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Ranking configuration */}
+                              {showRanking && (
+                                <div className="space-y-3 rounded-md border p-3 bg-slate-50">
+                                  <Label className="font-medium">
+                                    Ranking Settings
+                                  </Label>
+
+                                  {/* Allow partial ranking */}
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={q.allow_partial_rank ?? true}
+                                      onCheckedChange={(checked) => {
+                                        const updated = normalizeRanking({
+                                          ...q,
+                                          allow_partial_rank: checked,
+                                        });
+
+                                        handleQuestionBatchUpdate(
+                                          q.id,
+                                          updated
+                                        );
+                                      }}
+                                    />
+                                    <Label>Allow partial ranking</Label>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label>Min rank required</Label>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        value={q.min_rank_required ?? 1}
+                                        onChange={(e) => {
+                                          const updated = normalizeRanking({
+                                            ...q,
+                                            min_rank_required: Number(
+                                              e.target.value
+                                            ),
+                                          });
+                                          handleQuestionBatchUpdate(
+                                            q.id,
+                                            updated
+                                          );
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <Label>Max rank allowed</Label>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        value={q.max_rank_allowed ?? 1}
+                                        onChange={(e) => {
+                                          const updated = normalizeRanking({
+                                            ...q,
+                                            max_rank_allowed: Number(
+                                              e.target.value
+                                            ),
+                                          });
+                                          handleQuestionBatchUpdate(
+                                            q.id,
+                                            updated
+                                          );
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <p className="text-xs text-slate-500">
+                                    Max rank cannot exceed number of options. If
+                                    partial ranking is off, users must rank all
+                                    options.
+                                  </p>
                                 </div>
                               )}
                             </CardContent>

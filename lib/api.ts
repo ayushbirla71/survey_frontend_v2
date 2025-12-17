@@ -54,6 +54,9 @@ export interface Survey {
     isAnonymous?: boolean;
     showProgressBar?: boolean;
     shuffleQuestions?: boolean;
+    isResultPublic: boolean;
+    autoReloadOnSubmit: boolean;
+    requireTermsAndConditions: boolean;
   };
   status: "DRAFT" | "SCHEDULED" | "PUBLISHED";
   scheduled_date?: string;
@@ -787,6 +790,9 @@ export const questionApi = {
     required?: boolean;
     rowOptions?: any[];
     columnOptions?: any[];
+    allow_partial_rank?: boolean;
+    min_rank_required?: number;
+    max_rank_allowed?: number;
   }): Promise<ApiResponse<Question>> => {
     return apiRequest("/api/questions", {
       method: "POST",
@@ -853,6 +859,9 @@ export const questionApi = {
       required?: boolean;
       rowOptions?: any[];
       columnOptions?: any[];
+      allow_partial_rank?: boolean;
+      min_rank_required?: number;
+      max_rank_allowed?: number;
     }
   ): Promise<ApiResponse<Question>> => {
     return apiRequest(`/api/questions/${questionId}`, {
@@ -1874,6 +1883,7 @@ export const demoData = {
     { id: "d16778d4-85bc-4fac-8815-2bb2f1346fd9", type_name: "time" },
     { id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", type_name: "number" },
     { id: "f6e5d4c3-b2a1-4f5e-6d7c-8b9a0e1f2a3b", type_name: "nps" },
+    { id: "ed797df3-c526-49a5-b6b8-05e2065f1a69", type_name: "ranking" },
   ],
 
   audienceStats: {

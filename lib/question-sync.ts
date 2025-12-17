@@ -18,6 +18,9 @@ export type AnyQuestion = {
   mediaId?: string | null;
   rowOptions?: any[];
   columnOptions?: any[];
+  allow_partial_rank?: boolean;
+  min_rank_required?: number;
+  max_rank_allowed?: number;
 };
 
 export function normalize(q: AnyQuestion, surveyId: string) {
@@ -33,6 +36,9 @@ export function normalize(q: AnyQuestion, surveyId: string) {
     mediaId: q.mediaId ?? null,
     rowOptions: q.rowOptions ?? [],
     columnOptions: q.columnOptions ?? [],
+    allow_partial_rank: q.allow_partial_rank ?? true,
+    min_rank_required: q.min_rank_required ?? 1,
+    max_rank_allowed: q.max_rank_allowed ?? 1,
   };
 }
 
@@ -68,7 +74,10 @@ export function diffQuestions(original: AnyQuestion[], current: AnyQuestion[]) {
         (get(oq, "order_index", "orderindex") ?? 0) !==
           (get(cq, "order_index", "orderindex") ?? 0) ||
         (oq.required ?? false) !== (cq.required ?? false) ||
-        (oq.mediaId ?? null) !== (cq.mediaId ?? null);
+        (oq.mediaId ?? null) !== (cq.mediaId ?? null) ||
+        (oq.allow_partial_rank ?? true) !== (cq.allow_partial_rank ?? true) ||
+        (oq.min_rank_required ?? 1) !== (cq.min_rank_required ?? 1) ||
+        (oq.max_rank_allowed ?? 1) !== (cq.max_rank_allowed ?? 1);
 
       if (changed) toUpdate.push(cq);
     }
@@ -103,6 +112,9 @@ export async function syncSurveyQuestions(
         required: n.required ?? false,
         rowOptions: n.rowOptions || [],
         columnOptions: n.columnOptions || [],
+        allow_partial_rank: n.allow_partial_rank ?? true,
+        min_rank_required: n.min_rank_required ?? 1,
+        max_rank_allowed: n.max_rank_allowed ?? 1,
       });
       if (error) throw new Error(error);
       return { localId: q.id, server: data };
@@ -125,6 +137,9 @@ export async function syncSurveyQuestions(
         columnOptions: n.columnOptions || [],
         // Send null explicitly when mediaId is null (to clear media in DB)
         mediaId: n.mediaId,
+        allow_partial_rank: n.allow_partial_rank ?? true,
+        min_rank_required: n.min_rank_required ?? 1,
+        max_rank_allowed: n.max_rank_allowed ?? 1,
       });
       if (error) throw new Error(error);
     })

@@ -220,6 +220,17 @@ export default function GenerateSurvey() {
   }, []); // Add empty dependency array to prevent infinite re-renders
   // console.log(">>>>>>>>> the value of the CATEGORIES is  : ", categories);
 
+  const { data: questionCategories } = useApi(() =>
+    apiWithFallback(
+      () => categoriesApi.getQuestionCategories(),
+      demoData.question_categories
+    )
+  );
+  // normalize questionCategories
+  const safeQuestionCategories = Array.isArray(questionCategories)
+    ? questionCategories
+    : [];
+
   const {
     mutate: createQuestion,
     loading: createQuestionLoading,
@@ -284,6 +295,15 @@ export default function GenerateSurvey() {
       (cat: any) => cat.id === categoryId
     );
     return category ? category.name : categoryId;
+  };
+
+  const getQuestionCategoryName = (categoryId?: string) => {
+    if (!categoryId) return "";
+
+    const qc = (safeQuestionCategories as any[])?.find(
+      (qcat) => qcat.id === categoryId
+    );
+    return qc ? String(qc.type_name).trim() : String(categoryId);
   };
 
   // Load existing survey data when in edit mode
@@ -376,6 +396,9 @@ export default function GenerateSurvey() {
                   mediaId,
                   mediaAsset,
                   description: q.description ?? "",
+                  allow_partial_rank: q.allow_partial_rank ?? true,
+                  min_rank_required: q.min_rank_required ?? null,
+                  max_rank_allowed: q.max_rank_allowed ?? null,
                 };
               }
             );
@@ -405,9 +428,30 @@ export default function GenerateSurvey() {
               //   "Setting AI generated questions:",
               //   aiGeneratedQuestionsResponse
               // );
-              setQuestions((prev) => {
-                return [...aiGeneratedQuestionsResponse.data];
-              });
+              // normalize AI generated questions
+              const normalizedAiQuestions =
+                aiGeneratedQuestionsResponse.data.map(
+                  (q: any, index: number) => ({
+                    id: q.id,
+                    surveyId: q.surveyId,
+                    question_type: q.question_type ?? "TEXT",
+                    question_text: q.question_text ?? "",
+                    options: q.options ?? [],
+                    rowOptions: q.rowOptions ?? [],
+                    columnOptions: q.columnOptions ?? [],
+                    required: q.required ?? false,
+                    categoryId: q.categoryId ?? surveyCategoryId ?? "",
+                    order_index: q.order_index ?? index,
+                    allow_partial_rank: q.allow_partial_rank ?? true,
+                    min_rank_required: q.min_rank_required ?? 1,
+                    max_rank_allowed:
+                      q.max_rank_allowed ?? q.options?.length ?? 0,
+                  })
+                );
+              setQuestions(normalizedAiQuestions);
+              // setQuestions((prev) => {
+              //   return [...aiGeneratedQuestionsResponse.data];
+              // });
             } else {
               console.log("No AI generated questions found");
               setQuestions([]);
@@ -736,6 +780,7 @@ export default function GenerateSurvey() {
       URL: "TEXT",
       NUMBER: "TEXT",
       NPS: "TEXT",
+      RANKING: "TEXT",
     };
     return typeMap[questionType] || "TEXT";
   };
@@ -1041,6 +1086,42 @@ export default function GenerateSurvey() {
     }
   };
 
+  const validateRankingQuestion = (q: any) => {
+    if (getQuestionCategoryName(q.categoryId).toLowerCase() !== "ranking")
+      return { validate: true };
+
+    const optionCount = q.options?.length ?? 0;
+
+    if (optionCount === 0)
+      return { validate: false, message: "Please add at least some option" };
+    if (!q.min_rank_required || q.min_rank_required < 1)
+      return {
+        validate: false,
+        message: "Min rank required must be at least 1",
+      };
+    if (!q.max_rank_allowed || q.max_rank_allowed > optionCount)
+      return {
+        validate: false,
+        message: "Max rank allowed cannot exceed options",
+      };
+    if (q.min_rank_required > q.max_rank_allowed)
+      return {
+        validate: false,
+        message: "Min rank required cannot exceed max rank allowed",
+      };
+
+    // If partial ranking is disabled → must rank all
+    if (q.allow_partial_rank === false && q.max_rank_allowed !== optionCount) {
+      return {
+        validate: false,
+        message:
+          "If partial ranking is disabled, max rank allowed must be equal to the number of options",
+      };
+    }
+
+    return { validate: true };
+  };
+
   const handleStep2Continue = async () => {
     setStep2Loading(true);
     try {
@@ -1068,6 +1149,13 @@ export default function GenerateSurvey() {
       //   ">>>>>>> the value of the CURRENT QUESTIONS STEP-2 is : ",
       //   questions
       // );
+      for (const q of questions) {
+        const { validate, message } = validateRankingQuestion(q);
+        if (!validate) {
+          toast.error(`${message} for question - "${q.question_text}"`);
+          return;
+        }
+      }
 
       // Persist only on continue: create/update/delete in a single pass
       const updated = await syncSurveyQuestions(
@@ -1808,6 +1896,7 @@ export default function GenerateSurvey() {
                 questions={questions}
                 onQuestionsUpdate={handleQuestionUpdate}
                 survey={createdSurvey}
+                questionCategories={safeQuestionCategories}
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
