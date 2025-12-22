@@ -234,20 +234,33 @@ export default function QuotaAudienceSelector({
 
     // Only set defaults if no existing data and not in edit mode
     if (!hasExistingData && !isEditMode) {
+      // Initialize ALL categories with target_count: 0 (similar to DEFAULT_AGE_GROUPS)
+      // This ensures all categories are available for screening questions
+      const defaultCategoryQuotas = categories.map((cat) => ({
+        surveyCategoryId: cat.id,
+        categoryName: cat.name,
+        quota_type: "COUNT" as QuotaType,
+        target_count: 0,
+        target_percentage: 0,
+        // current_count: 0,
+      }));
+
       onQuotaAudienceUpdate({
         ...quotaAudience,
         ageQuotas: DEFAULT_AGE_GROUPS,
         genderQuotas: DEFAULT_GENDERS,
+        categoryQuotas: defaultCategoryQuotas,
       });
     }
 
     setHasInitialized(true);
-  }, [isEditMode, hasInitialized]);
+  }, [isEditMode, hasInitialized, categories]);
 
   // Generate screening questions based on selected quotas
   // Show ALL options for proper screening, not just the ones with targets
   const generateScreeningQuestions = useMemo((): ScreeningQuestion[] => {
     const questions: ScreeningQuestion[] = [];
+    // console.log("quotaAudience is ----->>>>>>> : ", quotaAudience);
 
     // Check if any age quotas have targets (to determine if we need age screening)
     const hasActiveAgeQuotas = quotaAudience.ageQuotas.some(
@@ -322,23 +335,27 @@ export default function QuotaAudienceSelector({
     }
 
     // Generate category/industry screening question if category quotas exist
-    // For categories, all selected categories are qualifying options
-    const activeCategoryQuotas = (quotaAudience.categoryQuotas || []).filter(
-      (q) => q.surveyCategoryId
+    // Show ALL categories for proper screening, not just the ones with targets
+    const hasActiveCategoryQuotas = quotaAudience.categoryQuotas.some(
+      (q) =>
+        (q.target_count && q.target_count > 0) ||
+        (q.target_percentage && q.target_percentage > 0)
     );
-    if (activeCategoryQuotas.length > 0) {
+    if (hasActiveCategoryQuotas && categories.length > 0) {
       questions.push({
         id: "screening_category",
         type: "category",
         question_text: "Which industry do you work in?",
-        options: activeCategoryQuotas.map((q, idx) => ({
+        // Show all categories from the configured quotas (includes all available categories)
+        options: categories.map((cat, idx) => ({
           id: `category_option_${idx}`,
-          label: q.categoryName || q.surveyCategoryId,
-          value: q.surveyCategoryId,
+          label: cat.name,
+          value: cat.id,
         })),
         required: true,
       });
     }
+    console.log("Generated screening questions:", questions);
 
     return questions;
   }, [
@@ -350,6 +367,28 @@ export default function QuotaAudienceSelector({
 
   // Update screening questions when quotas change
   // Always regenerate options from current quota state, only preserve custom question text
+  // Always regenerate screening questions from quotas (edit & create mode)
+  // useEffect(() => {
+  //   const regenerated = generateScreeningQuestions.map((q) => {
+  //     const existing = quotaAudience.screeningQuestions.find(
+  //       (eq) => eq.id === q.id
+  //     );
+
+  //     return {
+  //       ...q,
+  //       // Only preserve custom text
+  //       question_text: existing?.question_text || q.question_text,
+  //       // Never reuse old options
+  //       options: q.options,
+  //     };
+  //   });
+
+  //   onQuotaAudienceUpdate({
+  //     ...quotaAudience,
+  //     screeningQuestions: regenerated,
+  //   });
+  // }, [generateScreeningQuestions, quotaAudience.screeningQuestions.length]);
+
   useEffect(() => {
     const existingQuestions = quotaAudience.screeningQuestions;
     const newQuestions = generateScreeningQuestions;
@@ -782,39 +821,6 @@ export default function QuotaAudienceSelector({
     });
   };
 
-  // Handle industry/category selection - stores as CategoryQuota in categoryQuotas
-  const handleIndustryToggle = (categoryId: string, categoryName: string) => {
-    const currentCategoryQuotas = quotaAudience.categoryQuotas || [];
-    const isSelected = currentCategoryQuotas.some(
-      (q) => q.surveyCategoryId === categoryId
-    );
-
-    let updatedCategoryQuotas: CategoryQuota[];
-
-    if (isSelected) {
-      // Remove the category
-      updatedCategoryQuotas = currentCategoryQuotas.filter(
-        (q) => q.surveyCategoryId !== categoryId
-      );
-    } else {
-      // Add the category with default quota settings
-      const newCategoryQuota: CategoryQuota = {
-        surveyCategoryId: categoryId,
-        categoryName: categoryName,
-        quota_type: "COUNT" as QuotaType,
-        target_count: 0,
-        target_percentage: 0,
-        current_count: 0,
-      };
-      updatedCategoryQuotas = [...currentCategoryQuotas, newCategoryQuota];
-    }
-
-    onQuotaAudienceUpdate({
-      ...quotaAudience,
-      categoryQuotas: updatedCategoryQuotas,
-    });
-  };
-
   // File handling for AGENT mode
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -878,7 +884,9 @@ export default function QuotaAudienceSelector({
   };
 
   // Check if a quota is active (has target)
-  const isQuotaActive = (quota: AgeQuota | GenderQuota | LocationQuota) => {
+  const isQuotaActive = (
+    quota: AgeQuota | GenderQuota | LocationQuota | CategoryQuota
+  ) => {
     return (
       (quota.target_count && quota.target_count > 0) ||
       (quota.target_percentage && quota.target_percentage > 0)
@@ -951,7 +959,7 @@ export default function QuotaAudienceSelector({
             </div>
             <Switch
               checked={quotaAudience.quotaEnabled}
-              disabled={true}
+              // disabled={true}
               onCheckedChange={(checked) =>
                 onQuotaAudienceUpdate({
                   ...quotaAudience,
@@ -1072,7 +1080,9 @@ export default function QuotaAudienceSelector({
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="age">Age Groups</TabsTrigger>
                   <TabsTrigger value="gender">Gender</TabsTrigger>
-                  <TabsTrigger value="location">Location</TabsTrigger>
+                  <TabsTrigger value="location" disabled>
+                    Location
+                  </TabsTrigger>
                   <TabsTrigger value="industry">Industry</TabsTrigger>
                 </TabsList>
 
@@ -1466,12 +1476,11 @@ export default function QuotaAudienceSelector({
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-slate-500 mb-4">
-                        Select the industries/categories that qualify
-                        respondents for this survey and set quota targets. Click
-                        on a selected category to configure its quota.
+                        Click on any industry/category card to set target
+                        quotas. All industries are shown for proper screening.
                       </p>
 
-                      {categories.length === 0 ? (
+                      {(quotaAudience.categoryQuotas || []).length === 0 ? (
                         <div className="text-center py-8 text-slate-500">
                           <p>No categories available.</p>
                           <p className="text-sm">
@@ -1480,118 +1489,53 @@ export default function QuotaAudienceSelector({
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {categories.map((category) => {
-                            const categoryQuotas =
-                              quotaAudience.categoryQuotas || [];
-                            const quotaIndex = categoryQuotas.findIndex(
-                              (q) => q.surveyCategoryId === category.id
-                            );
-                            const isSelected = quotaIndex >= 0;
-                            const quota = isSelected
-                              ? categoryQuotas[quotaIndex]
-                              : null;
-                            const isExpanded =
-                              isSelected && expandedQuotas.industry[quotaIndex];
-                            const hasTarget =
-                              quota &&
-                              ((quota.target_count && quota.target_count > 0) ||
+                          {(quotaAudience.categoryQuotas || []).map(
+                            (quota, index) => {
+                              const hasTarget =
+                                (quota.target_count &&
+                                  quota.target_count > 0) ||
                                 (quota.target_percentage &&
-                                  quota.target_percentage > 0));
+                                  quota.target_percentage > 0);
+                              const isExpanded =
+                                hasTarget || expandedQuotas.industry[index];
 
-                            return (
-                              <div
-                                key={category.id}
-                                className={`p-4 border rounded-lg transition-colors ${
-                                  isSelected
-                                    ? "border-violet-300 bg-violet-50"
-                                    : "border-slate-200 hover:border-violet-400 hover:bg-slate-50 cursor-pointer"
-                                }`}
-                              >
+                              return (
                                 <div
-                                  className="flex items-center justify-between cursor-pointer"
-                                  onClick={() => {
-                                    if (!isSelected) {
-                                      // Add the category
-                                      handleIndustryToggle(
-                                        category.id,
-                                        category.name
-                                      );
-                                    } else {
-                                      // Toggle expanded state
-                                      toggleQuotaExpanded(
-                                        "industry",
-                                        quotaIndex
-                                      );
-                                    }
-                                  }}
+                                  key={quota.surveyCategoryId}
+                                  className={`p-4 border rounded-lg cursor-pointer transition-colors hover:border-violet-400 ${
+                                    hasTarget || isExpanded
+                                      ? "border-violet-300 bg-violet-50"
+                                      : "border-slate-200 hover:bg-slate-50"
+                                  }`}
+                                  onClick={() =>
+                                    toggleQuotaExpanded("industry", index)
+                                  }
                                 >
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                                        isSelected
-                                          ? "bg-violet-600 border-violet-600"
-                                          : "border-slate-300"
-                                      }`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleIndustryToggle(
-                                          category.id,
-                                          category.name
-                                        );
-                                      }}
-                                    >
-                                      {isSelected && (
-                                        <svg
-                                          className="w-3 h-3 text-white"
-                                          fill="none"
-                                          viewBox="0 0 24 24"
-                                          stroke="currentColor"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={3}
-                                            d="M5 13l4 4L19 7"
-                                          />
-                                        </svg>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <Badge
+                                        variant={
+                                          hasTarget ? "default" : "outline"
+                                        }
+                                        className="text-sm px-3 py-1"
+                                      >
+                                        {quota.categoryName ||
+                                          quota.surveyCategoryId}
+                                      </Badge>
+                                      {hasTarget && (
+                                        <span className="text-sm text-violet-600 font-medium">
+                                          Target:{" "}
+                                          {quota.target_count ||
+                                            quota.target_percentage}
+                                          {quota.quota_type === "PERCENTAGE"
+                                            ? "%"
+                                            : ""}
+                                        </span>
                                       )}
                                     </div>
-                                    <span
-                                      className={`font-medium ${
-                                        isSelected
-                                          ? "text-violet-700"
-                                          : "text-slate-700"
-                                      }`}
-                                    >
-                                      {category.name}
-                                    </span>
-                                    {hasTarget && quota && (
-                                      <span className="text-sm text-violet-600 font-medium">
-                                        Target:{" "}
-                                        {quota.target_count ||
-                                          quota.target_percentage}
-                                        {quota.quota_type === "PERCENTAGE"
-                                          ? "%"
-                                          : ""}
-                                      </span>
-                                    )}
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    {isSelected && (
-                                      <Badge
-                                        variant="default"
-                                        className="bg-violet-600"
-                                      >
-                                        {hasTarget ? "Configured" : "Selected"}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
 
-                                {/* Expanded quota controls */}
-                                {isSelected &&
-                                  (isExpanded || hasTarget) &&
-                                  quota && (
+                                  {(hasTarget || isExpanded) && (
                                     <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-4">
                                       <div className="flex items-center gap-2">
                                         <Label className="text-sm">Type:</Label>
@@ -1636,7 +1580,7 @@ export default function QuotaAudienceSelector({
                                           onChange={(e) =>
                                             handleQuotaTargetChange(
                                               "industry",
-                                              quotaIndex,
+                                              index,
                                               parseInt(e.target.value) || 0,
                                               quota.quota_type
                                             )
@@ -1652,36 +1596,34 @@ export default function QuotaAudienceSelector({
                                           <span>%</span>
                                         )}
                                       </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="ml-auto"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleIndustryToggle(
-                                            category.id,
-                                            category.name
-                                          );
-                                        }}
-                                      >
-                                        <Trash2 className="h-4 w-4 text-red-500" />
-                                      </Button>
                                     </div>
                                   )}
-                              </div>
-                            );
-                          })}
+                                </div>
+                              );
+                            }
+                          )}
                         </div>
                       )}
 
-                      {(quotaAudience.categoryQuotas || []).length > 0 && (
+                      {(quotaAudience.categoryQuotas || []).filter(
+                        (q) =>
+                          (q.target_count && q.target_count > 0) ||
+                          (q.target_percentage && q.target_percentage > 0)
+                      ).length > 0 && (
                         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                           <p className="text-sm text-green-800">
                             <strong>
-                              {(quotaAudience.categoryQuotas || []).length}
+                              {
+                                (quotaAudience.categoryQuotas || []).filter(
+                                  (q) =>
+                                    (q.target_count && q.target_count > 0) ||
+                                    (q.target_percentage &&
+                                      q.target_percentage > 0)
+                                ).length
+                              }
                             </strong>{" "}
-                            industry/categories selected. Respondents will be
-                            asked to select their industry during screening.
+                            industry/categories with targets. All industries
+                            will be shown to respondents during screening.
                           </p>
                         </div>
                       )}
@@ -1785,6 +1727,37 @@ export default function QuotaAudienceSelector({
                         )}
                       </div>
                     </div>
+
+                    <div>
+                      <Label className="text-sm font-medium text-slate-600">
+                        Active Industry Quotas
+                      </Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(quotaAudience.categoryQuotas || []).filter(
+                          isQuotaActive
+                        ).length > 0 ? (
+                          (quotaAudience.categoryQuotas || [])
+                            .filter(isQuotaActive)
+                            .map((q, i) => (
+                              <Badge
+                                key={i}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {q.categoryName ||
+                                  q.surveyCategory?.name ||
+                                  q.surveyCategoryId}
+                                : {q.target_count || q.target_percentage}
+                                {q.quota_type === "PERCENTAGE" ? "%" : ""}
+                              </Badge>
+                            ))
+                        ) : (
+                          <span className="text-sm text-slate-400">
+                            None selected
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <Separator />
@@ -1835,131 +1808,147 @@ export default function QuotaAudienceSelector({
 
                       {showScreeningPreview && (
                         <div className="space-y-4 mt-4">
-                          {quotaAudience.screeningQuestions.map((question) => (
-                            <div
-                              key={question.id}
-                              className="p-3 bg-slate-50 rounded-lg"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <Label className="text-xs text-slate-500 uppercase">
-                                    {question.type} Question
-                                  </Label>
-                                  <Input
-                                    value={question.question_text}
-                                    onChange={(e) =>
-                                      handleScreeningQuestionTextChange(
-                                        question.id,
-                                        e.target.value
-                                      )
-                                    }
-                                    className="mt-1 text-sm"
-                                    placeholder="Enter question text..."
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <Label className="text-xs text-slate-500">
-                                  Options:{" "}
-                                  <span className="text-green-600">
-                                    Green = Qualifying
-                                  </span>{" "}
-                                  |{" "}
-                                  <span className="text-slate-400">
-                                    Gray = Non-qualifying
-                                  </span>
-                                </Label>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {question.options.map((opt) => {
-                                    // Check if this option is a qualifying option (has quota target)
-                                    let isQualifying = false;
-                                    if (question.type === "age") {
-                                      const ageQuota =
-                                        quotaAudience.ageQuotas.find(
-                                          (q) =>
-                                            `${q.min_age}-${q.max_age}` ===
-                                            opt.value
-                                        );
-                                      isQualifying = !!(
-                                        ageQuota &&
-                                        ((ageQuota.target_count &&
-                                          ageQuota.target_count > 0) ||
-                                          (ageQuota.target_percentage &&
-                                            ageQuota.target_percentage > 0))
-                                      );
-                                    } else if (question.type === "gender") {
-                                      const genderQuota =
-                                        quotaAudience.genderQuotas.find(
-                                          (q) => q.gender === opt.value
-                                        );
-                                      isQualifying = !!(
-                                        genderQuota &&
-                                        ((genderQuota.target_count &&
-                                          genderQuota.target_count > 0) ||
-                                          (genderQuota.target_percentage &&
-                                            genderQuota.target_percentage > 0))
-                                      );
-                                    } else if (question.type === "location") {
-                                      const locationQuota =
-                                        quotaAudience.locationQuotas.find(
-                                          (q) => {
-                                            try {
-                                              const parsed = JSON.parse(
-                                                opt.value
-                                              );
-                                              return (
-                                                q.country === parsed.country &&
-                                                q.state === parsed.state &&
-                                                q.city === parsed.city
-                                              );
-                                            } catch {
-                                              return false;
-                                            }
-                                          }
-                                        );
-                                      isQualifying = !!(
-                                        locationQuota &&
-                                        ((locationQuota.target_count &&
-                                          locationQuota.target_count > 0) ||
-                                          (locationQuota.target_percentage &&
-                                            locationQuota.target_percentage >
-                                              0))
-                                      );
-                                    } else if (question.type === "category") {
-                                      const categoryQuota =
-                                        quotaAudience.categoryQuotas.find(
-                                          (q) =>
-                                            q.surveyCategoryId === opt.value
-                                        );
-                                      isQualifying = !!(
-                                        categoryQuota &&
-                                        ((categoryQuota.target_count &&
-                                          categoryQuota.target_count > 0) ||
-                                          (categoryQuota.target_percentage &&
-                                            categoryQuota.target_percentage >
-                                              0))
-                                      );
-                                    }
+                          {generateScreeningQuestions.map((question) => {
+                            const savedQuestion =
+                              quotaAudience.screeningQuestions.find(
+                                (q) => q.id === question.id
+                              );
 
-                                    return (
-                                      <Badge
-                                        key={opt.id}
-                                        variant="outline"
-                                        className={`text-xs ${
-                                          isQualifying
-                                            ? "bg-green-50 border-green-500 text-green-700"
-                                            : "bg-slate-50 border-slate-300 text-slate-400"
-                                        }`}
-                                      >
-                                        {opt.label}
-                                        {isQualifying && " ✓"}
-                                      </Badge>
-                                    );
-                                  })}
+                            const previewQuestion = {
+                              ...question,
+                              question_text:
+                                savedQuestion?.question_text ||
+                                question.question_text,
+                            };
+
+                            return (
+                              <div
+                                key={previewQuestion.id}
+                                className="p-3 bg-slate-50 rounded-lg"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <Label className="text-xs text-slate-500 uppercase">
+                                      {question.type} Question
+                                    </Label>
+                                    <Input
+                                      value={previewQuestion.question_text}
+                                      onChange={(e) =>
+                                        handleScreeningQuestionTextChange(
+                                          previewQuestion.id,
+                                          e.target.value
+                                        )
+                                      }
+                                      className="mt-1 text-sm"
+                                      placeholder="Enter question text..."
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mt-2">
+                                  <Label className="text-xs text-slate-500">
+                                    Options:{" "}
+                                    <span className="text-green-600">
+                                      Green = Qualifying
+                                    </span>{" "}
+                                    |{" "}
+                                    <span className="text-slate-400">
+                                      Gray = Non-qualifying
+                                    </span>
+                                  </Label>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {previewQuestion.options.map((opt) => {
+                                      // Check if this option is a qualifying option (has quota target)
+                                      let isQualifying = false;
+                                      if (question.type === "age") {
+                                        const ageQuota =
+                                          quotaAudience.ageQuotas.find(
+                                            (q) =>
+                                              `${q.min_age}-${q.max_age}` ===
+                                              opt.value
+                                          );
+                                        isQualifying = !!(
+                                          ageQuota &&
+                                          ((ageQuota.target_count &&
+                                            ageQuota.target_count > 0) ||
+                                            (ageQuota.target_percentage &&
+                                              ageQuota.target_percentage > 0))
+                                        );
+                                      } else if (question.type === "gender") {
+                                        const genderQuota =
+                                          quotaAudience.genderQuotas.find(
+                                            (q) => q.gender === opt.value
+                                          );
+                                        isQualifying = !!(
+                                          genderQuota &&
+                                          ((genderQuota.target_count &&
+                                            genderQuota.target_count > 0) ||
+                                            (genderQuota.target_percentage &&
+                                              genderQuota.target_percentage >
+                                                0))
+                                        );
+                                      } else if (question.type === "location") {
+                                        const locationQuota =
+                                          quotaAudience.locationQuotas.find(
+                                            (q) => {
+                                              try {
+                                                const parsed = JSON.parse(
+                                                  opt.value
+                                                );
+                                                return (
+                                                  q.country ===
+                                                    parsed.country &&
+                                                  q.state === parsed.state &&
+                                                  q.city === parsed.city
+                                                );
+                                              } catch {
+                                                return false;
+                                              }
+                                            }
+                                          );
+                                        isQualifying = !!(
+                                          locationQuota &&
+                                          ((locationQuota.target_count &&
+                                            locationQuota.target_count > 0) ||
+                                            (locationQuota.target_percentage &&
+                                              locationQuota.target_percentage >
+                                                0))
+                                        );
+                                      } else if (question.type === "category") {
+                                        const categoryQuota =
+                                          quotaAudience.categoryQuotas.find(
+                                            (q) =>
+                                              q.surveyCategoryId === opt.value
+                                          );
+                                        isQualifying = !!(
+                                          categoryQuota &&
+                                          ((categoryQuota.target_count &&
+                                            categoryQuota.target_count > 0) ||
+                                            (categoryQuota.target_percentage &&
+                                              categoryQuota.target_percentage >
+                                                0))
+                                        );
+                                      }
+
+                                      return (
+                                        <Badge
+                                          key={opt.id}
+                                          variant="outline"
+                                          className={`text-xs ${
+                                            isQualifying
+                                              ? "bg-green-50 border-green-500 text-green-700"
+                                              : "bg-slate-50 border-slate-300 text-slate-400"
+                                          }`}
+                                        >
+                                          {opt.label}
+                                          {isQualifying && " ✓"}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

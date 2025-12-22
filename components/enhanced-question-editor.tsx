@@ -164,6 +164,30 @@ export default function EnhancedQuestionEditor({
 }: QuestionEditorProps) {
   // console.log("^^^^^ Questions is", questions);
   const [focusedQuestion, setFocusedQuestion] = useState<string | null>(null);
+  // global upload overlay state
+  const [isUploading, setIsUploading] = useState(false);
+  const [dotCount, setDotCount] = useState(1);
+  const [colorIndex, setColorIndex] = useState(0);
+
+  // blinking dots animation
+  React.useEffect(() => {
+    if (!isUploading) return;
+
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev % 3) + 1); // 1 → 2 → 3 → 1
+      setColorIndex((prev) => (prev + 1) % 4); // cycle colors
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [isUploading]);
+
+  // text color cycle
+  const uploadColors = [
+    "text-violet-600",
+    "text-indigo-600",
+    "text-blue-600",
+    "text-fuchsia-600",
+  ];
 
   // const { data: questionCategories } = useApi(() =>
   //   apiWithFallback(
@@ -313,6 +337,7 @@ export default function EnhancedQuestionEditor({
   const removeOption = (qid: string, idx: number) => {
     const q = byId.get(qid);
     if (!q) return;
+    if (q.options?.[idx]?.mediaId) deleteMedia(q.options[idx].mediaId);
     const updated = {
       ...q,
       options: q.options.filter((_, i) => i !== idx),
@@ -347,7 +372,9 @@ export default function EnhancedQuestionEditor({
     else if (file.type.startsWith("audio/")) detected = "AUDIO";
 
     try {
-      toast.info(`Uploading ${file.name}...`);
+      // toast.info(`Uploading ${file.name}...`);
+      setIsUploading(true);
+
       const mediaData: any = await uploadMedia(file);
 
       const mediaId = mediaData?.data?.media?.id ?? mediaData?.media?.id;
@@ -385,6 +412,8 @@ export default function EnhancedQuestionEditor({
     } catch (err: any) {
       console.error("Option media upload error:", err);
       toast.error(err?.message || "Failed to upload option media");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -392,6 +421,10 @@ export default function EnhancedQuestionEditor({
   const clearOptionMedia = (qid: string, optIdx: number) => {
     const q = byId.get(qid);
     if (!q) return;
+    const optionMediaId = q.options?.[optIdx]?.mediaId;
+    if (optionMediaId) {
+      deleteMedia(optionMediaId);
+    }
     const next = (q.options || []).map((opt, i) =>
       i === optIdx ? { ...opt, mediaId: null, mediaAsset: null } : opt
     );
@@ -506,6 +539,14 @@ export default function EnhancedQuestionEditor({
 
   // IMPORTANT: no API call here — defer deletes to parent Continue sync
   const removeQuestion = (id: string) => {
+    const q = byId.get(id);
+    if (!q) return;
+    if (q.mediaId) deleteMedia(q.mediaId);
+    if (q.options) {
+      q.options.forEach((opt) => {
+        if (opt.mediaId) deleteMedia(opt.mediaId);
+      });
+    }
     const next = reindex(questions.filter((q) => q.id !== id));
     onQuestionsUpdate(next);
     if (focusedQuestion === id) setFocusedQuestion(null);
@@ -517,6 +558,15 @@ export default function EnhancedQuestionEditor({
     const [moved] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, moved);
     onQuestionsUpdate(reindex(items));
+  };
+
+  const deleteMedia = async (mediaId: string) => {
+    try {
+      const { error } = await mediaUploadApi.deleteMedia(mediaId);
+      if (error) throw new Error(error);
+    } catch (err) {
+      console.error("Media delete error:", err);
+    }
   };
 
   // helper to reset file input by id
@@ -539,6 +589,8 @@ export default function EnhancedQuestionEditor({
     if (!q) return;
 
     try {
+      setIsUploading(true);
+
       const mediaData: any = await uploadMedia(file);
       console.log(">>>>> the value of the MEDIA DATA is : ", mediaData);
 
@@ -576,6 +628,8 @@ export default function EnhancedQuestionEditor({
         question_type: "TEXT",
       });
       toast.error("Failed to upload media");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -586,11 +640,39 @@ export default function EnhancedQuestionEditor({
       mediaId: null,
       question_type: "TEXT",
     });
+    const q = byId.get(qid);
+    if (!q || !q.mediaId) return;
+    deleteMedia(q.mediaId);
     resetFileInput(qid);
   };
 
   return (
     <div className="space-y-4">
+      {/* FULL-PAGE UPLOADING OVERLAY */}
+      {isUploading && (
+        <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center">
+          <div className="bg-white rounded-2xl px-14 py-12 text-center shadow-2xl min-w-[420px]">
+            {/* Animated title */}
+            <div
+              className={`text-2xl font-semibold transition-colors duration-300 ${uploadColors[colorIndex]}`}
+            >
+              Uploading media
+              <span className="inline-block w-[32px] text-left">
+                {".".repeat(dotCount)}
+              </span>
+            </div>
+
+            {/* Subtext */}
+            <div className="mt-4 text-base text-slate-500">
+              Please wait while we process your file.
+            </div>
+
+            {/* Optional subtle pulse */}
+            <div className="mt-8 h-2 w-24 mx-auto rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 animate-pulse" />
+          </div>
+        </div>
+      )}
+
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="questions">
           {(dropProvided) => (

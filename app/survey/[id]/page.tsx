@@ -56,6 +56,18 @@ interface AnimatedStartButtonProps {
   fillDuration?: number; // in milliseconds
 }
 
+interface SavedScreeningQuestionInterface {
+  id: string;
+  type: "age" | "gender" | "location" | "category";
+  question_text: string;
+  options: Array<{
+    id: string;
+    label: string;
+    value: string;
+  }>;
+  required: boolean;
+}
+
 function AnimatedStartButton({
   onComplete,
   isReady,
@@ -301,13 +313,15 @@ const regenerateScreeningQuestionsWithAllOptions = (
   }
 
   // Check if there are any category quotas
-  const activeCategoryQuotas = (quotaConfig.category_quotas || []).filter(
-    (q) => q.surveyCategoryId
+  const hasActiveCategoryQuotas = (quotaConfig.category_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
   );
 
-  if (activeCategoryQuotas.length > 0) {
+  if (hasActiveCategoryQuotas) {
     const savedCategoryQuestion = savedQuestions.find(
-      (sq) => sq.type === "category"
+      (sq): sq is SavedScreeningQuestionInterface => sq.type === "category"
     );
     questions.push({
       id: "screening_category",
@@ -315,10 +329,10 @@ const regenerateScreeningQuestionsWithAllOptions = (
       question_text:
         savedCategoryQuestion?.question_text ||
         "Which industry do you work in?",
-      options: activeCategoryQuotas.map((q, idx) => ({
+      options: (savedCategoryQuestion?.options || []).map((q, idx) => ({
         id: `category_option_${idx}`,
-        label: q.categoryName || q.surveyCategoryId,
-        value: q.surveyCategoryId,
+        label: q.label,
+        value: q.value,
       })),
       required: true,
     });
@@ -2120,6 +2134,7 @@ export default function PublicSurveyPage() {
 
   // Show screening questions phase
   if (screeningPhase && screeningQuestions.length > 0) {
+    console.log("screeningQuestions **** : ", screeningQuestions);
     const currentScreeningQuestion = screeningQuestions[currentScreeningIndex];
     const screeningProgress =
       ((currentScreeningIndex + 1) / screeningQuestions.length) * 100;
@@ -2172,11 +2187,11 @@ export default function PublicSurveyPage() {
                 >
                   {currentScreeningQuestion.options.map((option) => (
                     <div
-                      key={option.id}
+                      key={option.value}
                       className="flex items-center space-x-3"
                     >
-                      <RadioGroupItem value={option.value} id={option.id} />
-                      <Label htmlFor={option.id} className="cursor-pointer">
+                      <RadioGroupItem value={option.value} id={option.value} />
+                      <Label htmlFor={option.value} className="cursor-pointer">
                         {option.label}
                       </Label>
                     </div>

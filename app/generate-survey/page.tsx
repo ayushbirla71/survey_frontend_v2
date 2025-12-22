@@ -1221,6 +1221,11 @@ export default function GenerateSurvey() {
           (q.target_count && q.target_count > 0) ||
           (q.target_percentage && q.target_percentage > 0)
       );
+      const activeCategoryQuotas = quotaAudience.categoryQuotas.filter(
+        (q) =>
+          (q.target_count && q.target_count > 0) ||
+          (q.target_percentage && q.target_percentage > 0)
+      );
 
       // Check if there are any changes from original
       const hasChanges =
@@ -1250,8 +1255,12 @@ export default function GenerateSurvey() {
           originalQuotaAudience.locationQuotas || []
         ) ||
         hasFieldChanged(
-          quotaAudience.categoryQuotas,
-          originalQuotaAudience.categoryQuotas || []
+          activeCategoryQuotas,
+          originalQuotaAudience.categoryQuotas?.filter(
+            (q) =>
+              (q.target_count && q.target_count > 0) ||
+              (q.target_percentage && q.target_percentage > 0)
+          ) || []
         ) ||
         hasFieldChanged(
           quotaAudience.totalTarget,
@@ -1324,19 +1333,16 @@ export default function GenerateSurvey() {
           if (
             !originalQuotaAudience ||
             hasFieldChanged(
-              quotaAudience.categoryQuotas,
-              originalQuotaAudience.categoryQuotas || []
+              activeCategoryQuotas,
+              originalQuotaAudience.categoryQuotas?.filter(
+                (q) =>
+                  (q.target_count && q.target_count > 0) ||
+                  (q.target_percentage && q.target_percentage > 0)
+              ) || []
             )
           ) {
             // Only send required fields to backend (exclude categoryName and current_count)
-            quotaConfigData.category_quotas = quotaAudience.categoryQuotas.map(
-              (q) => ({
-                surveyCategoryId: q.surveyCategoryId,
-                quota_type: q.quota_type,
-                target_count: q.target_count,
-                target_percentage: q.target_percentage,
-              })
-            );
+            quotaConfigData.category_quotas = activeCategoryQuotas;
           }
 
           if (

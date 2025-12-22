@@ -176,6 +176,10 @@ export interface CategoryQuota {
   target_count?: number;
   target_percentage?: number;
   current_count?: number;
+  surveyCategory?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface QuotaConfig {
@@ -264,7 +268,7 @@ async function apiRequest<T>(
 
     // Add timeout to prevent hanging requests
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers,
@@ -1040,6 +1044,21 @@ export const mediaUploadApi = {
     return apiRequest("/api/upload/media", {
       method: "POST",
       body: formData,
+      headers,
+    });
+  },
+  // DELETE /api/upload/media/:mediaId
+  deleteMedia: async (
+    mediaId: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return apiRequest(`/api/upload/media/${mediaId}`, {
+      method: "DELETE",
       headers,
     });
   },
