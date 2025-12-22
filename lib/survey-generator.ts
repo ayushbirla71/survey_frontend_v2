@@ -905,6 +905,25 @@ function generateQuestionPageHtml(
       `;
       break;
 
+    case "ranking":
+      optionsHtml = `
+        <div class="ranking-group">
+          ${
+            question.options
+              ?.map(
+                (option, optIndex) => `
+            <div class="ranking-option">
+              <span class="ranking-number">${optIndex + 1}</span>
+              <span class="ranking-label">${option}</span>
+            </div>
+          `
+              )
+              .join("") || ""
+          }
+        </div>
+      `;
+      break;
+
     default:
       optionsHtml = `<p>Unsupported question type: ${question.type}</p>`;
   }

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Star } from "lucide-react";
+import RankingQuestion from "./ranking-question";
 
 type GridLabel = { id?: string; text: string };
 
@@ -98,7 +99,8 @@ type GKind =
   | "date"
   | "time"
   | "number"
-  | "nps";
+  | "nps"
+  | "ranking";
 
 type KindsMap = Record<string, GKind>;
 
@@ -209,6 +211,7 @@ function normKindStr(s?: string): GKind | null {
   if (k === "time") return "time";
   if (k === "number") return "number";
   if (k === "nps" || k === "netpromoterscore") return "nps";
+  if (k === "ranking") return "ranking";
   return null;
 }
 
@@ -834,6 +837,24 @@ export default function SurveyPreview({
                     <span>Not at all likely</span>
                     <span>Extremely likely</span>
                   </div>
+                </div>
+              )}
+
+              {/* ranking (UPDATED – real interactive preview, disabled) */}
+              {kind === "ranking" && (
+                <div className="pointer-events-none opacity-90">
+                  <RankingQuestion
+                    question={{
+                      ...q,
+                      options: opts.map((o) => ({
+                        id: o.id!,
+                        text: o.text ?? "",
+                        mediaAsset: o.mediaAsset ?? null,
+                      })),
+                    }}
+                    answer={[]}
+                    onChange={() => {}}
+                  />
                 </div>
               )}
             </div>

@@ -40,12 +40,32 @@ import {
   ScreeningQuestion,
   QuotaCheckRequest,
 } from "@/lib/api";
+import RankingQuestion from "@/components/ranking-question";
+import { cn } from "@/lib/utils";
+
+import {
+  DEFAULT_AGE_GROUPS,
+  DEFAULT_GENDERS,
+  GENDER_LABELS,
+} from "@/components/quota-audience-selector";
 
 // Animated Start Button Component
 interface AnimatedStartButtonProps {
   onComplete: () => void;
   isReady: boolean;
   fillDuration?: number; // in milliseconds
+}
+
+interface SavedScreeningQuestionInterface {
+  id: string;
+  type: "age" | "gender" | "location" | "category";
+  question_text: string;
+  options: Array<{
+    id: string;
+    label: string;
+    value: string;
+  }>;
+  required: boolean;
 }
 
 function AnimatedStartButton({
@@ -197,11 +217,6 @@ function TermsAndConditions() {
     </div>
   );
 }
-import {
-  DEFAULT_AGE_GROUPS,
-  DEFAULT_GENDERS,
-  GENDER_LABELS,
-} from "@/components/quota-audience-selector";
 
 // Helper function to regenerate screening questions with ALL options
 // ALWAYS shows all available options regardless of which ones have quotas set
@@ -298,13 +313,15 @@ const regenerateScreeningQuestionsWithAllOptions = (
   }
 
   // Check if there are any category quotas
-  const activeCategoryQuotas = (quotaConfig.category_quotas || []).filter(
-    (q) => q.surveyCategoryId
+  const hasActiveCategoryQuotas = (quotaConfig.category_quotas || []).some(
+    (q) =>
+      (q.target_count && q.target_count > 0) ||
+      (q.target_percentage && q.target_percentage > 0)
   );
 
-  if (activeCategoryQuotas.length > 0) {
+  if (hasActiveCategoryQuotas) {
     const savedCategoryQuestion = savedQuestions.find(
-      (sq) => sq.type === "category"
+      (sq): sq is SavedScreeningQuestionInterface => sq.type === "category"
     );
     questions.push({
       id: "screening_category",
@@ -312,10 +329,10 @@ const regenerateScreeningQuestionsWithAllOptions = (
       question_text:
         savedCategoryQuestion?.question_text ||
         "Which industry do you work in?",
-      options: activeCategoryQuotas.map((q, idx) => ({
+      options: (savedCategoryQuestion?.options || []).map((q, idx) => ({
         id: `category_option_${idx}`,
-        label: q.categoryName || q.surveyCategoryId,
-        value: q.surveyCategoryId,
+        label: q.label,
+        value: q.value,
       })),
       required: true,
     });
@@ -372,12 +389,16 @@ interface Question {
   required: boolean;
   order_index: number;
   categoryId?: string;
+  category?: any;
   rows?: any[];
   columns?: any[];
   rowOptions?: any[];
   columnOptions?: any[];
   allowMultipleInGrid?: boolean;
   mediaAsset?: QuestionMedia[] | QuestionMedia | null;
+  allow_partial_rank?: boolean;
+  min_rank_required?: number;
+  max_rank_allowed?: number;
 }
 
 interface Survey {
@@ -440,34 +461,52 @@ function QuestionMediaDisplay({ media }: { media: QuestionMedia | null }) {
 }
 
 // Component to render option media preview (smaller version)
-function OptionMediaDisplay({
+export function OptionMediaDisplay({
   media,
+  fullWidth = false,
 }: {
   media: OptionMedia | null | undefined;
+  fullWidth?: boolean;
 }) {
+  console.log(">>>>> the value of the FULL WIDTH is : ", fullWidth);
   if (!media || !media.url) return null;
 
   const mediaType = (media.type || "").toUpperCase();
 
   return (
-    <div className="mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50 max-w-[200px]">
+    <div
+      className={cn(
+        "mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50",
+        fullWidth ? "w-full" : "max-w-[200px]"
+      )}
+    >
       {mediaType === "IMAGE" && (
         <img
           src={media.url}
           alt={media.meta?.originalname || "Option image"}
-          className="max-w-full max-h-[100px] object-contain mx-auto"
+          className={cn(
+            "object-contain mx-auto",
+            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]"
+          )}
         />
       )}
       {mediaType === "VIDEO" && (
         <video
           src={media.url}
           controls
-          className="max-w-full max-h-[100px] mx-auto"
+          className={cn(
+            "mx-auto",
+            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]"
+          )}
         />
       )}
       {mediaType === "AUDIO" && (
         <div className="p-2">
-          <audio src={media.url} controls className="w-full h-8" />
+          <audio
+            src={media.url}
+            controls
+            className="w-full h-8 min-w-[200px]"
+          />
         </div>
       )}
     </div>
@@ -487,7 +526,8 @@ type GKind =
   | "date"
   | "time"
   | "number"
-  | "nps";
+  | "nps"
+  | "ranking";
 
 type KindsMap = Record<string, GKind>;
 
@@ -769,6 +809,7 @@ function normKindStr(s?: string): GKind | null {
   if (k === "time") return "time";
   if (k === "number") return "number";
   if (k === "nps" || k === "netpromoterscore") return "nps";
+  if (k === "ranking") return "ranking";
   return null;
 }
 
@@ -1225,6 +1266,15 @@ export default function PublicSurveyPage() {
 
     // Arrays (checkboxes, some multi-selects)
     if (Array.isArray(value)) {
+      if (question.category?.type_name.toLowerCase() === "ranking") {
+        if (value.length < question?.min_rank_required) {
+          toast.error(
+            `Please rank at least ${question.min_rank_required} options`
+          );
+          return false;
+        }
+        return value.length > 0;
+      }
       return value.length > 0;
     }
 
@@ -1880,6 +1930,19 @@ export default function PublicSurveyPage() {
       );
     }
 
+    // Ranking
+    if (kind === "ranking") {
+      return (
+        <RankingQuestion
+          question={question}
+          answer={answer}
+          onChange={(rankedIds) => {
+            answers[question.id] = rankedIds;
+          }}
+        />
+      );
+    }
+
     // Default fallback
     return (
       <Input
@@ -2071,6 +2134,7 @@ export default function PublicSurveyPage() {
 
   // Show screening questions phase
   if (screeningPhase && screeningQuestions.length > 0) {
+    console.log("screeningQuestions **** : ", screeningQuestions);
     const currentScreeningQuestion = screeningQuestions[currentScreeningIndex];
     const screeningProgress =
       ((currentScreeningIndex + 1) / screeningQuestions.length) * 100;
@@ -2123,11 +2187,11 @@ export default function PublicSurveyPage() {
                 >
                   {currentScreeningQuestion.options.map((option) => (
                     <div
-                      key={option.id}
+                      key={option.value}
                       className="flex items-center space-x-3"
                     >
-                      <RadioGroupItem value={option.value} id={option.id} />
-                      <Label htmlFor={option.id} className="cursor-pointer">
+                      <RadioGroupItem value={option.value} id={option.value} />
+                      <Label htmlFor={option.value} className="cursor-pointer">
                         {option.label}
                       </Label>
                     </div>
