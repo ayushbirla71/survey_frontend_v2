@@ -249,6 +249,31 @@ export interface MediaUploadResponse {
   media: any;
 }
 
+export type VendorKey = "INNOVATEMR"; // from Prisma enum VendorKey
+
+export type VendorAuthType = "API_KEY" | "BASIC" | "OAUTH2" | "CUSTOM";
+
+export interface VendorApiConfig {
+  id?: string;
+  api_version: string;
+  base_url: string;
+  auth_type: VendorAuthType;
+  credentials: Record<string, unknown>;
+  is_default: boolean;
+  is_active?: boolean;
+}
+
+export interface Vendor {
+  id: string;
+  key: VendorKey;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  api_configs: VendorApiConfig[];
+  question_library: any[];
+}
+
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
@@ -667,7 +692,13 @@ export const surveyApi = {
     title: string;
     description: string;
     flow_type?: "STATIC" | "INTERACTIVE" | "GAME";
-    survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT";
+    survey_send_by?:
+      | "WHATSAPP"
+      | "EMAIL"
+      | "BOTH"
+      | "NONE"
+      | "AGENT"
+      | "VENDOR";
     settings?: {
       isAnonymous?: boolean;
       showProgressBar?: boolean;
@@ -1069,7 +1100,7 @@ export const shareApi = {
   // POST /api/share
   shareSurvey: async (shareData: {
     surveyId: string;
-    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH" | "VENDOR";
     recipients?: Array<{
       email?: string;
       mobile_no?: string;
@@ -1797,6 +1828,64 @@ export const categoriesApi = {
       return { data: (result.data as any).categories };
     }
     return { data: [] };
+  },
+};
+
+// Vendors API
+export const vendorsApi = {
+  // GET /api/vendors
+  getVendors: async (): Promise<ApiResponse<ApiResponse<Vendor[]>>> => {
+    return apiRequest("/api/vendors");
+  },
+
+  // POST /api/vendors
+  createVendor: async (vendorData: {
+    key: VendorKey;
+    name: string;
+    apiConfig: VendorApiConfig;
+  }): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest("/api/vendors", {
+      method: "POST",
+      body: JSON.stringify(vendorData),
+    });
+  },
+
+  // PATCH /api/vendors/:id
+  updateVendor: async (
+    id: string,
+    updates: {
+      name?: string;
+      is_active?: boolean;
+    }
+  ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest(`/api/vendors/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  },
+
+  // PATCH /api/vendors/:id/toggle-active
+  toggleVendorActive: async (
+    id: string,
+    is_active: boolean
+  ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest(`/api/vendors/${id}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active }),
+    });
+  },
+
+  // GET /api/vendors/:vendorId/questions
+  getVendorQuestions: async (
+    vendorId: string,
+    params?: { countryCode?: string; language?: string }
+  ): Promise<ApiResponse<ApiResponse<any[]>>> => {
+    return apiRequest(
+      `/api/vendors/${vendorId}/questions?countryCode=${params?.countryCode}&language=${params?.language}`,
+      {
+        method: "GET",
+      }
+    );
   },
 };
 

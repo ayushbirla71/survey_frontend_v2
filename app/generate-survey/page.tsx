@@ -69,6 +69,9 @@ import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { deepEqual } from "@/lib/deepCompare";
 import { buildQuotaUpdatePayload } from "@/lib/buildQuotaPayload";
+import VendorAudience, {
+  VendorAudienceData,
+} from "@/components/vendor-audience";
 
 // (only if you do not already have a similar type)
 type QuestionWithOptions = {
@@ -89,7 +92,13 @@ type QuestionWithOptions = {
   is_added_to_survey?: boolean;
 };
 
-type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+type SurveySendByType =
+  | "NONE"
+  | "AGENT"
+  | "WHATSAPP"
+  | "EMAIL"
+  | "BOTH"
+  | "VENDOR";
 
 interface PublicSurveySettings {
   isResultPublic: boolean;
@@ -181,6 +190,10 @@ export default function GenerateSurvey() {
     quotaFullUrl: "",
     dataSource: "default",
     screeningQuestions: [],
+  });
+
+  const [vendorsAudience, setVendorsAudience] = useState<VendorAudienceData>({
+    vendorId: "",
   });
 
   const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
@@ -681,6 +694,12 @@ export default function GenerateSurvey() {
   ) => {
     setQuotaAudience(updatedQuotaAudience);
     // No auto-save - quota will be saved on "Continue to Preview" button click
+  };
+
+  const handleVendorAudienceUpdate = (
+    updatedVendorAudience: VendorAudienceData
+  ) => {
+    setVendorsAudience(updatedVendorAudience);
   };
 
   const generatePublicLink = async () => {
@@ -1785,7 +1804,13 @@ export default function GenerateSurvey() {
                     <Select
                       value={surveySettings.survey_send_by}
                       onValueChange={(
-                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT"
+                        value:
+                          | "WHATSAPP"
+                          | "EMAIL"
+                          | "BOTH"
+                          | "NONE"
+                          | "AGENT"
+                          | "VENDOR"
                       ) =>
                         setSurveySettings((prev: any) => ({
                           ...prev,
@@ -1802,6 +1827,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="BOTH">Both</SelectItem> */}
                         <SelectItem value="NONE">Public (Link Only)</SelectItem>
                         <SelectItem value="AGENT">Agent</SelectItem>
+                        <SelectItem value="VENDOR">Vendor</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2005,21 +2031,36 @@ export default function GenerateSurvey() {
           {/* Step 4: Target Audience */}
           {step === 4 && (
             <div className="p-8">
-              <QuotaAudienceSelector
-                createdSurvey={createdSurvey}
-                surveySettings={surveySettings}
-                quotaAudience={quotaAudience}
-                onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
-                onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
-                categories={categories || []}
-                onValidationError={setQuotaValidationError}
-                isEditMode={isEditMode}
-              />
+              {surveySettings.survey_send_by === "VENDOR" ? (
+                <VendorAudience
+                  createdSurvey={createdSurvey}
+                  surveySettings={surveySettings}
+                  vendorsAudience={vendorsAudience}
+                  onVendorsAudienceUpdate={handleVendorAudienceUpdate}
+                  // onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                  categories={categories || []}
+                  // onValidationError={setQuotaValidationError}
+                  isEditMode={isEditMode}
+                />
+              ) : (
+                <div>
+                  <QuotaAudienceSelector
+                    createdSurvey={createdSurvey}
+                    surveySettings={surveySettings}
+                    quotaAudience={quotaAudience}
+                    onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
+                    onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                    categories={categories || []}
+                    onValidationError={setQuotaValidationError}
+                    isEditMode={isEditMode}
+                  />
 
-              {quotaValidationError && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5" />
-                  {quotaValidationError}
+                  {quotaValidationError && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
+                      {quotaValidationError}
+                    </div>
+                  )}
                 </div>
               )}
 

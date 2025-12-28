@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { authApi, type User } from "@/lib/api";
+import { toast } from "react-toastify";
 
 interface AuthContextType {
   user: User | null;
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Public routes that don't require authentication
   const publicRoutes = ["/auth/login", "/auth/admin-signup"];
   const publicRoutePrefixes = ["/survey/", "/survey-results/"]; // anything starting with /survey/ is public
+  const adminRoutesPrefixes = ["/admin"];
   // ✅ Check if the route is public
 
   // 🔹 Auth routes = only login/signup
@@ -55,6 +57,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // ✅ Check if the route is an AUTH page (login/signup only)
   const isAuthRoute = authRoutes.includes(pathname);
 
+  const isAdminRoute = adminRoutesPrefixes.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
+
   useEffect(() => {
     // Check if user is already logged in
     const initializeAuth = async () => {
@@ -66,6 +72,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (token && savedUser) {
           const userData = JSON.parse(savedUser);
           setUser(userData);
+          if (isAdminRoute && userData.role !== "SYSTEM_ADMIN") {
+            toast.error("You are not authorized to access the ADMIN page.");
+            router.push("/");
+          }
         } else {
           // Clear any stale data
           authApi.removeAuthToken();

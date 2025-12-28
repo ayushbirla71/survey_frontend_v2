@@ -15,9 +15,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   // Routes that don't need the sidebar (auth pages)
   const authRoutes = ["/auth/login", "/auth/admin-signup"];
   const authRoutesPrefixes = ["/survey/", "/survey-results/"];
+  const adminRoutesPrefixes = ["/admin"];
   const isAuthRoute =
     authRoutes.includes(pathname) ||
     authRoutesPrefixes.some((prefix) => pathname.startsWith(prefix));
+  const isAdminRoute = adminRoutesPrefixes.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
 
   // Show loading state
   if (loading) {
@@ -40,7 +44,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   if (user) {
     return (
       <div className="flex min-h-screen bg-slate-50">
-        <Sidebar />
+        {!isAdminRoute && <Sidebar />}
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>
     );
