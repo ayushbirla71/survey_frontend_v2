@@ -62,6 +62,7 @@ import {
   ScreeningQuestion,
   QuotaConfig,
   CategoryQuota,
+  vendorsApi,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
@@ -194,6 +195,9 @@ export default function GenerateSurvey() {
 
   const [vendorsAudience, setVendorsAudience] = useState<VendorAudienceData>({
     vendorId: "",
+    hasScreeningSelection: false,
+    isScreeningValid: false,
+    screeningCriteria: {},
   });
 
   const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
@@ -228,6 +232,9 @@ export default function GenerateSurvey() {
   const [rawQuotaConfig, setRawQuotaConfig] = useState<QuotaConfig | null>(
     null
   );
+  const [vendorValidationError, setVendorValidationError] = useState<
+    string | null
+  >(null);
 
   // API calls
   const {
@@ -1228,14 +1235,11 @@ export default function GenerateSurvey() {
     }
   };
 
-  const handleStep4Continue = async () => {
-    setStep4Loading(true);
+  const handleManualQuotaUpdate = async (
+    surveyId: string,
+    quotaAudience: QuotaAudienceData
+  ) => {
     try {
-      if (!createdSurvey?.id) {
-        toast.error("Survey not found. Please go back to Step 1.");
-        return;
-      }
-
       // If quota is not enabled, skip quota saving and proceed
       if (!quotaAudience.quotaEnabled) {
         console.log("Quota is disabled, skipping quota configuration");
@@ -1282,9 +1286,50 @@ export default function GenerateSurvey() {
         console.error("updateQuota failed:", error);
         toast.error("Failed to update quota configuration");
       }
+    } catch (error) {
+      console.error("Error updating quota:", error);
+      toast.error("Failed to update quota configuration");
+    }
+  };
+
+  const handleVendorAudience = async (
+    surveyId: string,
+    vendorsAudience: VendorAudienceData
+  ) => {
+    try {
+      console.log(
+        ">>>>> the value of the VENDORS AUDIENCE is : ",
+        vendorsAudience
+      );
+
+      const res = await vendorsApi.distributeSurvey(
+        vendorsAudience.vendorId,
+        surveyId,
+        { distribution: vendorsAudience.screeningCriteria }
+      );
+      console.log(">>>>> the value of the VENDORS API RESPONSE is : ", res);
+    } catch (error) {
+      console.error("Error updating vendor audience:", error);
+      toast.error("Failed to update vendor audience");
+    }
+  };
+
+  const handleStep4Continue = async () => {
+    setStep4Loading(true);
+    try {
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      if (surveySettings.survey_send_by === "VENDOR") {
+        await handleVendorAudience(createdSurvey.id, vendorsAudience);
+      } else {
+        await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+      }
 
       // Move to next step (Preview & Publish)
-      nextStep();
+      // nextStep();
     } catch (error: any) {
       console.error("Error in step 4:", error);
       toast.error(error.message || "Failed to process quota configuration");
@@ -1332,6 +1377,19 @@ export default function GenerateSurvey() {
     // Trigger download
     XLSX.writeFile(workbook, "SurveyLinks.xlsx");
   };
+
+  const handleVendorValidationError = (error: string | null) => {
+    setVendorValidationError(error);
+  };
+
+  // ✅ NEW
+  const isVendorFlow = surveySettings.survey_send_by === "VENDOR";
+
+  const disableContinuePreviewPublishForVendor =
+    isVendorFlow &&
+    (!vendorsAudience.vendorId ||
+      !vendorsAudience.hasScreeningSelection ||
+      !!vendorValidationError);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -2032,16 +2090,26 @@ export default function GenerateSurvey() {
           {step === 4 && (
             <div className="p-8">
               {surveySettings.survey_send_by === "VENDOR" ? (
-                <VendorAudience
-                  createdSurvey={createdSurvey}
-                  surveySettings={surveySettings}
-                  vendorsAudience={vendorsAudience}
-                  onVendorsAudienceUpdate={handleVendorAudienceUpdate}
-                  // onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
-                  categories={categories || []}
-                  // onValidationError={setQuotaValidationError}
-                  isEditMode={isEditMode}
-                />
+                <div>
+                  <VendorAudience
+                    createdSurvey={createdSurvey}
+                    surveySettings={surveySettings}
+                    vendorsAudience={vendorsAudience}
+                    onVendorsAudienceUpdate={handleVendorAudienceUpdate}
+                    // onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                    categories={categories || []}
+                    onValidationError={handleVendorValidationError}
+                    isEditMode={isEditMode}
+                  />
+                  {/* ✅ NEW: show vendor blocking errors */}
+                  {surveySettings.survey_send_by === "VENDOR" &&
+                    vendorValidationError && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5" />
+                        {vendorValidationError}
+                      </div>
+                    )}
+                </div>
               ) : (
                 <div>
                   <QuotaAudienceSelector
@@ -2071,7 +2139,11 @@ export default function GenerateSurvey() {
                 </Button>
                 <Button
                   onClick={handleStep4Continue}
-                  disabled={!!quotaValidationError || step4Loading}
+                  disabled={
+                    !!quotaValidationError ||
+                    step4Loading ||
+                    disableContinuePreviewPublishForVendor
+                  }
                   title={quotaValidationError || undefined}
                 >
                   {step4Loading ? (

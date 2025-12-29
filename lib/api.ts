@@ -1887,6 +1887,18 @@ export const vendorsApi = {
       }
     );
   },
+
+  // POST /api/vendors/:vendorId/distribute
+  distributeSurvey: async (
+    vendorId: string,
+    surveyId: string,
+    distributionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/vendors/${vendorId}/distribute`, {
+      method: "POST",
+      body: JSON.stringify({ surveyId, ...distributionData }),
+    });
+  },
 };
 
 // Demo data for testing (fallback when API is not available)
