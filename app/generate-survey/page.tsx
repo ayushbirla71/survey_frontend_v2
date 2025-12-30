@@ -195,6 +195,7 @@ export default function GenerateSurvey() {
 
   const [vendorsAudience, setVendorsAudience] = useState<VendorAudienceData>({
     vendorId: "",
+    totalTarget: undefined,
     hasScreeningSelection: false,
     isScreeningValid: false,
     screeningCriteria: {},
@@ -1305,7 +1306,10 @@ export default function GenerateSurvey() {
       const res = await vendorsApi.distributeSurvey(
         vendorsAudience.vendorId,
         surveyId,
-        { distribution: vendorsAudience.screeningCriteria }
+        {
+          totalTarget: vendorsAudience.totalTarget,
+          distribution: vendorsAudience.screeningCriteria,
+        }
       );
       console.log(">>>>> the value of the VENDORS API RESPONSE is : ", res);
     } catch (error) {
@@ -1388,6 +1392,7 @@ export default function GenerateSurvey() {
   const disableContinuePreviewPublishForVendor =
     isVendorFlow &&
     (!vendorsAudience.vendorId ||
+      !vendorsAudience.totalTarget ||
       !vendorsAudience.hasScreeningSelection ||
       !!vendorValidationError);
 

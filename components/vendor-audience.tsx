@@ -57,23 +57,18 @@ interface GroupedQuestionBucket {
   questions: VendorQuestion[];
 }
 
-type OpenEndedTextValue = { value: string; quota?: number };
+type OpenEndedTextValue = { value: string };
 type OpenEndedRange = {
   id: string;
   min?: number;
   max?: number;
-  quota?: number;
 };
 
 type ScreeningCriteriaByQuestion = Record<
   string,
   {
-    desiredCompletes?: number;
-
     // option-based
     selectedOptionIds?: string[];
-    optionQuotas?: Record<string, number | undefined>;
-
     // open-ended
     openEnded?: {
       mode: "TEXT" | "RANGE";
@@ -85,6 +80,7 @@ type ScreeningCriteriaByQuestion = Record<
 
 export interface VendorAudienceData {
   vendorId: string;
+  totalTarget?: number;
   screeningCriteria?: ScreeningCriteriaByQuestion;
   hasScreeningSelection?: boolean;
   isScreeningValid?: boolean;
@@ -131,11 +127,11 @@ export default function VendorAudience({
     useState<ScreeningCriteriaByQuestion>({});
 
   // NEW: drafts for open-ended adds
-  const [textDraft, setTextDraft] = useState<
-    Record<string, { value: string; quota: string }>
-  >({});
+  const [textDraft, setTextDraft] = useState<Record<string, { value: string }>>(
+    {}
+  );
   const [rangeDraft, setRangeDraft] = useState<
-    Record<string, { min: string; max: string; quota: string }>
+    Record<string, { min: string; max: string }>
   >({});
 
   useEffect(() => {
@@ -183,6 +179,30 @@ export default function VendorAudience({
     onValidationError?.(error);
   };
 
+  // ✅ NEW: remove empty criteria entries so validation stays clean
+  const pruneCriteria = (criteria: ScreeningCriteriaByQuestion) => {
+    const next: ScreeningCriteriaByQuestion = { ...(criteria ?? {}) };
+
+    Object.keys(next).forEach((qid) => {
+      const c: any = next[qid] ?? {};
+      const hasOptions =
+        Array.isArray(c.selectedOptionIds) && c.selectedOptionIds.length > 0;
+
+      const hasTextValues =
+        Array.isArray(c.openEnded?.textValues) &&
+        c.openEnded.textValues.length > 0;
+
+      const hasRanges =
+        Array.isArray(c.openEnded?.ranges) && c.openEnded.ranges.length > 0;
+
+      if (!hasOptions && !hasTextValues && !hasRanges) {
+        delete next[qid];
+      }
+    });
+
+    return next;
+  };
+
   const updateCriteria = (
     questionId: string,
     patch: Partial<ScreeningCriteriaByQuestion[string]>
@@ -203,58 +223,58 @@ export default function VendorAudience({
     optionId: string,
     checked: boolean
   ) => {
-    const current = criteriaByQuestion[questionId] ?? {};
+    const current: any = criteriaByQuestion[questionId] ?? {};
     const selected = new Set(current.selectedOptionIds ?? []);
 
     if (checked) selected.add(optionId);
     else selected.delete(optionId);
 
-    const nextOptionQuotas = { ...(current.optionQuotas ?? {}) };
-    if (!checked) delete nextOptionQuotas[optionId];
+    const nextRaw: ScreeningCriteriaByQuestion = {
+      ...criteriaByQuestion,
+      [questionId]: {
+        ...current,
+        selectedOptionIds: Array.from(selected),
+      },
+    };
 
-    updateCriteria(questionId, {
-      selectedOptionIds: Array.from(selected),
-      optionQuotas: nextOptionQuotas,
-    });
-  };
-
-  const setOptionQuota = (
-    questionId: string,
-    optionId: string,
-    quota?: number
-  ) => {
-    const current = criteriaByQuestion[questionId] ?? {};
-    const nextOptionQuotas = { ...(current.optionQuotas ?? {}) };
-    nextOptionQuotas[optionId] = quota;
-    updateCriteria(questionId, { optionQuotas: nextOptionQuotas });
+    const next = pruneCriteria(nextRaw);
+    setCriteriaByQuestion(next);
+    pushCriteriaToParent(next);
   };
 
   // -------- open-ended TEXT (multiple values + quota per value)
   const addTextValue = (questionId: string) => {
-    const draft = textDraft[questionId] ?? { value: "", quota: "" };
+    const draft = textDraft[questionId] ?? { value: "" };
     const value = draft.value.trim();
     if (!value) return;
 
-    const quota = toNumOrUndef(draft.quota);
-    const current = criteriaByQuestion[questionId] ?? {};
-    const existing = current.openEnded?.textValues ?? [];
+    const current = (criteriaByQuestion as any)[questionId] ?? {};
+    const existing: OpenEndedTextValue[] = current.openEnded?.textValues ?? [];
 
     if (existing.some((x) => x.value.toLowerCase() === value.toLowerCase())) {
-      setTextDraft((p) => ({ ...p, [questionId]: { value: "", quota: "" } }));
+      setTextDraft((p) => ({ ...p, [questionId]: { value: "" } }));
       return;
     }
 
-    const nextValues: OpenEndedTextValue[] = [...existing, { value, quota }];
+    const nextValues: OpenEndedTextValue[] = [...existing, { value }];
 
-    updateCriteria(questionId, {
-      openEnded: {
-        mode: "TEXT",
-        textValues: nextValues,
-        ranges: current.openEnded?.ranges,
+    const nextRaw: ScreeningCriteriaByQuestion = {
+      ...criteriaByQuestion,
+      [questionId]: {
+        ...current,
+        openEnded: {
+          mode: "TEXT",
+          textValues: nextValues,
+          ranges: current.openEnded?.ranges,
+        },
       },
-    });
+    };
 
-    setTextDraft((p) => ({ ...p, [questionId]: { value: "", quota: "" } }));
+    const next = pruneCriteria(nextRaw);
+    setCriteriaByQuestion(next);
+    pushCriteriaToParent(next);
+
+    setTextDraft((p) => ({ ...p, [questionId]: { value: "" } }));
   };
 
   const removeTextValue = (questionId: string, value: string) => {
@@ -271,56 +291,37 @@ export default function VendorAudience({
     });
   };
 
-  const setTextValueQuota = (
-    questionId: string,
-    value: string,
-    quota?: number
-  ) => {
-    const current = criteriaByQuestion[questionId] ?? {};
-    const existing = current.openEnded?.textValues ?? [];
-    const nextValues = existing.map((x) =>
-      x.value === value ? { ...x, quota } : x
-    );
-
-    updateCriteria(questionId, {
-      openEnded: {
-        mode: "TEXT",
-        textValues: nextValues,
-        ranges: current.openEnded?.ranges,
-      },
-    });
-  };
-
   // -------- open-ended RANGE (multiple ranges + quota per range)
   const addRange = (questionId: string) => {
-    const draft = rangeDraft[questionId] ?? { min: "", max: "", quota: "" };
+    const draft = rangeDraft[questionId] ?? { min: "", max: "" };
     const min = toNumOrUndef(draft.min);
     const max = toNumOrUndef(draft.max);
-    const quota = toNumOrUndef(draft.quota);
 
     // allow adding only if min/max are present
     if (min === undefined || max === undefined) return;
 
-    const current = criteriaByQuestion[questionId] ?? {};
-    const existing = current.openEnded?.ranges ?? [];
+    const current = (criteriaByQuestion as any)[questionId] ?? {};
+    const existing: OpenEndedRange[] = current.openEnded?.ranges ?? [];
 
-    const nextRanges: OpenEndedRange[] = [
-      ...existing,
-      { id: uid(), min, max, quota },
-    ];
+    const nextRanges = [...existing, { id: uid(), min, max }];
 
-    updateCriteria(questionId, {
-      openEnded: {
-        mode: "RANGE",
-        ranges: nextRanges,
-        textValues: current.openEnded?.textValues,
+    const nextRaw: ScreeningCriteriaByQuestion = {
+      ...criteriaByQuestion,
+      [questionId]: {
+        ...current,
+        openEnded: {
+          mode: "RANGE",
+          ranges: nextRanges,
+          textValues: current.openEnded?.textValues,
+        },
       },
-    });
+    };
 
-    setRangeDraft((p) => ({
-      ...p,
-      [questionId]: { min: "", max: "", quota: "" },
-    }));
+    const next = pruneCriteria(nextRaw);
+    setCriteriaByQuestion(next);
+    pushCriteriaToParent(next);
+
+    setRangeDraft((p) => ({ ...p, [questionId]: { min: "", max: "" } }));
   };
 
   const removeRange = (questionId: string, rangeId: string) => {
@@ -340,7 +341,7 @@ export default function VendorAudience({
   const updateRangeField = (
     questionId: string,
     rangeId: string,
-    patch: Partial<Pick<OpenEndedRange, "min" | "max" | "quota">>
+    patch: Partial<Pick<OpenEndedRange, "min" | "max">>
   ) => {
     const current = criteriaByQuestion[questionId] ?? {};
     const existing = current.openEnded?.ranges ?? [];
@@ -355,47 +356,6 @@ export default function VendorAudience({
         textValues: current.openEnded?.textValues,
       },
     });
-  };
-
-  // -------- validation / allocation
-  const getAllocation = (
-    q: VendorQuestion,
-    qCriteria: ScreeningCriteriaByQuestion[string]
-  ) => {
-    const target = qCriteria.desiredCompletes;
-
-    // open-ended TEXT => sum of value quotas
-    if (isOpenEndedQuestion(q) && !isRangeQuestion(q)) {
-      const values = qCriteria.openEnded?.textValues ?? [];
-      const hasItems = values.length > 0;
-      const missingQuota = values.some((v) => v.quota === undefined);
-      const allocated = hasItems
-        ? values.reduce((a, v) => a + (Number(v.quota) || 0), 0)
-        : null;
-      return { target, allocated, hasItems, missingQuota };
-    }
-
-    // open-ended RANGE => sum of range quotas
-    if (isOpenEndedQuestion(q) && isRangeQuestion(q)) {
-      const ranges = qCriteria.openEnded?.ranges ?? [];
-      const hasItems = ranges.length > 0;
-      const missingQuota = ranges.some((r) => r.quota === undefined);
-      const allocated = hasItems
-        ? ranges.reduce((a, r) => a + (Number(r.quota) || 0), 0)
-        : null;
-      return { target, allocated, hasItems, missingQuota };
-    }
-
-    // option-based => sum of selected option quotas
-    const selected = qCriteria.selectedOptionIds ?? [];
-    const quotas = qCriteria.optionQuotas ?? {};
-    const hasItems = selected.length > 0;
-    const missingQuota = selected.some((optId) => quotas[optId] === undefined);
-    const allocated = hasItems
-      ? selected.reduce((a, id) => a + (Number(quotas[id]) || 0), 0)
-      : null;
-
-    return { target, allocated, hasItems, missingQuota };
   };
 
   const handleSelectedVendor = async (value: string) => {
@@ -440,7 +400,7 @@ export default function VendorAudience({
     }
   };
 
-  // ✅ NEW: tells if user selected at least one screening question
+  // ✅ CHANGED: selection-only
   const computeHasScreeningSelection = (
     criteria: ScreeningCriteriaByQuestion
   ) => {
@@ -475,34 +435,26 @@ export default function VendorAudience({
   const computeBlockingError = (criteria: ScreeningCriteriaByQuestion) => {
     // 1) vendor required
     if (!vendorsAudience.vendorId) return "Please select a vendor.";
+    if (!vendorsAudience.totalTarget || vendorsAudience.totalTarget <= 0)
+      return "Please enter Total Target.";
 
     // 2) at least one screening question required
     const hasSelection = computeHasScreeningSelection(criteria);
     if (!hasSelection) return "Please select at least one screening question.";
 
-    // 3) validate only questions that have desiredCompletes set
+    // Optional safety: ensure any RANGE entries are valid (min/max exist)
     for (const [questionId, c] of Object.entries(criteria ?? {})) {
       const q = questionById.get(questionId);
       if (!q) continue;
 
-      const target = (c as any)?.desiredCompletes;
-      if (
-        target === undefined ||
-        target === null ||
-        Number.isNaN(Number(target))
-      )
-        continue;
-
-      const { hasItems, missingQuota, allocated } = getAllocation(q, c as any);
-
-      if (!hasItems)
-        return `Please configure values/options for: "${q.questionText}".`;
-      if (missingQuota)
-        return `Please fill user counts for: "${q.questionText}".`;
-      if (allocated === null)
-        return `Please allocate user counts for: "${q.questionText}".`;
-      if (Number(allocated) !== Number(target))
-        return `Allocated users must equal Desired users for: "${q.questionText}".`;
+      if (isOpenEndedQuestion(q) && isRangeQuestion(q)) {
+        const ranges = (c as any)?.openEnded?.ranges ?? [];
+        if (
+          ranges.some((r: any) => r.min === undefined || r.max === undefined)
+        ) {
+          return `Please fill Min/Max for: "${q.questionText}".`;
+        }
+      }
     }
 
     return null;
@@ -545,6 +497,27 @@ export default function VendorAudience({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Total Target at top (global) */}
+        <div className="space-y-2">
+          <Label htmlFor="vendor_total_target">Total Target</Label>
+          <Input
+            id="vendor_total_target"
+            type="number"
+            min={1}
+            value={vendorsAudience.totalTarget ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const totalTarget = raw.trim() === "" ? undefined : Number(raw);
+
+              onVendorsAudienceUpdate({
+                ...vendorsAudience,
+                totalTarget,
+              });
+            }}
+            placeholder="e.g. 200"
+          />
         </div>
 
         {/* Categories + Questions */}
@@ -596,90 +569,18 @@ export default function VendorAudience({
                   const selectedIds = new Set(
                     qCriteria.selectedOptionIds ?? []
                   );
-                  const optionQuotas = qCriteria.optionQuotas ?? {};
-
-                  const { target, allocated, hasItems, missingQuota } =
-                    getAllocation(q, qCriteria);
-                  const mismatch =
-                    target !== undefined &&
-                    allocated !== null &&
-                    allocated !== target;
 
                   return (
-                    <div key={q.id} className="rounded-md border p-3 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium">
-                            {q.questionText}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {q.questionType} • {q.optionsCount} option(s)
-                          </div>
+                    <div key={q.id} className="rounded-lg border bg-white p-4">
+                      <div className="mb-3">
+                        <div className="text-sm font-semibold">
+                          {q.questionText}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {q.questionType} • {q.optionsCount} option(s)
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {q.questionKey}
-                        </div>
-                      </div>
-
-                      {/* Target quota + status */}
-                      <div className="grid grid-cols-12 gap-3 items-end">
-                        <div className="col-span-12 md:col-span-6">
-                          <Label className="text-xs">
-                            Desired users for this question
-                          </Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={qCriteria.desiredCompletes ?? ""}
-                            onChange={(e) =>
-                              updateCriteria(q.id, {
-                                desiredCompletes: toNumOrUndef(e.target.value),
-                              })
-                            }
-                            placeholder="e.g. 50"
-                          />
-                        </div>
-
-                        <div className="col-span-12 md:col-span-6 text-xs">
-                          {target === undefined ? (
-                            <div className="text-muted-foreground rounded-md border px-3 py-2">
-                              Tip: Set a target to enforce quota validation.
-                            </div>
-                          ) : !hasItems ? (
-                            <div className="rounded-md border px-3 py-2 text-muted-foreground">
-                              Allocated: — / Target:{" "}
-                              <span className="font-medium">{target}</span>
-                              <div className="mt-1">
-                                Add values/options and their user counts.
-                              </div>
-                            </div>
-                          ) : (
-                            <div
-                              className={[
-                                "rounded-md border px-3 py-2",
-                                mismatch || missingQuota
-                                  ? "border-red-500 text-red-600"
-                                  : "text-muted-foreground",
-                              ].join(" ")}
-                            >
-                              Allocated:{" "}
-                              <span className="font-medium">{allocated}</span> /
-                              Target:{" "}
-                              <span className="font-medium">{target}</span>
-                              {missingQuota ? (
-                                <div className="mt-1">
-                                  Fill user counts for all selected items.
-                                </div>
-                              ) : mismatch ? (
-                                <div className="mt-1">
-                                  Difference:{" "}
-                                  <span className="font-medium">
-                                    {target - allocated!}
-                                  </span>
-                                </div>
-                              ) : null}
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -696,7 +597,7 @@ export default function VendorAudience({
 
                               {/* Add range row */}
                               <div className="grid grid-cols-12 gap-2 items-end">
-                                <div className="col-span-4">
+                                <div className="col-span-6">
                                   <Label className="text-xs">Min</Label>
                                   <Input
                                     type="number"
@@ -705,11 +606,7 @@ export default function VendorAudience({
                                       setRangeDraft((p) => ({
                                         ...p,
                                         [q.id]: {
-                                          ...(p[q.id] ?? {
-                                            min: "",
-                                            max: "",
-                                            quota: "",
-                                          }),
+                                          ...(p[q.id] ?? { min: "", max: "" }),
                                           min: e.target.value,
                                         },
                                       }))
@@ -717,7 +614,7 @@ export default function VendorAudience({
                                     placeholder="18"
                                   />
                                 </div>
-                                <div className="col-span-4">
+                                <div className="col-span-6">
                                   <Label className="text-xs">Max</Label>
                                   <Input
                                     type="number"
@@ -726,38 +623,12 @@ export default function VendorAudience({
                                       setRangeDraft((p) => ({
                                         ...p,
                                         [q.id]: {
-                                          ...(p[q.id] ?? {
-                                            min: "",
-                                            max: "",
-                                            quota: "",
-                                          }),
+                                          ...(p[q.id] ?? { min: "", max: "" }),
                                           max: e.target.value,
                                         },
                                       }))
                                     }
                                     placeholder="24"
-                                  />
-                                </div>
-                                <div className="col-span-4">
-                                  <Label className="text-xs">Users</Label>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    value={rangeDraft[q.id]?.quota ?? ""}
-                                    onChange={(e) =>
-                                      setRangeDraft((p) => ({
-                                        ...p,
-                                        [q.id]: {
-                                          ...(p[q.id] ?? {
-                                            min: "",
-                                            max: "",
-                                            quota: "",
-                                          }),
-                                          quota: e.target.value,
-                                        },
-                                      }))
-                                    }
-                                    placeholder="10"
                                   />
                                 </div>
                                 <div className="col-span-12">
@@ -779,7 +650,7 @@ export default function VendorAudience({
                                       key={r.id}
                                       className="grid grid-cols-12 gap-2 items-end rounded-md border p-2"
                                     >
-                                      <div className="col-span-4">
+                                      <div className="col-span-5">
                                         <Label className="text-xs">Min</Label>
                                         <Input
                                           type="number"
@@ -791,7 +662,7 @@ export default function VendorAudience({
                                           }
                                         />
                                       </div>
-                                      <div className="col-span-4">
+                                      <div className="col-span-6">
                                         <Label className="text-xs">Max</Label>
                                         <Input
                                           type="number"
@@ -799,21 +670,6 @@ export default function VendorAudience({
                                           onChange={(e) =>
                                             updateRangeField(q.id, r.id, {
                                               max: toNumOrUndef(e.target.value),
-                                            })
-                                          }
-                                        />
-                                      </div>
-                                      <div className="col-span-3">
-                                        <Label className="text-xs">Users</Label>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          value={r.quota ?? ""}
-                                          onChange={(e) =>
-                                            updateRangeField(q.id, r.id, {
-                                              quota: toNumOrUndef(
-                                                e.target.value
-                                              ),
                                             })
                                           }
                                         />
@@ -846,25 +702,19 @@ export default function VendorAudience({
                             <>
                               {/* TEXT: multiple values + quota at add-time */}
                               <div className="text-xs text-muted-foreground">
-                                Add multiple qualifying values (e.g. Haryana,
-                                MP) with user counts.
+                                Add multiple qualifying values (e.g.
+                                Haryana,MP).
                               </div>
 
                               <div className="grid grid-cols-12 gap-2 items-end">
-                                <div className="col-span-8">
+                                <div className="col-span-12">
                                   <Label className="text-xs">Value</Label>
                                   <Input
                                     value={textDraft[q.id]?.value ?? ""}
                                     onChange={(e) =>
                                       setTextDraft((p) => ({
                                         ...p,
-                                        [q.id]: {
-                                          ...(p[q.id] ?? {
-                                            value: "",
-                                            quota: "",
-                                          }),
-                                          value: e.target.value,
-                                        },
+                                        [q.id]: { value: e.target.value },
                                       }))
                                     }
                                     onKeyDown={(e) => {
@@ -874,28 +724,6 @@ export default function VendorAudience({
                                       }
                                     }}
                                     placeholder="e.g. Haryana"
-                                  />
-                                </div>
-
-                                <div className="col-span-4">
-                                  <Label className="text-xs">Users</Label>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    value={textDraft[q.id]?.quota ?? ""}
-                                    onChange={(e) =>
-                                      setTextDraft((p) => ({
-                                        ...p,
-                                        [q.id]: {
-                                          ...(p[q.id] ?? {
-                                            value: "",
-                                            quota: "",
-                                          }),
-                                          quota: e.target.value,
-                                        },
-                                      }))
-                                    }
-                                    placeholder="10"
                                   />
                                 </div>
 
@@ -915,39 +743,21 @@ export default function VendorAudience({
                                   (v) => (
                                     <div
                                       key={v.value}
-                                      className="grid grid-cols-12 gap-2 items-center rounded-md border p-2"
+                                      className="flex items-center justify-between rounded-md border p-2"
                                     >
-                                      <div className="col-span-7 flex items-center gap-2">
-                                        <Badge variant="secondary">
-                                          {v.value}
-                                        </Badge>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() =>
-                                            removeTextValue(q.id, v.value)
-                                          }
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-
-                                      <div className="col-span-5">
-                                        <Label className="text-xs">Users</Label>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          value={v.quota ?? ""}
-                                          onChange={(e) =>
-                                            setTextValueQuota(
-                                              q.id,
-                                              v.value,
-                                              toNumOrUndef(e.target.value)
-                                            )
-                                          }
-                                        />
-                                      </div>
+                                      <Badge variant="secondary">
+                                        {v.value}
+                                      </Badge>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          removeTextValue(q.id, v.value)
+                                        }
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
                                     </div>
                                   )
                                 )}
@@ -980,7 +790,7 @@ export default function VendorAudience({
                                 return (
                                   <div
                                     key={opt.id}
-                                    className="grid grid-cols-12 gap-3 items-center rounded-md border px-3 py-2"
+                                    className="flex items-center gap-2 rounded-md border px-3 py-2"
                                   >
                                     <div className="col-span-12 md:col-span-7 flex items-center gap-2">
                                       <Checkbox
@@ -992,26 +802,6 @@ export default function VendorAudience({
                                       <div className="text-sm">
                                         {opt.option_text}
                                       </div>
-                                    </div>
-
-                                    <div className="col-span-12 md:col-span-5">
-                                      <Label className="text-xs">
-                                        Users for this option
-                                      </Label>
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        disabled={!checked}
-                                        value={optionQuotas[opt.id] ?? ""}
-                                        onChange={(e) =>
-                                          setOptionQuota(
-                                            q.id,
-                                            opt.id,
-                                            toNumOrUndef(e.target.value)
-                                          )
-                                        }
-                                        placeholder="e.g. 10"
-                                      />
                                     </div>
                                   </div>
                                 );
