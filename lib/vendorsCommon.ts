@@ -25,6 +25,7 @@ export async function groupQuestionsByPrimaryCategory(questions: any[]) {
       questionKey: q.question_key,
       questionText: q.question_text,
       questionType: q.question_type,
+      vendor_question_id: q.vendor_question_id,
       optionsCount: Array.isArray(q.options) ? q.options.length : 0,
       options: q.options || [],
     });

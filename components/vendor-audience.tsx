@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"; // [web:48]
 import { Checkbox } from "@/components/ui/checkbox"; // [web:43]
 import { Badge } from "@/components/ui/badge"; // [web:63]
 import { Button } from "@/components/ui/button"; // [web:96]
-
 import {
   Select,
   SelectContent,
@@ -16,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import {
   Dialog,
   DialogContent,
@@ -47,6 +45,7 @@ interface VendorQuestion {
   questionKey: string;
   questionText: string;
   questionType: string;
+  vendor_question_id: string;
   optionsCount: number;
   options: VendorQuestionOption[];
 }
@@ -69,9 +68,21 @@ type ScreeningCriteriaByQuestion = Record<
   {
     // option-based
     selectedOptionIds?: string[];
+
+    // store vendor question id for this question
+    // vendor question id for this selected question
+    vendorQuestionId?: string;
+    // array of ONLY vendor_option_id
+    selectedVendorOptionIds?: string[];
+    // mapping list (optionId -> vendor_option_id)
+    selectedOptions?: Array<{
+      optionId: string; // q.options[].id (UI / internal)
+      vendor_option_id: string; // q.options[].vendor_option_id (vendor)
+    }>;
+
     // open-ended
     openEnded?: {
-      mode: "TEXT" | "RANGE";
+      mode: "TEXT" | "RANGE" | "NUMERIC";
       textValues?: OpenEndedTextValue[];
       ranges?: OpenEndedRange[];
     };
@@ -101,6 +112,8 @@ const isOpenEndedQuestion = (q: VendorQuestion) =>
   /open|text|verbatim/i.test(q.questionType);
 const isRangeQuestion = (q: VendorQuestion) =>
   /age/i.test(q.questionText) || /AGE/i.test(q.questionKey);
+const isNumericOpenEndedQuestion = (q: VendorQuestion) =>
+  q.questionType?.trim() === "Numeric Open Ended";
 
 const toNumOrUndef = (v: string) => (v.trim() === "" ? undefined : Number(v));
 const uid = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -221,7 +234,8 @@ export default function VendorAudience({
   const toggleOption = (
     questionId: string,
     optionId: string,
-    checked: boolean
+    checked: boolean,
+    vendorQuestionId: string
   ) => {
     const current: any = criteriaByQuestion[questionId] ?? {};
     const selected = new Set(current.selectedOptionIds ?? []);
@@ -229,11 +243,36 @@ export default function VendorAudience({
     if (checked) selected.add(optionId);
     else selected.delete(optionId);
 
+    // vendor option id lookup
+    const vendorOptMap = optionVendorIdByQuestionId.get(questionId);
+    const vendor_option_id = vendorOptMap?.get(optionId);
+
+    // Build mapping array from the FINAL selectedOptionIds set
+    const nextSelectedOptionIds = Array.from(selected);
+
+    // selectedOptions[] = [{ optionId, vendor_option_id }]
+    const nextSelectedOptions = nextSelectedOptionIds
+      .map((oid: any) => {
+        const vOptId = vendorOptMap?.get(oid);
+        return vOptId ? { optionId: oid, vendor_option_id: vOptId } : null;
+      })
+      .filter(Boolean) as Array<{ optionId: string; vendor_option_id: string }>;
+
+    // vendor_option_id array only
+    const nextSelectedVendorOptionIds = nextSelectedOptions.map(
+      (x) => x.vendor_option_id
+    );
+
     const nextRaw: ScreeningCriteriaByQuestion = {
       ...criteriaByQuestion,
       [questionId]: {
         ...current,
-        selectedOptionIds: Array.from(selected),
+        selectedOptionIds: nextSelectedOptionIds,
+
+        // tore vendor question id (your VendorQuestion has `id`)
+        vendorQuestionId: vendorQuestionId,
+        selectedOptions: nextSelectedOptions,
+        selectedVendorOptionIds: nextSelectedVendorOptionIds,
       },
     };
 
@@ -243,7 +282,11 @@ export default function VendorAudience({
   };
 
   // -------- open-ended TEXT (multiple values + quota per value)
-  const addTextValue = (questionId: string) => {
+  const addTextValue = (
+    questionId: string,
+    vendorQuestionId: string,
+    isNumeric: boolean
+  ) => {
     const draft = textDraft[questionId] ?? { value: "" };
     const value = draft.value.trim();
     if (!value) return;
@@ -262,8 +305,11 @@ export default function VendorAudience({
       ...criteriaByQuestion,
       [questionId]: {
         ...current,
+        // store vendor question id for open-ended too
+        vendorQuestionId: vendorQuestionId,
+
         openEnded: {
-          mode: "TEXT",
+          mode: isNumeric ? "NUMERIC" : "TEXT",
           textValues: nextValues,
           ranges: current.openEnded?.ranges,
         },
@@ -277,14 +323,20 @@ export default function VendorAudience({
     setTextDraft((p) => ({ ...p, [questionId]: { value: "" } }));
   };
 
-  const removeTextValue = (questionId: string, value: string) => {
+  const removeTextValue = (
+    questionId: string,
+    value: string,
+    vendorQuestionId: string,
+    isNumeric: boolean
+  ) => {
     const current = criteriaByQuestion[questionId] ?? {};
     const existing = current.openEnded?.textValues ?? [];
     const nextValues = existing.filter((x) => x.value !== value);
 
     updateCriteria(questionId, {
+      vendorQuestionId: vendorQuestionId,
       openEnded: {
-        mode: "TEXT",
+        mode: isNumeric ? "NUMERIC" : "TEXT",
         textValues: nextValues,
         ranges: current.openEnded?.ranges,
       },
@@ -292,7 +344,7 @@ export default function VendorAudience({
   };
 
   // -------- open-ended RANGE (multiple ranges + quota per range)
-  const addRange = (questionId: string) => {
+  const addRange = (questionId: string, vendorQuestionId: string) => {
     const draft = rangeDraft[questionId] ?? { min: "", max: "" };
     const min = toNumOrUndef(draft.min);
     const max = toNumOrUndef(draft.max);
@@ -309,6 +361,9 @@ export default function VendorAudience({
       ...criteriaByQuestion,
       [questionId]: {
         ...current,
+        // store vendor question id for open-ended too
+        vendorQuestionId: vendorQuestionId,
+
         openEnded: {
           mode: "RANGE",
           ranges: nextRanges,
@@ -324,12 +379,17 @@ export default function VendorAudience({
     setRangeDraft((p) => ({ ...p, [questionId]: { min: "", max: "" } }));
   };
 
-  const removeRange = (questionId: string, rangeId: string) => {
+  const removeRange = (
+    questionId: string,
+    rangeId: string,
+    vendorQuestionId: string
+  ) => {
     const current = criteriaByQuestion[questionId] ?? {};
     const existing = current.openEnded?.ranges ?? [];
     const nextRanges = existing.filter((r) => r.id !== rangeId);
 
     updateCriteria(questionId, {
+      vendorQuestionId: vendorQuestionId,
       openEnded: {
         mode: "RANGE",
         ranges: nextRanges,
@@ -389,6 +449,7 @@ export default function VendorAudience({
       const grouped = (await groupQuestionsByPrimaryCategory(
         questions
       )) as GroupedQuestionBucket[];
+      console.log(">>>>> the value of the GROUPED is : ", grouped);
 
       setGroupedQuestions(grouped);
       if (grouped?.length) setActiveGroupName(grouped[0].groupName);
@@ -416,12 +477,29 @@ export default function VendorAudience({
     });
   };
 
-  // ✅ NEW: flatten question map for validation messages (needs groupedQuestions)
+  // flatten question map for validation messages (needs groupedQuestions)
   const questionById = useMemo(() => {
     const map = new Map<string, VendorQuestion>();
     groupedQuestions.forEach((g) =>
       g.questions.forEach((q) => map.set(q.id, q))
     );
+    return map;
+  }, [groupedQuestions]);
+
+  // optionId -> vendor_option_id map per question
+  const optionVendorIdByQuestionId = useMemo(() => {
+    const map = new Map<string, Map<string, string>>();
+
+    groupedQuestions.forEach((g) => {
+      g.questions.forEach((q) => {
+        const optMap = new Map<string, string>();
+        (q.options ?? []).forEach((opt) => {
+          optMap.set(opt.id, opt.vendor_option_id);
+        });
+        map.set(q.id, optMap);
+      });
+    });
+
     return map;
   }, [groupedQuestions]);
 
@@ -634,7 +712,9 @@ export default function VendorAudience({
                                 <div className="col-span-12">
                                   <Button
                                     type="button"
-                                    onClick={() => addRange(q.id)}
+                                    onClick={() =>
+                                      addRange(q.id, q.vendor_question_id)
+                                    }
                                     className="w-full"
                                   >
                                     Add range
@@ -680,7 +760,11 @@ export default function VendorAudience({
                                           variant="ghost"
                                           size="icon"
                                           onClick={() =>
-                                            removeRange(q.id, r.id)
+                                            removeRange(
+                                              q.id,
+                                              r.id,
+                                              q.vendor_question_id
+                                            )
                                           }
                                         >
                                           <X className="h-4 w-4" />
@@ -720,7 +804,11 @@ export default function VendorAudience({
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter") {
                                         e.preventDefault();
-                                        addTextValue(q.id);
+                                        addTextValue(
+                                          q.id,
+                                          q.vendor_question_id,
+                                          isNumericOpenEndedQuestion(q)
+                                        );
                                       }
                                     }}
                                     placeholder="e.g. Haryana"
@@ -730,7 +818,13 @@ export default function VendorAudience({
                                 <div className="col-span-12">
                                   <Button
                                     type="button"
-                                    onClick={() => addTextValue(q.id)}
+                                    onClick={() =>
+                                      addTextValue(
+                                        q.id,
+                                        q.vendor_question_id,
+                                        isNumericOpenEndedQuestion(q)
+                                      )
+                                    }
                                     className="w-full"
                                   >
                                     Add value
@@ -753,7 +847,12 @@ export default function VendorAudience({
                                         variant="ghost"
                                         size="icon"
                                         onClick={() =>
-                                          removeTextValue(q.id, v.value)
+                                          removeTextValue(
+                                            q.id,
+                                            v.value,
+                                            q.vendor_question_id,
+                                            isNumericOpenEndedQuestion(q)
+                                          )
                                         }
                                       >
                                         <X className="h-4 w-4" />
@@ -796,7 +895,12 @@ export default function VendorAudience({
                                       <Checkbox
                                         checked={checked}
                                         onCheckedChange={(v) =>
-                                          toggleOption(q.id, opt.id, v === true)
+                                          toggleOption(
+                                            q.id,
+                                            opt.id,
+                                            v === true,
+                                            q.vendor_question_id
+                                          )
                                         }
                                       />
                                       <div className="text-sm">

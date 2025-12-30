@@ -236,6 +236,8 @@ export default function GenerateSurvey() {
   const [vendorValidationError, setVendorValidationError] = useState<
     string | null
   >(null);
+  const [isVendorSurveyMarkPublished, setIsVendorSurveyMarkPublished] =
+    useState<boolean>(false);
 
   // API calls
   const {
@@ -1314,7 +1316,8 @@ export default function GenerateSurvey() {
       console.log(">>>>> the value of the VENDORS API RESPONSE is : ", res);
     } catch (error) {
       console.error("Error updating vendor audience:", error);
-      toast.error("Failed to update vendor audience");
+      // toast.error("Failed to update vendor audience");
+      throw error;
     }
   };
 
@@ -1333,7 +1336,7 @@ export default function GenerateSurvey() {
       }
 
       // Move to next step (Preview & Publish)
-      // nextStep();
+      nextStep();
     } catch (error: any) {
       console.error("Error in step 4:", error);
       toast.error(error.message || "Failed to process quota configuration");
@@ -1384,6 +1387,33 @@ export default function GenerateSurvey() {
 
   const handleVendorValidationError = (error: string | null) => {
     setVendorValidationError(error);
+  };
+
+  const handleVendorSurveyMarkPublished = async () => {
+    try {
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      const updateVendorJobStatus = await vendorsApi.updateVendorJobStatus(
+        vendorsAudience.vendorId,
+        createdSurvey.id,
+        1
+      );
+      console.log(
+        ">>>>> the value of the UPDATE VENDOR JOB STATUS is : ",
+        updateVendorJobStatus
+      );
+
+      setIsVendorSurveyMarkPublished(true);
+    } catch (error: any) {
+      console.error("Error in step 4:", error);
+      toast.error(
+        error.message ||
+          "Failed to mark Vendor survey as published. Please try again."
+      );
+    }
   };
 
   // ✅ NEW
@@ -2334,6 +2364,31 @@ export default function GenerateSurvey() {
                           >
                             Download Links Excel
                           </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  ) : surveySettings?.survey_send_by === "VENDOR" ? (
+                    <CardContent>
+                      {!isVendorSurveyMarkPublished ? (
+                        <div className="text-center py-6">
+                          <p className="text-sm text-slate-500 mb-4">
+                            Your survey is ready to be shared with your
+                            audience.
+                          </p>
+                          <Button
+                            onClick={() => handleVendorSurveyMarkPublished()}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Mark as Published
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="mt-4 text-center">
+                          <h2 className="text-lg text-green-700 font-bold">
+                            Your survey is shared with your audience.
+                          </h2>
                         </div>
                       )}
                     </CardContent>
