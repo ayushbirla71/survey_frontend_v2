@@ -249,26 +249,47 @@ export interface MediaUploadResponse {
   media: any;
 }
 
+export type VendorKey = "INNOVATEMR"; // from Prisma enum VendorKey
+
+export type VendorAuthType = "API_KEY" | "BASIC" | "OAUTH2" | "CUSTOM";
+
+export interface VendorApiConfig {
+  id?: string;
+  api_version: string;
+  base_url: string;
+  auth_type: VendorAuthType;
+  credentials: Record<string, unknown>;
+  is_default: boolean;
+  is_active?: boolean;
+}
+
+export interface Vendor {
+  id: string;
+  key: VendorKey;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  api_configs: VendorApiConfig[];
+  question_library: any[];
+}
+
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  // Add timeout to prevent hanging requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+
   try {
     const token = getAuthToken();
     const headers: HeadersInit = {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
-
-    // Add authentication header if token exists
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    // Add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers,
@@ -276,16 +297,17 @@ async function apiRequest<T>(
       ...options,
     });
 
-    clearTimeout(timeoutId);
-
     if (!response.ok) {
+      console.error("API Error - Response not OK :", response);
+      let message = `HTTP ${response.status}: ${response.statusText}`;
+
       // Handle error responses
       if (response.headers.get("content-type")?.includes("application/json")) {
         const errorData = await response.json();
-        return { error: errorData.message || "API request failed" };
-      } else {
-        return { error: `HTTP ${response.status}: ${response.statusText}` };
+        message =
+          errorData?.message || errorData?.error || JSON.stringify(errorData);
       }
+      throw new Error(message);
     }
 
     // Handle successful responses
@@ -296,14 +318,14 @@ async function apiRequest<T>(
       // For non-JSON responses (like file downloads)
       return { data: response as any };
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("API Error:", error);
-    if (error instanceof Error && error.name === "AbortError") {
-      return { error: "Request timeout - please check your connection" };
+    if (error.name === "AbortError") {
+      throw new Error("Request timeout – server took too long to respond");
     }
-    return {
-      error: error instanceof Error ? error.message : "Network error occurred",
-    };
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -667,7 +689,13 @@ export const surveyApi = {
     title: string;
     description: string;
     flow_type?: "STATIC" | "INTERACTIVE" | "GAME";
-    survey_send_by?: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT";
+    survey_send_by?:
+      | "WHATSAPP"
+      | "EMAIL"
+      | "BOTH"
+      | "NONE"
+      | "AGENT"
+      | "VENDOR";
     settings?: {
       isAnonymous?: boolean;
       showProgressBar?: boolean;
@@ -1069,7 +1097,7 @@ export const shareApi = {
   // POST /api/share
   shareSurvey: async (shareData: {
     surveyId: string;
-    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+    type: "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH" | "VENDOR";
     recipients?: Array<{
       email?: string;
       mobile_no?: string;
@@ -1797,6 +1825,88 @@ export const categoriesApi = {
       return { data: (result.data as any).categories };
     }
     return { data: [] };
+  },
+};
+
+// Vendors API
+export const vendorsApi = {
+  // GET /api/vendors
+  getVendors: async (): Promise<ApiResponse<ApiResponse<Vendor[]>>> => {
+    return apiRequest("/api/vendors");
+  },
+
+  // POST /api/vendors
+  createVendor: async (vendorData: {
+    key: VendorKey;
+    name: string;
+    apiConfig: VendorApiConfig;
+  }): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest("/api/vendors", {
+      method: "POST",
+      body: JSON.stringify(vendorData),
+    });
+  },
+
+  // PATCH /api/vendors/:id
+  updateVendor: async (
+    id: string,
+    updates: {
+      name?: string;
+      is_active?: boolean;
+    }
+  ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest(`/api/vendors/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  },
+
+  // PATCH /api/vendors/:id/toggle-active
+  toggleVendorActive: async (
+    id: string,
+    is_active: boolean
+  ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
+    return apiRequest(`/api/vendors/${id}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active }),
+    });
+  },
+
+  // GET /api/vendors/:vendorId/questions
+  getVendorQuestions: async (
+    vendorId: string,
+    params?: { countryCode?: string; language?: string }
+  ): Promise<ApiResponse<ApiResponse<any[]>>> => {
+    return apiRequest(
+      `/api/vendors/${vendorId}/questions?countryCode=${params?.countryCode}&language=${params?.language}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  // POST /api/vendors/:vendorId/distribute
+  distributeSurvey: async (
+    vendorId: string,
+    surveyId: string,
+    distributionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/vendors/${vendorId}/distribute`, {
+      method: "POST",
+      body: JSON.stringify({ surveyId, ...distributionData }),
+    });
+  },
+
+  // PATCH /api/vendors/:vendorId/updateVendorJobStatus
+  updateVendorJobStatus: async (
+    vendorId: string,
+    surveyId: string,
+    status: number
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/vendors/${vendorId}/updateVendorJobStatus`, {
+      method: "PATCH",
+      body: JSON.stringify({ surveyId, status }),
+    });
   },
 };
 

@@ -98,7 +98,11 @@ interface QuotaAudienceSelectorProps {
   createdSurvey: any;
   surveySettings: any;
   quotaAudience: QuotaAudienceData;
-  onQuotaAudienceUpdate: (quotaAudience: QuotaAudienceData) => void;
+  onQuotaAudienceUpdate: (
+    updater:
+      | QuotaAudienceData
+      | ((prev: QuotaAudienceData) => QuotaAudienceData)
+  ) => void;
   onUserUniqueIdsUpdate: (userUniqueIds: string[]) => void;
   onValidationError?: (error: string | null) => void;
   categories?: Array<{ id: string; name: string }>;
@@ -122,6 +126,8 @@ interface QuotaValidationErrors {
   genderPercentageSum?: string;
   locationCountSum?: string;
   locationPercentageSum?: string;
+  categoryCountSum?: string;
+  categoryPercentageSum?: string;
 }
 
 export default function QuotaAudienceSelector({
@@ -220,41 +226,72 @@ export default function QuotaAudienceSelector({
   // State to track if initialization has been done
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Initialize with default quotas only if not in edit mode and quotas are empty
+  // normalize quotas so UI always has full lists
+  const normalizeQuotaAudience = (
+    quotaAudience: QuotaAudienceData,
+    categories: Array<{ id: string; name: string }>
+  ): QuotaAudienceData => {
+    const ageMap = new Map(
+      quotaAudience.ageQuotas.map((q) => [`${q.min_age}-${q.max_age}`, q])
+    );
+
+    const genderMap = new Map(
+      quotaAudience.genderQuotas.map((q) => [q.gender, q])
+    );
+
+    const categoryMap = new Map(
+      (quotaAudience.categoryQuotas || []).map((q) => [q.surveyCategoryId, q])
+    );
+
+    return {
+      ...quotaAudience,
+
+      // FIX AGE
+      ageQuotas: DEFAULT_AGE_GROUPS.map(
+        (defaultQ) =>
+          ageMap.get(`${defaultQ.min_age}-${defaultQ.max_age}`) || defaultQ
+      ),
+
+      // FIX GENDER
+      genderQuotas: DEFAULT_GENDERS.map(
+        (defaultQ) => genderMap.get(defaultQ.gender) || defaultQ
+      ),
+
+      // FIX CATEGORY / INDUSTRY
+      categoryQuotas: categories.map((cat) => {
+        const existingQuota = categoryMap.get(cat.id);
+
+        if (existingQuota) {
+          return {
+            ...existingQuota,
+            // normalize name for UI usage
+            categoryName: existingQuota.surveyCategory?.name ?? cat.name,
+          };
+        }
+
+        // category exists but has NO quota yet
+        return {
+          surveyCategoryId: cat.id,
+          categoryName: cat.name,
+          quota_type: "COUNT",
+          target_count: 0,
+          target_percentage: 0,
+          current_count: 0,
+          is_active: false,
+        };
+      }),
+    };
+  };
+
+  // normalize quotas for BOTH create & edit
   useEffect(() => {
-    // Don't initialize if already done or if in edit mode with loaded data
     if (hasInitialized) return;
 
-    // Check if quotas already have data (from editing or previously set)
-    const hasExistingData =
-      quotaAudience.ageQuotas.length > 0 ||
-      quotaAudience.genderQuotas.length > 0 ||
-      quotaAudience.locationQuotas.length > 0 ||
-      quotaAudience.categoryQuotas.length > 0;
+    const normalized = normalizeQuotaAudience(quotaAudience, categories);
 
-    // Only set defaults if no existing data and not in edit mode
-    if (!hasExistingData && !isEditMode) {
-      // Initialize ALL categories with target_count: 0 (similar to DEFAULT_AGE_GROUPS)
-      // This ensures all categories are available for screening questions
-      const defaultCategoryQuotas = categories.map((cat) => ({
-        surveyCategoryId: cat.id,
-        categoryName: cat.name,
-        quota_type: "COUNT" as QuotaType,
-        target_count: 0,
-        target_percentage: 0,
-        // current_count: 0,
-      }));
-
-      onQuotaAudienceUpdate({
-        ...quotaAudience,
-        ageQuotas: DEFAULT_AGE_GROUPS,
-        genderQuotas: DEFAULT_GENDERS,
-        categoryQuotas: defaultCategoryQuotas,
-      });
-    }
-
+    onQuotaAudienceUpdate(normalized);
     setHasInitialized(true);
-  }, [isEditMode, hasInitialized, categories]);
+  }, [categories]);
 
   // Generate screening questions based on selected quotas
   // Show ALL options for proper screening, not just the ones with targets
@@ -365,30 +402,6 @@ export default function QuotaAudienceSelector({
     quotaAudience.categoryQuotas,
   ]);
 
-  // Update screening questions when quotas change
-  // Always regenerate options from current quota state, only preserve custom question text
-  // Always regenerate screening questions from quotas (edit & create mode)
-  // useEffect(() => {
-  //   const regenerated = generateScreeningQuestions.map((q) => {
-  //     const existing = quotaAudience.screeningQuestions.find(
-  //       (eq) => eq.id === q.id
-  //     );
-
-  //     return {
-  //       ...q,
-  //       // Only preserve custom text
-  //       question_text: existing?.question_text || q.question_text,
-  //       // Never reuse old options
-  //       options: q.options,
-  //     };
-  //   });
-
-  //   onQuotaAudienceUpdate({
-  //     ...quotaAudience,
-  //     screeningQuestions: regenerated,
-  //   });
-  // }, [generateScreeningQuestions, quotaAudience.screeningQuestions.length]);
-
   useEffect(() => {
     const existingQuestions = quotaAudience.screeningQuestions;
     const newQuestions = generateScreeningQuestions;
@@ -417,10 +430,10 @@ export default function QuotaAudienceSelector({
       JSON.stringify(mergedQuestions) !== JSON.stringify(existingQuestions);
 
     if (hasOptionsChanged || hasQuestionsChanged) {
-      onQuotaAudienceUpdate({
-        ...quotaAudience,
+      onQuotaAudienceUpdate((prev) => ({
+        ...prev,
         screeningQuestions: mergedQuestions,
-      });
+      }));
     }
   }, [generateScreeningQuestions]);
 
@@ -771,6 +784,39 @@ export default function QuotaAudienceSelector({
       errors.locationPercentageSum = `Location quota percentage sum (${locationPercentageSum}%) must equal 100%`;
     }
 
+    // CATEGORY / INDUSTRY quota validation
+    const categoryCountSum = (quotaAudience.categoryQuotas || [])
+      .filter(
+        (q) => q.quota_type === "COUNT" && q.target_count && q.target_count > 0
+      )
+      .reduce((sum, q) => sum + (q.target_count || 0), 0);
+
+    const categoryPercentageSum = (quotaAudience.categoryQuotas || [])
+      .filter(
+        (q) =>
+          q.quota_type === "PERCENTAGE" &&
+          q.target_percentage &&
+          q.target_percentage > 0
+      )
+      .reduce((sum, q) => sum + (q.target_percentage || 0), 0);
+
+    // only validate if at least one category quota is active
+    const hasActiveCategoryQuota = (quotaAudience.categoryQuotas || []).some(
+      (q) =>
+        (q.target_count && q.target_count > 0) ||
+        (q.target_percentage && q.target_percentage > 0)
+    );
+
+    if (hasActiveCategoryQuota) {
+      if (categoryCountSum > 0 && categoryCountSum !== totalTarget) {
+        errors.categoryCountSum = `Industry quota count sum (${categoryCountSum}) must equal Total Responses (${totalTarget})`;
+      }
+
+      if (categoryPercentageSum > 0 && categoryPercentageSum !== 100) {
+        errors.categoryPercentageSum = `Industry quota percentage sum (${categoryPercentageSum}%) must equal 100%`;
+      }
+    }
+
     return {
       errors,
       hasErrors: Object.keys(errors).length > 0,
@@ -787,6 +833,7 @@ export default function QuotaAudienceSelector({
     quotaAudience.ageQuotas,
     quotaAudience.genderQuotas,
     quotaAudience.locationQuotas,
+    quotaAudience.categoryQuotas,
     quotaAudience.totalTarget,
   ]);
 
@@ -801,7 +848,8 @@ export default function QuotaAudienceSelector({
       const hasActiveQuotas =
         quotaAudience.ageQuotas.some(isQuotaActive) ||
         quotaAudience.genderQuotas.some(isQuotaActive) ||
-        quotaAudience.locationQuotas.length > 0;
+        quotaAudience.locationQuotas.some(isQuotaActive) ||
+        (quotaAudience.categoryQuotas || []).some(isQuotaActive);
       if (hasActiveQuotas && surveySettings.survey_send_by !== "AGENT") {
         onValidationError?.(errorMessages);
       }
@@ -1520,6 +1568,7 @@ export default function QuotaAudienceSelector({
                                         className="text-sm px-3 py-1"
                                       >
                                         {quota.categoryName ||
+                                          quota.surveyCategory?.name ||
                                           quota.surveyCategoryId}
                                       </Badge>
                                       {hasTarget && (

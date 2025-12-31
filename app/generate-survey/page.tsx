@@ -61,11 +61,18 @@ import {
   LocationQuota,
   ScreeningQuestion,
   QuotaConfig,
+  CategoryQuota,
+  vendorsApi,
 } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
+import { deepEqual } from "@/lib/deepCompare";
+import { buildQuotaUpdatePayload } from "@/lib/buildQuotaPayload";
+import VendorAudience, {
+  VendorAudienceData,
+} from "@/components/vendor-audience";
 
 // (only if you do not already have a similar type)
 type QuestionWithOptions = {
@@ -86,7 +93,13 @@ type QuestionWithOptions = {
   is_added_to_survey?: boolean;
 };
 
-type SurveySendByType = "NONE" | "AGENT" | "WHATSAPP" | "EMAIL" | "BOTH";
+type SurveySendByType =
+  | "NONE"
+  | "AGENT"
+  | "WHATSAPP"
+  | "EMAIL"
+  | "BOTH"
+  | "VENDOR";
 
 interface PublicSurveySettings {
   isResultPublic: boolean;
@@ -180,6 +193,14 @@ export default function GenerateSurvey() {
     screeningQuestions: [],
   });
 
+  const [vendorsAudience, setVendorsAudience] = useState<VendorAudienceData>({
+    vendorId: "",
+    totalTarget: undefined,
+    hasScreeningSelection: false,
+    isScreeningValid: false,
+    screeningCriteria: {},
+  });
+
   const [userUniqueIdsList, setUserUniqueIdsList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [surveyHtml, setSurveyHtml] = useState("");
@@ -206,6 +227,17 @@ export default function GenerateSurvey() {
   const [quotaValidationError, setQuotaValidationError] = useState<
     string | null
   >(null);
+  // State to track original quota data for change detection
+  const [originalQuotaAudience, setOriginalQuotaAudience] =
+    useState<QuotaAudienceData | null>(null);
+  const [rawQuotaConfig, setRawQuotaConfig] = useState<QuotaConfig | null>(
+    null
+  );
+  const [vendorValidationError, setVendorValidationError] = useState<
+    string | null
+  >(null);
+  const [isVendorSurveyMarkPublished, setIsVendorSurveyMarkPublished] =
+    useState<boolean>(false);
 
   // API calls
   const {
@@ -488,57 +520,7 @@ export default function GenerateSurvey() {
           const quotaConfig = (quotaResponse?.data ||
             quotaResponse) as QuotaConfig;
 
-          if (
-            quotaConfig &&
-            (quotaConfig.age_quotas ||
-              quotaConfig.gender_quotas ||
-              quotaConfig.location_quotas ||
-              quotaConfig.category_quotas ||
-              quotaConfig.total_target)
-          ) {
-            // console.log("Loading quota config:", quotaConfig);
-
-            // Merge saved age quotas with ALL default age groups
-            // This ensures all options are available for screening
-            const savedAgeQuotas = quotaConfig.age_quotas || [];
-            const mergedAgeQuotas = DEFAULT_AGE_GROUPS.map((defaultQuota) => {
-              const savedQuota = savedAgeQuotas.find(
-                (sq) =>
-                  sq.min_age === defaultQuota.min_age &&
-                  sq.max_age === defaultQuota.max_age
-              );
-              return savedQuota || { ...defaultQuota };
-            });
-
-            // Merge saved gender quotas with ALL default genders
-            const savedGenderQuotas = quotaConfig.gender_quotas || [];
-            const mergedGenderQuotas = DEFAULT_GENDERS.map((defaultQuota) => {
-              const savedQuota = savedGenderQuotas.find(
-                (sq) => sq.gender === defaultQuota.gender
-              );
-              return savedQuota || { ...defaultQuota };
-            });
-
-            // If quota data exists in DB, it means quota was enabled
-            const loadedQuotaData: QuotaAudienceData = {
-              quotaEnabled: true, // Quota was enabled since data exists
-              ageQuotas: mergedAgeQuotas,
-              genderQuotas: mergedGenderQuotas,
-              locationQuotas: quotaConfig.location_quotas || [],
-              categoryQuotas: quotaConfig.category_quotas || [],
-              totalTarget: quotaConfig.total_target || 100,
-              completedUrl: quotaConfig.completed_url || "",
-              terminatedUrl: quotaConfig.terminated_url || "",
-              quotaFullUrl: quotaConfig.quota_full_url || "",
-              dataSource: "default",
-              screeningQuestions: quotaConfig.screening_questions || [],
-            };
-            setQuotaAudience(loadedQuotaData);
-            // Store original quota data for change detection
-            setOriginalQuotaAudience(
-              JSON.parse(JSON.stringify(loadedQuotaData))
-            );
-          }
+          setRawQuotaConfig(quotaConfig);
         } catch (quotaError) {
           console.warn("Could not load quota configuration:", quotaError);
           // Continue without quota data - user can configure it manually
@@ -553,6 +535,80 @@ export default function GenerateSurvey() {
 
     loadSurveyData();
   }, [isEditMode, editSurveyId]);
+
+  useEffect(() => {
+    if (!rawQuotaConfig) return;
+    if (!Array.isArray(categories) || categories.length === 0) return;
+
+    if (
+      rawQuotaConfig &&
+      (rawQuotaConfig.age_quotas ||
+        rawQuotaConfig.gender_quotas ||
+        rawQuotaConfig.location_quotas ||
+        rawQuotaConfig.category_quotas ||
+        rawQuotaConfig.total_target)
+    ) {
+      const savedAgeQuotas = rawQuotaConfig.age_quotas || [];
+      const mergedAgeQuotas = DEFAULT_AGE_GROUPS.map((defaultQuota) => {
+        const savedQuota = savedAgeQuotas.find(
+          (sq) =>
+            sq.min_age === defaultQuota.min_age &&
+            sq.max_age === defaultQuota.max_age
+        );
+        return savedQuota || { ...defaultQuota };
+      });
+
+      // Merge saved gender quotas with ALL default genders
+      const savedGenderQuotas = rawQuotaConfig.gender_quotas || [];
+      const mergedGenderQuotas = DEFAULT_GENDERS.map((defaultQuota) => {
+        const savedQuota = savedGenderQuotas.find(
+          (sq) => sq.gender === defaultQuota.gender
+        );
+        return savedQuota || { ...defaultQuota };
+      });
+
+      const savedCategoryQuotas = rawQuotaConfig.category_quotas || [];
+
+      const mergedCategoryQuotas: CategoryQuota[] = categories.map((cat) => {
+        const savedQuota = savedCategoryQuotas.find(
+          (sq) => sq.surveyCategoryId === cat.id
+        );
+
+        if (savedQuota) {
+          return {
+            ...savedQuota,
+            categoryName: cat.name,
+          };
+        }
+
+        return {
+          surveyCategoryId: cat.id,
+          categoryName: cat.name,
+          quota_type: "COUNT",
+          target_count: 0,
+          target_percentage: 0,
+          current_count: 0,
+        };
+      });
+
+      const loadedQuotaData: QuotaAudienceData = {
+        quotaEnabled: true,
+        ageQuotas: mergedAgeQuotas,
+        genderQuotas: mergedGenderQuotas,
+        locationQuotas: rawQuotaConfig.location_quotas || [],
+        categoryQuotas: mergedCategoryQuotas,
+        totalTarget: rawQuotaConfig.total_target || 0,
+        completedUrl: rawQuotaConfig.completed_url || "",
+        terminatedUrl: rawQuotaConfig.terminated_url || "",
+        quotaFullUrl: rawQuotaConfig.quota_full_url || "",
+        dataSource: "default",
+        screeningQuestions: rawQuotaConfig.screening_questions || [],
+      };
+
+      setQuotaAudience(loadedQuotaData);
+      setOriginalQuotaAudience(JSON.parse(JSON.stringify(loadedQuotaData)));
+    }
+  }, [rawQuotaConfig, categories]);
 
   // Generate questions when category and description are set
   // useEffect(() => {
@@ -643,15 +699,17 @@ export default function GenerateSurvey() {
     setAudience(updatedAudience);
   };
 
-  // State to track original quota data for change detection
-  const [originalQuotaAudience, setOriginalQuotaAudience] =
-    useState<QuotaAudienceData | null>(null);
-
   const handleQuotaAudienceUpdate = (
     updatedQuotaAudience: QuotaAudienceData
   ) => {
     setQuotaAudience(updatedQuotaAudience);
     // No auto-save - quota will be saved on "Continue to Preview" button click
+  };
+
+  const handleVendorAudienceUpdate = (
+    updatedVendorAudience: VendorAudienceData
+  ) => {
+    setVendorsAudience(updatedVendorAudience);
   };
 
   const generatePublicLink = async () => {
@@ -1180,14 +1238,11 @@ export default function GenerateSurvey() {
     }
   };
 
-  const handleStep4Continue = async () => {
-    setStep4Loading(true);
+  const handleManualQuotaUpdate = async (
+    surveyId: string,
+    quotaAudience: QuotaAudienceData
+  ) => {
     try {
-      if (!createdSurvey?.id) {
-        toast.error("Survey not found. Please go back to Step 1.");
-        return;
-      }
-
       // If quota is not enabled, skip quota saving and proceed
       if (!quotaAudience.quotaEnabled) {
         console.log("Quota is disabled, skipping quota configuration");
@@ -1205,244 +1260,79 @@ export default function GenerateSurvey() {
         return;
       }
 
-      // Helper function to check if a field has changed
-      const hasFieldChanged = (current: any, original: any): boolean => {
-        return JSON.stringify(current) !== JSON.stringify(original);
-      };
+      // ✅ build backend-safe payload
+      const currentPayload = buildQuotaUpdatePayload(quotaAudience);
 
-      // Filter active quotas (with target > 0)
-      const activeAgeQuotas = quotaAudience.ageQuotas.filter(
-        (q) =>
-          (q.target_count && q.target_count > 0) ||
-          (q.target_percentage && q.target_percentage > 0)
+      const originalPayload = originalQuotaAudience
+        ? buildQuotaUpdatePayload(originalQuotaAudience)
+        : null;
+
+      const isEqu = deepEqual(currentPayload, originalPayload);
+
+      // ✅ detect changes ONLY on sanitized payload
+      const hasQuotaChanged = !originalPayload || !isEqu;
+
+      if (!hasQuotaChanged) {
+        console.log("⏭️ No quota changes detected. Skipping updateQuota.");
+        nextStep();
+        return;
+      }
+      try {
+        await quotaApi.updateQuota(createdSurvey.id, currentPayload);
+
+        // ✅ update baseline ONLY after successful save
+        setOriginalQuotaAudience(JSON.parse(JSON.stringify(quotaAudience)));
+
+        toast.success("Quota configuration updated");
+        nextStep();
+      } catch (error) {
+        console.error("updateQuota failed:", error);
+        toast.error("Failed to update quota configuration");
+      }
+    } catch (error) {
+      console.error("Error updating quota:", error);
+      toast.error("Failed to update quota configuration");
+    }
+  };
+
+  const handleVendorAudience = async (
+    surveyId: string,
+    vendorsAudience: VendorAudienceData
+  ) => {
+    try {
+      console.log(
+        ">>>>> the value of the VENDORS AUDIENCE is : ",
+        vendorsAudience
       );
-      const activeGenderQuotas = quotaAudience.genderQuotas.filter(
-        (q) =>
-          (q.target_count && q.target_count > 0) ||
-          (q.target_percentage && q.target_percentage > 0)
-      );
-      const activeCategoryQuotas = quotaAudience.categoryQuotas.filter(
-        (q) =>
-          (q.target_count && q.target_count > 0) ||
-          (q.target_percentage && q.target_percentage > 0)
-      );
 
-      // Check if there are any changes from original
-      const hasChanges =
-        !originalQuotaAudience ||
-        hasFieldChanged(
-          quotaAudience.quotaEnabled,
-          originalQuotaAudience.quotaEnabled
-        ) ||
-        hasFieldChanged(
-          activeAgeQuotas,
-          originalQuotaAudience.ageQuotas?.filter(
-            (q) =>
-              (q.target_count && q.target_count > 0) ||
-              (q.target_percentage && q.target_percentage > 0)
-          ) || []
-        ) ||
-        hasFieldChanged(
-          activeGenderQuotas,
-          originalQuotaAudience.genderQuotas?.filter(
-            (q) =>
-              (q.target_count && q.target_count > 0) ||
-              (q.target_percentage && q.target_percentage > 0)
-          ) || []
-        ) ||
-        hasFieldChanged(
-          quotaAudience.locationQuotas,
-          originalQuotaAudience.locationQuotas || []
-        ) ||
-        hasFieldChanged(
-          activeCategoryQuotas,
-          originalQuotaAudience.categoryQuotas?.filter(
-            (q) =>
-              (q.target_count && q.target_count > 0) ||
-              (q.target_percentage && q.target_percentage > 0)
-          ) || []
-        ) ||
-        hasFieldChanged(
-          quotaAudience.totalTarget,
-          originalQuotaAudience.totalTarget
-        ) ||
-        hasFieldChanged(
-          quotaAudience.completedUrl,
-          originalQuotaAudience.completedUrl
-        ) ||
-        hasFieldChanged(
-          quotaAudience.terminatedUrl,
-          originalQuotaAudience.terminatedUrl
-        ) ||
-        hasFieldChanged(
-          quotaAudience.quotaFullUrl,
-          originalQuotaAudience.quotaFullUrl
-        ) ||
-        hasFieldChanged(
-          quotaAudience.screeningQuestions,
-          originalQuotaAudience.screeningQuestions || []
-        );
-
-      console.log("Quota enabled, Has changes:", hasChanges);
-
-      // Save quota if enabled and there are changes
-      if (hasChanges) {
-        try {
-          // Build the quota config object with only the changed fields
-          const quotaConfigData: Partial<QuotaConfig> = {};
-
-          // Always include these fields for proper update
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              activeAgeQuotas,
-              originalQuotaAudience.ageQuotas?.filter(
-                (q) =>
-                  (q.target_count && q.target_count > 0) ||
-                  (q.target_percentage && q.target_percentage > 0)
-              ) || []
-            )
-          ) {
-            quotaConfigData.age_quotas = activeAgeQuotas;
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              activeGenderQuotas,
-              originalQuotaAudience.genderQuotas?.filter(
-                (q) =>
-                  (q.target_count && q.target_count > 0) ||
-                  (q.target_percentage && q.target_percentage > 0)
-              ) || []
-            )
-          ) {
-            quotaConfigData.gender_quotas = activeGenderQuotas;
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.locationQuotas,
-              originalQuotaAudience.locationQuotas || []
-            )
-          ) {
-            quotaConfigData.location_quotas = quotaAudience.locationQuotas;
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              activeCategoryQuotas,
-              originalQuotaAudience.categoryQuotas?.filter(
-                (q) =>
-                  (q.target_count && q.target_count > 0) ||
-                  (q.target_percentage && q.target_percentage > 0)
-              ) || []
-            )
-          ) {
-            // Only send required fields to backend (exclude categoryName and current_count)
-            quotaConfigData.category_quotas = activeCategoryQuotas;
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.totalTarget,
-              originalQuotaAudience.totalTarget
-            )
-          ) {
-            quotaConfigData.total_target = quotaAudience.totalTarget;
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.completedUrl,
-              originalQuotaAudience.completedUrl
-            )
-          ) {
-            quotaConfigData.completed_url = quotaAudience.completedUrl || "";
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.terminatedUrl,
-              originalQuotaAudience.terminatedUrl
-            )
-          ) {
-            quotaConfigData.terminated_url = quotaAudience.terminatedUrl || "";
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.quotaFullUrl,
-              originalQuotaAudience.quotaFullUrl
-            )
-          ) {
-            quotaConfigData.quota_full_url = quotaAudience.quotaFullUrl || "";
-          }
-
-          if (
-            !originalQuotaAudience ||
-            hasFieldChanged(
-              quotaAudience.screeningQuestions,
-              originalQuotaAudience.screeningQuestions || []
-            )
-          ) {
-            quotaConfigData.screening_questions =
-              quotaAudience.screeningQuestions;
-          }
-
-          console.log("Saving changed quota fields:", quotaConfigData);
-
-          // Try to update existing quota, if fails create new one
-          try {
-            await quotaApi.updateQuota(createdSurvey.id, quotaConfigData);
-            console.log("Quota config updated successfully");
-          } catch (updateErr: any) {
-            // If update fails (likely 404), try creating with full data
-            console.log(
-              "Update failed, trying to create quota config:",
-              updateErr
-            );
-            // Only send required fields for category_quotas (exclude categoryName and current_count)
-            const fullQuotaData = {
-              age_quotas: activeAgeQuotas,
-              gender_quotas: activeGenderQuotas,
-              location_quotas: quotaAudience.locationQuotas,
-              category_quotas: quotaAudience.categoryQuotas.map((q) => ({
-                surveyCategoryId: q.surveyCategoryId,
-                quota_type: q.quota_type,
-                target_count: q.target_count,
-                target_percentage: q.target_percentage,
-              })),
-              total_target: quotaAudience.totalTarget,
-              completed_url: quotaAudience.completedUrl || "",
-              terminated_url: quotaAudience.terminatedUrl || "",
-              quota_full_url: quotaAudience.quotaFullUrl || "",
-              screening_questions: quotaAudience.screeningQuestions,
-            };
-            await quotaApi.createQuota(createdSurvey.id, fullQuotaData);
-            console.log("Quota config created successfully");
-          }
-
-          // Update original quota data after successful save
-          setOriginalQuotaAudience(JSON.parse(JSON.stringify(quotaAudience)));
-          toast.success("Quota configuration saved successfully");
-        } catch (quotaErr: any) {
-          console.error("Error saving quota config:", quotaErr);
-          // Don't block navigation if quota save fails, just warn
-          toast.warning(
-            "Quota configuration could not be saved, but you can continue."
-          );
+      const res = await vendorsApi.distributeSurvey(
+        vendorsAudience.vendorId,
+        surveyId,
+        {
+          totalTarget: vendorsAudience.totalTarget,
+          distribution: vendorsAudience.screeningCriteria,
         }
-      } else if (!hasChanges) {
-        console.log(
-          "No changes detected in quota configuration, skipping save"
-        );
+      );
+      console.log(">>>>> the value of the VENDORS API RESPONSE is : ", res);
+    } catch (error) {
+      console.error("Error updating vendor audience:", error);
+      // toast.error("Failed to update vendor audience");
+      throw error;
+    }
+  };
+
+  const handleStep4Continue = async () => {
+    setStep4Loading(true);
+    try {
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      if (surveySettings.survey_send_by === "VENDOR") {
+        await handleVendorAudience(createdSurvey.id, vendorsAudience);
+      } else {
+        await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
       }
 
       // Move to next step (Preview & Publish)
@@ -1494,6 +1384,47 @@ export default function GenerateSurvey() {
     // Trigger download
     XLSX.writeFile(workbook, "SurveyLinks.xlsx");
   };
+
+  const handleVendorValidationError = (error: string | null) => {
+    setVendorValidationError(error);
+  };
+
+  const handleVendorSurveyMarkPublished = async () => {
+    try {
+      if (!createdSurvey?.id) {
+        toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      const updateVendorJobStatus = await vendorsApi.updateVendorJobStatus(
+        vendorsAudience.vendorId,
+        createdSurvey.id,
+        1
+      );
+      console.log(
+        ">>>>> the value of the UPDATE VENDOR JOB STATUS is : ",
+        updateVendorJobStatus
+      );
+
+      setIsVendorSurveyMarkPublished(true);
+    } catch (error: any) {
+      console.error("Error in step 4:", error);
+      toast.error(
+        error.message ||
+          "Failed to mark Vendor survey as published. Please try again."
+      );
+    }
+  };
+
+  // ✅ NEW
+  const isVendorFlow = surveySettings.survey_send_by === "VENDOR";
+
+  const disableContinuePreviewPublishForVendor =
+    isVendorFlow &&
+    (!vendorsAudience.vendorId ||
+      !vendorsAudience.totalTarget ||
+      !vendorsAudience.hasScreeningSelection ||
+      !!vendorValidationError);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1966,7 +1897,13 @@ export default function GenerateSurvey() {
                     <Select
                       value={surveySettings.survey_send_by}
                       onValueChange={(
-                        value: "WHATSAPP" | "EMAIL" | "BOTH" | "NONE" | "AGENT"
+                        value:
+                          | "WHATSAPP"
+                          | "EMAIL"
+                          | "BOTH"
+                          | "NONE"
+                          | "AGENT"
+                          | "VENDOR"
                       ) =>
                         setSurveySettings((prev: any) => ({
                           ...prev,
@@ -1983,6 +1920,7 @@ export default function GenerateSurvey() {
                         <SelectItem value="BOTH">Both</SelectItem> */}
                         <SelectItem value="NONE">Public (Link Only)</SelectItem>
                         <SelectItem value="AGENT">Agent</SelectItem>
+                        <SelectItem value="VENDOR">Vendor</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2186,21 +2124,46 @@ export default function GenerateSurvey() {
           {/* Step 4: Target Audience */}
           {step === 4 && (
             <div className="p-8">
-              <QuotaAudienceSelector
-                createdSurvey={createdSurvey}
-                surveySettings={surveySettings}
-                quotaAudience={quotaAudience}
-                onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
-                onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
-                categories={categories || []}
-                onValidationError={setQuotaValidationError}
-                isEditMode={isEditMode}
-              />
+              {surveySettings.survey_send_by === "VENDOR" ? (
+                <div>
+                  <VendorAudience
+                    createdSurvey={createdSurvey}
+                    surveySettings={surveySettings}
+                    vendorsAudience={vendorsAudience}
+                    onVendorsAudienceUpdate={handleVendorAudienceUpdate}
+                    // onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                    categories={categories || []}
+                    onValidationError={handleVendorValidationError}
+                    isEditMode={isEditMode}
+                  />
+                  {/* ✅ NEW: show vendor blocking errors */}
+                  {surveySettings.survey_send_by === "VENDOR" &&
+                    vendorValidationError && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5" />
+                        {vendorValidationError}
+                      </div>
+                    )}
+                </div>
+              ) : (
+                <div>
+                  <QuotaAudienceSelector
+                    createdSurvey={createdSurvey}
+                    surveySettings={surveySettings}
+                    quotaAudience={quotaAudience}
+                    onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
+                    onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
+                    categories={categories || []}
+                    onValidationError={setQuotaValidationError}
+                    isEditMode={isEditMode}
+                  />
 
-              {quotaValidationError && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5" />
-                  {quotaValidationError}
+                  {quotaValidationError && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
+                      {quotaValidationError}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2211,7 +2174,11 @@ export default function GenerateSurvey() {
                 </Button>
                 <Button
                   onClick={handleStep4Continue}
-                  disabled={!!quotaValidationError || step4Loading}
+                  disabled={
+                    !!quotaValidationError ||
+                    step4Loading ||
+                    disableContinuePreviewPublishForVendor
+                  }
                   title={quotaValidationError || undefined}
                 >
                   {step4Loading ? (
@@ -2397,6 +2364,31 @@ export default function GenerateSurvey() {
                           >
                             Download Links Excel
                           </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  ) : surveySettings?.survey_send_by === "VENDOR" ? (
+                    <CardContent>
+                      {!isVendorSurveyMarkPublished ? (
+                        <div className="text-center py-6">
+                          <p className="text-sm text-slate-500 mb-4">
+                            Your survey is ready to be shared with your
+                            audience.
+                          </p>
+                          <Button
+                            onClick={() => handleVendorSurveyMarkPublished()}
+                            size="lg"
+                            className="bg-violet-600 hover:bg-violet-700"
+                          >
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Mark as Published
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="mt-4 text-center">
+                          <h2 className="text-lg text-green-700 font-bold">
+                            Your survey is shared with your audience.
+                          </h2>
                         </div>
                       )}
                     </CardContent>

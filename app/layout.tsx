@@ -28,12 +28,10 @@ export default function RootLayout({
         >
           <ErrorBoundary>
             <AuthProvider>
-              <AppLayout>
-                {children}
-                <ToastContainer />
-              </AppLayout>
+              <AppLayout>{children}</AppLayout>
             </AuthProvider>
           </ErrorBoundary>
+          <ToastContainer />
         </ThemeProvider>
       </body>
     </html>

@@ -674,7 +674,8 @@ export default function Dashboard() {
                       {/* Show Edit button for DRAFT and SCHEDULED surveys */}
                       {(survey.status === "DRAFT" ||
                         survey.status === "SCHEDULED" ||
-                        survey.share_tokens?.length == 0) && (
+                        (survey.share_tokens?.length == 0 &&
+                          survey.survey_send_by !== "VENDOR")) && (
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/generate-survey?edit=${survey.id}`}>
                             <Edit className="mr-2 h-4 w-4" />
@@ -684,7 +685,8 @@ export default function Dashboard() {
                       )}
                       {(survey.status === "DRAFT" ||
                         survey.status === "SCHEDULED" ||
-                        survey.share_tokens?.length == 0) && (
+                        (survey.share_tokens?.length == 0 &&
+                          survey.survey_send_by !== "VENDOR")) && (
                         <Button
                           variant="destructive"
                           size="sm"
@@ -703,7 +705,8 @@ export default function Dashboard() {
 
                       {/* Show View Results for PUBLISHED surveys */}
                       {survey.status === "PUBLISHED" &&
-                        survey.share_tokens?.length > 0 && (
+                        (survey.share_tokens?.length > 0 ||
+                          survey.survey_send_by === "VENDOR") && (
                           <Button asChild variant="outline" size="sm">
                             <Link href={`/survey-results/${survey.id}`}>
                               <ExternalLink className="mr-2 h-4 w-4" />
@@ -714,7 +717,8 @@ export default function Dashboard() {
 
                       {/* Show Share button for DRAFT and SCHEDULED surveys */}
                       {survey.status === "PUBLISHED" &&
-                        survey.share_tokens?.length === 1 && (
+                        survey.share_tokens?.length === 1 &&
+                        survey.survey_send_by !== "VENDOR" && (
                           <Button
                             variant="ghost"
                             size="sm"
