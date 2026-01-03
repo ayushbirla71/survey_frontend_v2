@@ -43,6 +43,18 @@ export default function AdminLayout({
                 Manage Vendors
               </Link>
             </li>
+            <li>
+              <Link
+                href="/admin/screening-questions"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/admin/screening-questions"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Manage Screening Questions
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>

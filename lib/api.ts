@@ -274,6 +274,59 @@ export interface Vendor {
   question_library: any[];
 }
 
+export type QuestionSource = "CUSTOM" | "SYSTEM" | "VENDOR";
+
+export type ScreenQuestionOption = {
+  id: string;
+  option_text: string;
+  vendor_option_id?: string | null;
+  order_index: number;
+};
+
+export type ScreeningQuestionDefinition = {
+  id: string;
+  source: QuestionSource;
+  vendorId?: string | null;
+  country_code: string;
+  language: string;
+
+  question_key: string;
+  question_text: string;
+  question_type: string;
+  data_type: string;
+
+  options: ScreenQuestionOption[];
+  created_at: string;
+  is_active: boolean;
+};
+
+/** DTOs for create/edit */
+export type CreateScreeningQuestionDto = {
+  source: "CUSTOM" | "SYSTEM"; // block vendor creation
+  country_code: string;
+  language: string;
+
+  question_key: string;
+  question_text: string;
+  question_type: ScreeningQuestionDefinition["question_type"];
+  data_type: ScreeningQuestionDefinition["data_type"];
+
+  options: { option_text: string; order_index: number }[];
+};
+
+export type UpdateScreeningQuestionDto = {
+  country_code: string;
+  language: string;
+
+  question_key: string;
+  question_text: string;
+  question_type: ScreeningQuestionDefinition["question_type"];
+  data_type: ScreeningQuestionDefinition["data_type"];
+
+  options: { option_text: string; order_index: number }[];
+  is_active?: boolean;
+};
+
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
@@ -1906,6 +1959,54 @@ export const vendorsApi = {
     return apiRequest(`/api/vendors/${vendorId}/updateVendorJobStatus`, {
       method: "PATCH",
       body: JSON.stringify({ surveyId, status }),
+    });
+  },
+};
+
+// Screening Questions API
+export const screeningQuestionsApi = {
+  // GET /api/screening-questions
+  getScreeningQuestions: async (params: {
+    source: QuestionSource;
+    vendorId?: string;
+    countryCode?: string;
+    language?: string;
+  }): Promise<ApiResponse<ApiResponse<ScreeningQuestionDefinition[]>>> => {
+    return apiRequest(
+      `/api/screening-questions?source=${params.source}&vendorId=${params.vendorId}&countryCode=${params.countryCode}&language=${params.language}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  // POST /api/screening-questions
+  createScreeningQuestion: async (
+    questionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions`, {
+      method: "POST",
+      body: JSON.stringify(questionData),
+    });
+  },
+
+  // PUT /api/screening-questions/:id
+  updateScreeningQuestion: async (
+    id: string,
+    questionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(questionData),
+    });
+  },
+
+  // DELETE /api/screening-questions/:id
+  deleteScreeningQuestion: async (
+    id: string
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions/${id}`, {
+      method: "DELETE",
     });
   },
 };
