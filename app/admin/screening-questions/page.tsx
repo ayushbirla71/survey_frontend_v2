@@ -249,7 +249,7 @@ export default function ScreeningQuestionsPage() {
   };
 
   const handleDeleteVendorQuestion = async (q: ScreeningQuestionDefinition) => {
-    if (q.source !== "VENDOR") return;
+    // if (q.source !== "VENDOR") return;
 
     const ok = confirm("Delete this VENDOR screening question?");
     if (!ok) return;
@@ -431,7 +431,8 @@ export default function ScreeningQuestionsPage() {
               {questions.map((q) => {
                 const allowEdit =
                   q.source === "CUSTOM" || q.source === "SYSTEM";
-                const allowDelete = q.source === "VENDOR";
+                const allowDelete =
+                  q.source === "VENDOR" || q.source === "SYSTEM";
 
                 return (
                   <tr key={q.id} className="border-t hover:bg-gray-50">

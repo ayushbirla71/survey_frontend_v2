@@ -285,19 +285,25 @@ export type ScreenQuestionOption = {
 
 export type ScreeningQuestionDefinition = {
   id: string;
-  source: QuestionSource;
-  vendorId?: string | null;
   country_code: string;
   language: string;
-
   question_key: string;
   question_text: string;
   question_type: string;
   data_type: string;
+  source: QuestionSource;
+  vendorId?: string | null;
+  vendor_question_id?: string | null;
+
+  primary_vendor_category_id?: string | null;
+  primary_vendor_category_name?: string | null;
+
+  categories_meta?: any;
+
+  is_active: boolean;
+  created_at: string;
 
   options: ScreenQuestionOption[];
-  created_at: string;
-  is_active: boolean;
 };
 
 /** DTOs for create/edit */
@@ -1755,50 +1761,9 @@ export const audienceApi = {
 
 // Quota Management APIs
 export const quotaApi = {
-  // POST /api/quota/surveys/:surveyId/quota - Create quota configuration
-  createQuota: async (
-    surveyId: string,
-    quotaConfig: Omit<
-      QuotaConfig,
-      "id" | "surveyId" | "created_at" | "updated_at"
-    >
-  ): Promise<ApiResponse<QuotaConfig>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "POST",
-      body: JSON.stringify(quotaConfig),
-    });
-  },
-
   // GET /api/quota/surveys/:surveyId/quota - Get quota configuration
   getQuota: async (surveyId: string): Promise<ApiResponse<QuotaConfig>> => {
     return apiRequest(`/api/quota/surveys/${surveyId}/quota`);
-  },
-
-  // PUT /api/quota/surveys/:surveyId/quota - Update quota configuration
-  updateQuota: async (
-    surveyId: string,
-    quotaConfig: Partial<QuotaConfig>
-  ): Promise<ApiResponse<QuotaConfig>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "PUT",
-      body: JSON.stringify(quotaConfig),
-    });
-  },
-
-  // DELETE /api/quota/surveys/:surveyId/quota - Delete quota configuration
-  deleteQuota: async (
-    surveyId: string
-  ): Promise<ApiResponse<{ message: string }>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "DELETE",
-    });
-  },
-
-  // GET /api/quota/surveys/:surveyId/status - Get quota fill status
-  getQuotaStatus: async (
-    surveyId: string
-  ): Promise<ApiResponse<QuotaStatus>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/status`);
   },
 
   // POST /api/quota/:surveyId/check - Check if respondent qualifies
@@ -1834,6 +1799,22 @@ export const quotaApi = {
       method: "POST",
       body: JSON.stringify({ respondent_id, reason }),
     });
+  },
+
+  // POST /api/quota/:surveyId/quota - Create/Update quota
+  updateQuota_v2: async (
+    surveyId: string,
+    currentPayload: any
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota_v2`, {
+      method: "POST",
+      body: JSON.stringify(currentPayload),
+    });
+  },
+
+  // GET /api/quota/:surveyId/quota - Get quota
+  getQuota_v2: async (surveyId: string): Promise<ApiResponse<any>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota_v2`);
   },
 };
 
