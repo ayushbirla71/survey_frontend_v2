@@ -39,6 +39,7 @@ import {
   QuotaConfig,
   ScreeningQuestion,
   QuotaCheckRequest,
+  vendorsApi,
 } from "@/lib/api";
 import RankingQuestion from "@/components/ranking-question";
 import { cn } from "@/lib/utils";
@@ -414,6 +415,7 @@ interface Survey {
     autoReloadOnSubmit: boolean;
     requireTermsAndConditions: boolean;
   };
+  survey_send_by?: string;
 }
 
 // Helper to extract media from question (handles array or single object)
@@ -863,6 +865,10 @@ function inferFromOptions(q: Question): GKind | null {
   return null;
 }
 
+function redirectVendor(shareTokenId: string, isCompleted: boolean) {
+  return `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/redirect?shareTokenId=${shareTokenId}&isCompleted=${isCompleted}`;
+}
+
 export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
@@ -903,6 +909,7 @@ export default function PublicSurveyPage() {
   const [surveyIdForQuota, setSurveyIdForQuota] = useState<string | null>(null);
   const [respondentId, setRespondentId] = useState<string | null>(null);
   const [shouldAutoRestart, setShouldAutoRestart] = useState(false);
+  const [isSurveyInProgress, setIsSurveyInProgress] = useState(false);
 
   const hasScreeningQuestions = screeningQuestions.length > 0;
 
@@ -1021,6 +1028,7 @@ export default function PublicSurveyPage() {
             description: surveyData.survey.description,
             questions: sortedQuestions,
             settings: surveyData.survey.settings || {},
+            survey_send_by: surveyData.survey.survey_send_by,
           });
 
           // Mark data as ready
@@ -1043,6 +1051,28 @@ export default function PublicSurveyPage() {
     loadAllData();
   }, [token]);
 
+  useEffect(() => {
+    if (!isSurveyInProgress) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    const handleUnload = () => {
+      // user abandoned mid-survey
+      navigator.sendBeacon(redirectVendor(token, false));
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("unload", handleUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("unload", handleUnload);
+    };
+  }, [isSurveyInProgress, token]);
+
   // // Handle start button click
   // const handleStartSurvey = useCallback(() => {
   //   if (dataReady && survey) {
@@ -1064,6 +1094,7 @@ export default function PublicSurveyPage() {
       }
     }
 
+    setIsSurveyInProgress(true);
     setShowStartPage(false);
   }, [dataReady, survey, hasScreeningQuestions, quotaConfig, isQualified]);
 
@@ -1193,12 +1224,14 @@ export default function PublicSurveyPage() {
 
       const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
       console.log(">>>> CHECK QUOTA RESULT:", result);
+
       if (result.data?.qualified) {
         setRespondentId(result.data?.respondent_id ?? null);
         setIsQualified(true);
         setScreeningPhase(false);
         toast.success("You qualify for this survey!");
       } else {
+        setIsSurveyInProgress(false);
         if (result.data?.status == "QUOTA_FULL") {
           router.push("/survey/terminated?reason=quota_full");
           return;
@@ -1392,6 +1425,7 @@ export default function PublicSurveyPage() {
     setScreeningAnswers({});
     setCurrentScreeningIndex(0);
 
+    setIsSurveyInProgress(false);
     // DO NOT TOUCH: surveySettings, survey, quotaConfig, etc.
   };
 
@@ -1462,6 +1496,13 @@ export default function PublicSurveyPage() {
 
       const result: any = submitResponse;
 
+      console.log(">>>>> the value of the SURVEY is : ", survey);
+      if (survey?.survey_send_by === "VENDOR") {
+        const redirectUrl = redirectVendor(token, true);
+        console.log(">>>>> the value of the REDIRECT URL is : ", redirectUrl);
+        navigator.sendBeacon(redirectUrl);
+      }
+
       const response_id = result.data?.response?.id;
 
       if (result.data || response_id) {
@@ -1485,6 +1526,7 @@ export default function PublicSurveyPage() {
           }
         }
 
+        setIsSurveyInProgress(false);
         setSubmitted(true);
         toast.success("Survey submitted successfully!");
 
