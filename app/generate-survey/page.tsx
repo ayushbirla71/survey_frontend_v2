@@ -146,6 +146,12 @@ type RawQuotaConfigNew = {
   // backend key you already use in page.tsx
   totaltarget?: number | null;
   screeningquestions?: RawQuotaScreeningQuestion[] | null;
+
+  vendorId?: string | null;
+  vendor_id?: string | null;
+  countryCode?: string | null;
+  country_code?: string | null;
+  language?: string | null;
 };
 
 // Full-screen blocking loader
@@ -522,6 +528,10 @@ export default function GenerateSurvey() {
     const loaded: EnhancedQuotaAudience = {
       enabled: Boolean((rawQuotaConfig.totaltarget ?? 0) > 0),
       totalTarget: rawQuotaConfig.totaltarget ?? null,
+      vendorId: rawQuotaConfig.vendorId ?? rawQuotaConfig.vendor_id ?? null,
+      countryCode:
+        rawQuotaConfig.countryCode ?? rawQuotaConfig.country_code ?? null,
+      language: rawQuotaConfig.language ?? null,
       screening: Array.isArray(rawQuotaConfig.screeningquestions)
         ? rawQuotaConfig.screeningquestions
             .map((sq): EnhancedQuotaAudience["screening"][number] | null => {
@@ -563,6 +573,27 @@ export default function GenerateSurvey() {
     setQuotaAudience(loaded);
     setOriginalQuotaAudience(structuredClone(loaded));
   }, [rawQuotaConfig]);
+
+  useEffect(() => {
+    // Reset quota screening whenever the distribution method changes
+    setQuotaAudience((prev) => ({
+      ...prev,
+      screening: [],
+      // also clear vendorId when not vendor flow (optional but keeps data consistent)
+      vendorId:
+        surveySettings.survey_send_by === "VENDOR" ? prev.vendorId : null,
+    }));
+
+    // Optional: if you maintain a separate vendor-audience state, reset it too
+    setVendorsAudience((prev) => ({
+      ...prev,
+      vendorId: "",
+      totalTarget: undefined,
+      hasScreeningSelection: false,
+      isScreeningValid: false,
+      screeningCriteria: {},
+    }));
+  }, [surveySettings.survey_send_by]);
 
   // Generate questions when category and description are set
   // useEffect(() => {
@@ -1196,10 +1227,15 @@ export default function GenerateSurvey() {
     return {
       enabled: q.enabled ?? false,
       totalTarget: q.totalTarget ?? 0,
+      vendorId: q.vendorId ?? null,
+      countryCode: q.countryCode ?? null,
+      language: q.language ?? null,
       screening: q.screening.map((s) => ({
         questionId: s.questionId,
+        vendorQuestionId: s.vendorQuestionId ?? null,
         optionTargets: (s.optionTargets ?? []).map((t) => ({
           optionId: t.optionId,
+          vendorOptionId: t.vendorOptionId ?? null,
           target: t.target,
         })),
       })),
@@ -2084,52 +2120,10 @@ export default function GenerateSurvey() {
 
           {/* Step 4: Target Audience */}
           {step === 4 && (
-            // <div className="p-8">
-            //   {surveySettings.survey_send_by === "VENDOR" ? (
-            //     <div>
-            //       <VendorAudience
-            //         createdSurvey={createdSurvey}
-            //         surveySettings={surveySettings}
-            //         vendorsAudience={vendorsAudience}
-            //         onVendorsAudienceUpdate={handleVendorAudienceUpdate}
-            //         // onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
-            //         categories={categories || []}
-            //         onValidationError={handleVendorValidationError}
-            //         isEditMode={isEditMode}
-            //       />
-            //       {/* ✅ NEW: show vendor blocking errors */}
-            //       {surveySettings.survey_send_by === "VENDOR" &&
-            //         vendorValidationError && (
-            //           <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-            //             <AlertCircle className="h-5 w-5" />
-            //             {vendorValidationError}
-            //           </div>
-            //         )}
-            //     </div>
-            //   ) : (
-            //     <div>
-            //       <QuotaAudienceSelector
-            //         createdSurvey={createdSurvey}
-            //         surveySettings={surveySettings}
-            //         quotaAudience={quotaAudience}
-            //         onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
-            //         onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
-            //         categories={categories || []}
-            //         onValidationError={setQuotaValidationError}
-            //         isEditMode={isEditMode}
-            //       />
-
-            //       {quotaValidationError && (
-            //         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-            //           <AlertCircle className="h-5 w-5" />
-            //           {quotaValidationError}
-            //         </div>
-            //       )}
-            //     </div>
-            //   )}
             <div className="p-8">
               <div>
                 <EnhancedQuotaAudienceSelector
+                  key={surveySettings.survey_send_by}
                   createdSurvey={createdSurvey}
                   surveySettings={surveySettings}
                   quotaAudience={quotaAudience}

@@ -3,37 +3,30 @@ import { useQuery } from "@tanstack/react-query";
 import { screeningQuestionsApi, vendorsApi } from "@/lib/api";
 
 /** =========================
- *  API types (your format)
- *  ========================= */
+ * API types (your format)
+ * ========================= */
 export type ApiScreeningOption = {
   id: string;
   option_text: string;
+  vendor_option_id?: string | null;
 };
 
 export type ApiScreeningQuestion = {
   id: string;
-
   country_code: string;
   language: string;
-
   question_key: string;
   question_text: string;
-  question_type: string; // "SINGLE" etc
+  question_type: string;
   data_type: string;
-
   source: "SYSTEM" | "VENDOR" | string;
-
   vendorId?: string | null;
   vendor_question_id?: string | null;
-
   primary_vendor_category_id?: string | null;
   primary_vendor_category_name?: string | null;
-
   categories_meta?: unknown | null;
-
   is_active: boolean;
   created_at: string;
-
   options: ApiScreeningOption[];
 };
 
@@ -45,17 +38,24 @@ export type Vendor = {
 export type QuotaOptionTarget = {
   optionId: string;
   target: number;
+  vendorOptionId?: string | null;
 };
 
 export type QuotaScreeningQuestion = {
   questionId: string;
+  vendorQuestionId?: string | null;
   optionTargets?: QuotaOptionTarget[];
 };
 
+// Updated QuotaAudience type to include filter fields
 export type QuotaAudience = {
   enabled: boolean;
   totalTarget: number | null;
   screening: QuotaScreeningQuestion[];
+  // Add filter fields that will be saved to DB
+  vendorId?: string | null;
+  countryCode?: string | null;
+  language?: string | null;
 };
 
 type SurveySettings = {
@@ -63,22 +63,19 @@ type SurveySettings = {
 };
 
 export type QuotaAudienceSelectorProps = {
-  createdSurvey: { id: string }; // still accepted, but not used for fetching now
+  createdSurvey: { id: string };
   surveySettings: SurveySettings;
-
   quotaAudience: QuotaAudience;
   onQuotaAudienceUpdate: (next: QuotaAudience) => void;
-
   onUserUniqueIdsUpdate?: (ids: string[]) => void;
   onValidationError?: (message: string | null) => void;
-
   categories?: { id: string; name: string }[];
   isEditMode?: boolean;
 };
 
 /** =========================
- *  UI: blocking loading modal
- *  ========================= */
+ * UI: blocking loading modal
+ * ========================= */
 function LoadingModal({
   open,
   title = "Loading",
@@ -89,14 +86,10 @@ function LoadingModal({
   message?: string;
 }) {
   if (!open) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" />
-
-      {/* Dialog */}
-      <div className="relative w-[92%] max-w-md rounded bg-white p-5 shadow-lg">
+      <div className="relative w-92 max-w-md rounded bg-white p-5 shadow-lg">
         <div className="text-base font-semibold">{title}</div>
         <div className="mt-2 text-sm text-gray-600">{message}</div>
         <div className="mt-4 flex items-center gap-2">
@@ -109,8 +102,8 @@ function LoadingModal({
 }
 
 /** =========================
- *  Fetchers
- *  ========================= */
+ * Fetchers
+ * ========================= */
 type ScreeningQuestionsPayload =
   | { source: "SYSTEM"; countryCode: string; language: string }
   | {
@@ -120,7 +113,6 @@ type ScreeningQuestionsPayload =
       language: string;
     };
 
-// Optional: fetch vendors only when survey_send_by=VENDOR
 async function fetchVendors(): Promise<Vendor[]> {
   const res = await vendorsApi.getVendors();
   const data = res.data?.data || [];
@@ -128,8 +120,8 @@ async function fetchVendors(): Promise<Vendor[]> {
 }
 
 /** =========================
- *  Helpers
- *  ========================= */
+ * Helpers
+ * ========================= */
 function normalizeOptionLabel(opt: ApiScreeningOption) {
   return opt.option_text ?? String(opt.id);
 }
@@ -142,17 +134,15 @@ function rebalanceToTotal(
   optionTargets: QuotaOptionTarget[],
   totalTarget: number,
   changedOptionId?: string
-) {
+): QuotaOptionTarget[] {
   const sum = optionTargets.reduce((a, t) => a + t.target, 0);
   const diff = totalTarget - sum;
   if (diff === 0) return optionTargets;
 
   let adjustIndex = optionTargets.length - 1;
-  if (
-    changedOptionId &&
-    optionTargets[adjustIndex]?.optionId === changedOptionId
-  ) {
-    adjustIndex = Math.max(0, optionTargets.length - 2);
+  if (changedOptionId) {
+    const idx = optionTargets.findIndex((t) => t.optionId === changedOptionId);
+    if (idx >= 0) adjustIndex = Math.max(0, optionTargets.length - 2);
   }
   if (!optionTargets[adjustIndex]) return optionTargets;
 
@@ -167,20 +157,17 @@ function rebalanceToTotal(
 function validateQuota(
   quotaAudience: QuotaAudience,
   questions: ApiScreeningQuestion[]
-) {
+): string | null {
   if (!quotaAudience.enabled) return null;
-
   if (!quotaAudience.totalTarget || quotaAudience.totalTarget <= 0) {
     return "Total target must be > 0.";
   }
   if (!quotaAudience.screening || quotaAudience.screening.length === 0) {
     return "Please select at least 1 screening question.";
   }
-
   for (const s of quotaAudience.screening) {
     const q = questions.find((qq) => qq.id === s.questionId);
     if (!q) continue;
-
     if (q.options?.length) {
       const targets = s.optionTargets ?? [];
       const sum = targets.reduce(
@@ -198,11 +185,14 @@ function validateQuota(
 function groupQuestionsByVendorCategory(
   questions: ApiScreeningQuestion[],
   enabledGrouping: boolean
-) {
+): Array<{
+  categoryId: string;
+  categoryName: string;
+  questions: ApiScreeningQuestion[];
+}> {
   if (!enabledGrouping) {
     return [{ categoryId: "ALL", categoryName: "All questions", questions }];
   }
-
   const map = new Map<
     string,
     {
@@ -211,23 +201,24 @@ function groupQuestionsByVendorCategory(
       questions: ApiScreeningQuestion[];
     }
   >();
-
   for (const q of questions) {
     const key = q.primary_vendor_category_id ?? "UNCATEGORIZED";
     const name = q.primary_vendor_category_name ?? "Uncategorized";
     const existing = map.get(key);
-    if (existing) existing.questions.push(q);
-    else map.set(key, { categoryId: key, categoryName: name, questions: [q] });
+    if (existing) {
+      existing.questions.push(q);
+    } else {
+      map.set(key, { categoryId: key, categoryName: name, questions: [q] });
+    }
   }
-
   return Array.from(map.values()).sort((a, b) =>
     a.categoryName.localeCompare(b.categoryName)
   );
 }
 
 /** =========================
- *  Component
- *  ========================= */
+ * Component
+ * ========================= */
 export default function EnhancedQuotaAudienceSelector({
   createdSurvey,
   surveySettings,
@@ -238,45 +229,186 @@ export default function EnhancedQuotaAudienceSelector({
   categories = [],
   isEditMode = false,
 }: QuotaAudienceSelectorProps) {
-  console.log(
-    ">>>>> the value of the QUOTA AUDIENCE in ENHANCED QUOTA AUDIENCE SELECTOR is : ",
-    quotaAudience
-  );
-
   const isVendorFlow = surveySettings?.survey_send_by === "VENDOR";
 
-  // Filters (defaults)
-  const [countryCode, setCountryCode] = React.useState("IN");
-  const [language, setLanguage] = React.useState("ENGLISH");
-  const [vendorId, setVendorId] = React.useState<string>("");
+  // Initialize filters from quotaAudience prop (from DB)
+  const [countryCode, setCountryCode] = React.useState<string>(
+    quotaAudience.countryCode || "IN"
+  );
+  const [language, setLanguage] = React.useState<string>(
+    quotaAudience.language || "ENGLISH"
+  );
+  const [vendorId, setVendorId] = React.useState<string>(
+    quotaAudience.vendorId || ""
+  );
+
+  const withFilters = React.useCallback(
+    (next: QuotaAudience): QuotaAudience => ({
+      ...next,
+      vendorId: isVendorFlow ? vendorId || null : null,
+      countryCode: countryCode || null,
+      language: language || null,
+    }),
+    [isVendorFlow, vendorId, countryCode, language]
+  );
+
+  const prevFlowRef = React.useRef<boolean | null>(null);
+
+  // Tracks last applied filters to detect real changes (avoid wiping DB-loaded state)
+  const prevFiltersRef = React.useRef<{
+    isVendorFlow: boolean;
+    vendorId: string;
+    countryCode: string;
+    language: string;
+  } | null>(null);
+
+  // Update filters when quotaAudience changes (Edit Mode)
+  React.useEffect(() => {
+    if (isEditMode && quotaAudience.enabled) {
+      if (quotaAudience.countryCode) setCountryCode(quotaAudience.countryCode);
+      if (quotaAudience.language) setLanguage(quotaAudience.language);
+      if (quotaAudience.vendorId && isVendorFlow)
+        setVendorId(quotaAudience.vendorId);
+      // align baseline with DB state to avoid unintended reset
+      prevFiltersRef.current = {
+        isVendorFlow,
+        vendorId: (quotaAudience.vendorId ?? vendorId ?? "") as string,
+        countryCode: (quotaAudience.countryCode ?? countryCode ?? "") as string,
+        language: (quotaAudience.language ?? language ?? "") as string,
+      };
+    }
+  }, [
+    isEditMode,
+    quotaAudience.enabled,
+    quotaAudience.countryCode,
+    quotaAudience.language,
+    quotaAudience.vendorId,
+    isVendorFlow,
+  ]);
+
+  React.useEffect(() => {
+    if (!quotaAudience.enabled) return;
+
+    // baseline
+    if (prevFlowRef.current === null) {
+      prevFlowRef.current = isVendorFlow;
+      return;
+    }
+
+    // If survey_send_by changed => wipe screening
+    if (prevFlowRef.current !== isVendorFlow) {
+      prevFlowRef.current = isVendorFlow;
+
+      // Also reset baseline for filter-change tracker so it won't re-trigger weirdly
+      prevFiltersRef.current = {
+        isVendorFlow,
+        vendorId: normalizeVendor(isVendorFlow ? vendorId : ""),
+        countryCode: countryCode ?? "",
+        language: language ?? "",
+      };
+
+      onQuotaAudienceUpdate(
+        withFilters({
+          ...quotaAudience,
+          screening: [],
+        })
+      );
+      onValidationError?.(null);
+    }
+  }, [
+    quotaAudience.enabled,
+    isVendorFlow,
+    quotaAudience,
+    withFilters,
+    onQuotaAudienceUpdate,
+    onValidationError,
+    vendorId,
+    countryCode,
+    language,
+  ]);
+
+  const didInitEditRef = React.useRef(false);
+
+  const normalizeVendor = (v: string | null | undefined) => (v ?? "").trim();
+
+  React.useEffect(() => {
+    if (!quotaAudience.enabled) return;
+
+    if (isEditMode && !didInitEditRef.current) {
+      didInitEditRef.current = true;
+      prevFiltersRef.current = {
+        isVendorFlow,
+        vendorId: normalizeVendor(isVendorFlow ? vendorId : ""),
+        countryCode: countryCode ?? "",
+        language: language ?? "",
+      };
+      return;
+    }
+
+    const curr = {
+      isVendorFlow,
+      vendorId: normalizeVendor(isVendorFlow ? vendorId : ""), // ✅ ignore in SYSTEM
+      countryCode: countryCode ?? "",
+      language: language ?? "",
+    };
+
+    const prev = prevFiltersRef.current ?? curr;
+
+    const changed =
+      prev.countryCode !== curr.countryCode ||
+      prev.language !== curr.language ||
+      (curr.isVendorFlow && prev.vendorId !== curr.vendorId); // ✅ only compare vendor in VENDOR flow
+
+    if (!prevFiltersRef.current) {
+      prevFiltersRef.current = curr;
+      return;
+    }
+
+    if (!changed) return;
+
+    prevFiltersRef.current = curr;
+
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      screening: [],
+      vendorId: curr.isVendorFlow ? curr.vendorId || null : null,
+      countryCode: curr.countryCode || null,
+      language: curr.language || null,
+    });
+
+    onValidationError?.(null);
+  }, [
+    quotaAudience.enabled,
+    isEditMode,
+    isVendorFlow,
+    vendorId,
+    countryCode,
+    language,
+    quotaAudience,
+    onQuotaAudienceUpdate,
+    onValidationError,
+  ]);
 
   // Vendor list (only when vendor flow)
   const vendorsQuery = useQuery({
     queryKey: ["vendors"],
     queryFn: fetchVendors,
-    enabled: quotaAudience.enabled && isVendorFlow, // only load when needed [web:41]
-    staleTime: 60_000,
+    enabled: quotaAudience.enabled && isVendorFlow,
+    staleTime: 60000,
   });
 
   // Build payload for questions
   const questionsPayload: ScreeningQuestionsPayload | null =
     React.useMemo(() => {
       if (!quotaAudience.enabled) return null;
-
       if (isVendorFlow) {
-        if (!vendorId) return null; // must select vendor first
-        return {
-          source: "VENDOR",
-          vendorId,
-          countryCode: countryCode,
-          language,
-        };
+        if (!vendorId) return null;
+        return { source: "VENDOR", vendorId, countryCode, language };
       }
-
-      return { source: "SYSTEM", countryCode: countryCode, language };
+      return { source: "SYSTEM", countryCode, language };
     }, [quotaAudience.enabled, isVendorFlow, vendorId, countryCode, language]);
 
-  // Fetch questions (only when payload is ready)
+  // Fetch questions only when payload is ready
   const questionsQuery = useQuery({
     queryKey: ["screeningQuestions", questionsPayload],
     queryFn: async () => {
@@ -287,17 +419,18 @@ export default function EnhancedQuotaAudienceSelector({
         "screeningQuestionsApiResponse is",
         screeningQuestionsApiResponse
       );
-      return screeningQuestionsApiResponse.data?.data ?? [];
+      return (screeningQuestionsApiResponse.data?.data ??
+        []) as ApiScreeningQuestion[];
     },
-    enabled: Boolean(questionsPayload), // dependent query with enabled [web:41]
-    staleTime: 30_000,
+    enabled: Boolean(questionsPayload),
+    staleTime: 30000,
   });
 
   const questions = (questionsQuery.data ?? []).filter(
     (q) => q.is_active !== false
   );
 
-  // Grouping: only vendor flow groups by primary_vendor_category_id
+  // Grouping (only vendor flow groups by primary_vendor_category_id)
   const grouped = React.useMemo(
     () => groupQuestionsByVendorCategory(questions, isVendorFlow),
     [questions, isVendorFlow]
@@ -327,19 +460,15 @@ export default function EnhancedQuotaAudienceSelector({
     onValidationError?.(msg);
   }, [quotaAudience, questions, onValidationError]);
 
-  // When filters change, it’s usually safer to clear screening selections (optional but recommended)
-  React.useEffect(() => {
-    // If you don't want auto-clear, remove this effect.
-    if (!quotaAudience.enabled) return;
-    onQuotaAudienceUpdate({ ...quotaAudience, screening: [] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryCode, language, vendorId, isVendorFlow]);
-
   const activeGroup = grouped.find((g) => g.categoryId === activeCategoryId);
 
+  // ====================================
+  // HANDLERS
+  // ====================================
   const setEnabled = (enabled: boolean) => {
     if (!enabled) {
       onQuotaAudienceUpdate({
+        ...quotaAudience,
         enabled: false,
         totalTarget: null,
         screening: [],
@@ -351,6 +480,10 @@ export default function EnhancedQuotaAudienceSelector({
       enabled: true,
       totalTarget: quotaAudience.totalTarget ?? 100,
       screening: quotaAudience.screening ?? [],
+      // Save current filter values
+      vendorId: vendorId || null,
+      countryCode: countryCode,
+      language: language,
     });
   };
 
@@ -360,7 +493,6 @@ export default function EnhancedQuotaAudienceSelector({
       Math.trunc(Number.isFinite(value) ? value : 0)
     );
 
-    // Rebalance all selected questions with options to keep sum == totalTarget
     const nextScreening = quotaAudience.screening.map((s) => {
       const q = questions.find((qq) => qq.id === s.questionId);
       if (!q?.options?.length) return s;
@@ -372,17 +504,17 @@ export default function EnhancedQuotaAudienceSelector({
 
       const targets: QuotaOptionTarget[] = optionIds.map((id) => ({
         optionId: id,
+        vendorOptionId:
+          q.options.find((o) => o.id === id)?.vendor_option_id ?? null,
         target: Math.max(0, Math.trunc(existing.get(id) ?? 0)),
       }));
 
       return { ...s, optionTargets: rebalanceToTotal(targets, totalTarget) };
     });
 
-    onQuotaAudienceUpdate({
-      ...quotaAudience,
-      totalTarget,
-      screening: nextScreening,
-    });
+    onQuotaAudienceUpdate(
+      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening })
+    );
   };
 
   const toggleScreeningQuestion = (
@@ -393,26 +525,39 @@ export default function EnhancedQuotaAudienceSelector({
       if (getScreeningEntry(quotaAudience, q.id)) return;
 
       const total = quotaAudience.totalTarget ?? 0;
-
       const newEntry: QuotaScreeningQuestion = q.options?.length
         ? {
             questionId: q.id,
+            vendorQuestionId: q.vendor_question_id ?? undefined,
             optionTargets: rebalanceToTotal(
-              q.options.map((o) => ({ optionId: o.id, target: 0 })),
+              q.options.map((o) => ({
+                optionId: o.id,
+                vendorOptionId: o.vendor_option_id ?? null,
+                target: 0,
+              })),
               total
             ),
           }
-        : { questionId: q.id };
+        : {
+            questionId: q.id,
+            vendorQuestionId: q.vendor_question_id ?? undefined,
+          };
 
-      onQuotaAudienceUpdate({
-        ...quotaAudience,
-        screening: [...quotaAudience.screening, newEntry],
-      });
+      onQuotaAudienceUpdate(
+        withFilters({
+          ...quotaAudience,
+          screening: [...quotaAudience.screening, newEntry],
+        })
+      );
     } else {
-      onQuotaAudienceUpdate({
-        ...quotaAudience,
-        screening: quotaAudience.screening.filter((s) => s.questionId !== q.id),
-      });
+      onQuotaAudienceUpdate(
+        withFilters({
+          ...quotaAudience,
+          screening: quotaAudience.screening.filter(
+            (s) => s.questionId !== q.id
+          ),
+        })
+      );
     }
   };
 
@@ -426,7 +571,6 @@ export default function EnhancedQuotaAudienceSelector({
     if (!q?.options?.length) return;
 
     const optionIds = q.options.map((o) => o.id);
-
     const nextScreening = quotaAudience.screening.map((s) => {
       if (s.questionId !== questionId) return s;
 
@@ -436,6 +580,8 @@ export default function EnhancedQuotaAudienceSelector({
 
       const nextTargets: QuotaOptionTarget[] = optionIds.map((id) => ({
         optionId: id,
+        vendorOptionId:
+          q.options.find((o) => o.id === id)?.vendor_option_id ?? null,
         target: Math.max(
           0,
           Math.trunc(id === optionId ? target : existing.get(id) ?? 0)
@@ -448,13 +594,45 @@ export default function EnhancedQuotaAudienceSelector({
       };
     });
 
-    onQuotaAudienceUpdate({ ...quotaAudience, screening: nextScreening });
+    onQuotaAudienceUpdate(
+      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening })
+    );
+  };
+
+  // Update filters and save to quotaAudience
+  const handleVendorChange = (newVendorId: string) => {
+    setVendorId(newVendorId);
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      vendorId: newVendorId || null,
+      countryCode,
+      language,
+    });
+  };
+
+  const handleCountryChange = (newCountryCode: string) => {
+    setCountryCode(newCountryCode);
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      vendorId: vendorId || null,
+      countryCode: newCountryCode,
+      language,
+    });
+  };
+
+  const handleLanguageChange = (newLanguage: string) => {
+    setLanguage(newLanguage);
+    onQuotaAudienceUpdate({
+      ...quotaAudience,
+      vendorId: vendorId || null,
+      countryCode,
+      language: newLanguage,
+    });
   };
 
   const isBlockingLoading =
     quotaAudience.enabled &&
     (vendorsQuery.isFetching || questionsQuery.isFetching) &&
-    // Only block when we actually have a payload condition met or are trying to load vendors
     (isVendorFlow ? true : Boolean(questionsPayload));
 
   return (
@@ -481,14 +659,12 @@ export default function EnhancedQuotaAudienceSelector({
 
         {quotaAudience.enabled && (
           <div className="flex items-center gap-2">
-            <label className="text-sm">Total target</label>
+            <label className="text-sm">Total target:</label>
             <input
               type="number"
               min={1}
               value={quotaAudience.totalTarget ?? ""}
-              onChange={(e) =>
-                setTotalTarget(parseInt(e.target.value || "0", 10))
-              }
+              onChange={(e) => setTotalTarget(parseFloat(e.target.value) || 0)}
               className="w-28 rounded border px-2 py-1"
             />
           </div>
@@ -504,7 +680,7 @@ export default function EnhancedQuotaAudienceSelector({
               <select
                 className="w-full rounded border px-2 py-2 text-sm"
                 value={vendorId}
-                onChange={(e) => setVendorId(e.target.value)}
+                onChange={(e) => handleVendorChange(e.target.value)}
               >
                 <option value="">Select vendor</option>
                 {(vendorsQuery.data ?? []).map((v) => (
@@ -530,7 +706,7 @@ export default function EnhancedQuotaAudienceSelector({
             <select
               className="w-full rounded border px-2 py-2 text-sm"
               value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
+              onChange={(e) => handleCountryChange(e.target.value)}
             >
               <option value="IN">IN</option>
               <option value="US">US</option>
@@ -547,7 +723,7 @@ export default function EnhancedQuotaAudienceSelector({
             <select
               className="w-full rounded border px-2 py-2 text-sm"
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
             >
               <option value="ENGLISH">ENGLISH</option>
               <option value="HINDI">HINDI</option>
@@ -591,7 +767,6 @@ export default function EnhancedQuotaAudienceSelector({
             <div className="border-b px-3 py-2 text-sm font-medium">
               {isVendorFlow ? "Vendor categories" : "Questions"}
             </div>
-
             {grouped.length === 0 ? (
               <div className="px-3 py-3 text-sm">No questions found.</div>
             ) : (
@@ -623,7 +798,6 @@ export default function EnhancedQuotaAudienceSelector({
             <div className="border-b px-3 py-2 text-sm font-medium">
               {activeGroup ? activeGroup.categoryName : "Questions"}
             </div>
-
             {!activeGroup ? (
               <div className="px-3 py-3 text-sm text-gray-600">
                 Select a group.
@@ -641,7 +815,15 @@ export default function EnhancedQuotaAudienceSelector({
                     );
 
                     return (
-                      <div key={q.id} className="rounded border p-3">
+                      <div
+                        key={q.id}
+                        // Add visual indicator for selected questions
+                        className={`rounded border p-3 transition-all ${
+                          selected
+                            ? "border-violet-500 bg-violet-50 shadow-sm"
+                            : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="text-sm font-medium">
@@ -654,16 +836,23 @@ export default function EnhancedQuotaAudienceSelector({
                                 : ""}
                             </div>
                           </div>
-
-                          <label className="flex items-center gap-2 text-sm">
+                          <label className="flex items-center gap-2 text-sm cursor-pointer">
                             <input
                               type="checkbox"
                               checked={selected}
                               onChange={(e) =>
                                 toggleScreeningQuestion(q, e.target.checked)
                               }
+                              // Style checkbox for selected state
+                              className="cursor-pointer"
                             />
-                            Use in screening
+                            <span
+                              className={
+                                selected ? "text-violet-700 font-medium" : ""
+                              }
+                            >
+                              Use in screening
+                            </span>
                           </label>
                         </div>
 
@@ -673,13 +862,11 @@ export default function EnhancedQuotaAudienceSelector({
                               Per-option targets must sum to total target (
                               {quotaAudience.totalTarget ?? 0}).
                             </div>
-
                             {q.options.map((opt) => {
                               const t =
                                 screeningEntry?.optionTargets?.find(
                                   (x) => x.optionId === opt.id
                                 )?.target ?? 0;
-
                               return (
                                 <div
                                   key={opt.id}
@@ -696,7 +883,7 @@ export default function EnhancedQuotaAudienceSelector({
                                       setOptionTarget(
                                         q.id,
                                         opt.id,
-                                        parseInt(e.target.value || "0", 10)
+                                        parseFloat(e.target.value) || 0
                                       )
                                     }
                                     className="w-28 rounded border px-2 py-1"
