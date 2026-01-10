@@ -45,12 +45,6 @@ import {
 import RankingQuestion from "@/components/ranking-question";
 import { cn } from "@/lib/utils";
 
-import {
-  DEFAULT_AGE_GROUPS,
-  DEFAULT_GENDERS,
-  GENDER_LABELS,
-} from "@/components/quota-audience-selector";
-
 // Animated Start Button Component
 interface AnimatedStartButtonProps {
   onComplete: () => void;
@@ -731,8 +725,8 @@ function inferFromOptions(q: Question): GKind | null {
   return null;
 }
 
-function redirectVendor(shareTokenId: string, isCompleted: boolean) {
-  return `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/redirect?shareTokenId=${shareTokenId}&isCompleted=${isCompleted}`;
+function redirectVendor(shareTokenId: string, respondent_id: string | null) {
+  return `${process.env.NEXT_PUBLIC_API_URL}/api/quota/terminate_v2?shareToken=${shareTokenId}&respondent_id=${respondent_id}`;
 }
 
 export default function PublicSurveyPage() {
@@ -764,9 +758,9 @@ export default function PublicSurveyPage() {
   const [screeningQuestions, setScreeningQuestions] = useState<
     SavedScreeningQuestionInterface[]
   >([]);
-  const [screeningAnswers, setScreeningAnswers] = useState<
-    Record<string, string>
-  >({});
+  const [screeningAnswers, setScreeningAnswers] = useState<Record<string, any>>(
+    {}
+  );
   const [currentScreeningIndex, setCurrentScreeningIndex] = useState(0);
   const [screeningPhase, setScreeningPhase] = useState(true); // Start with screening
   const [isQualified, setIsQualified] = useState<boolean | null>(null);
@@ -878,7 +872,7 @@ export default function PublicSurveyPage() {
 
     const handleUnload = () => {
       // user abandoned mid-survey
-      navigator.sendBeacon(redirectVendor(token, false));
+      navigator.sendBeacon(redirectVendor(token, respondentId));
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -915,11 +909,8 @@ export default function PublicSurveyPage() {
   };
 
   // Handle screening question answer change
-  const handleScreeningAnswerChange = (questionId: string, value: string) => {
-    setScreeningAnswers((prev) => ({
-      ...prev,
-      [questionId]: value,
-    }));
+  const handleScreeningAnswerChange = (questionId: string, value: any) => {
+    setScreeningAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
   // Check if user qualifies based on screening answers
@@ -928,19 +919,39 @@ export default function PublicSurveyPage() {
 
     setCheckingQualification(true);
     try {
-      const checkRequest: QuotaCheckRequest_v2 = { screeningAnswers: [] };
+      const checkRequest: QuotaCheckRequest_v2 = {
+        screeningAnswers: [],
+        vendor_respondent_id: token,
+      };
 
       // support both with and without screening questions
       if (hasScreeningQuestions) {
         screeningQuestions.forEach((sq) => {
           const answer = screeningAnswers[sq.id];
           console.log(">>>>> the value of the SCREENING ANSWERS is : ", answer);
-          if (!answer) return;
-          checkRequest.screeningAnswers.push({
-            screeningQuestionId: sq.id,
-            screeningOptionId: answer,
-            answerValue: answer,
-          });
+          // CHANGED: treat empty string/empty array as unanswered
+          const isEmpty =
+            answer === null ||
+            answer === undefined ||
+            (typeof answer === "string" && answer.trim() === "") ||
+            (Array.isArray(answer) && answer.length === 0);
+
+          if (isEmpty) return;
+
+          const hasOptions = (sq.options?.length ?? 0) > 0;
+
+          checkRequest.screeningAnswers.push(
+            hasOptions
+              ? {
+                  screeningQuestionId: sq.id,
+                  screeningOptionId: String(answer), // selected option id
+                  answerValue: answer,
+                }
+              : {
+                  screeningQuestionId: sq.id,
+                  answerValue: answer, // number/string/string[]
+                }
+          );
         });
       } else {
         // No screening questions: still call quota API using just vendor_respondent_id
@@ -1002,8 +1013,13 @@ export default function PublicSurveyPage() {
   // Check if current screening question is answered
   const isCurrentScreeningAnswered = () => {
     if (screeningQuestions.length === 0) return false;
-    const currentQuestion = screeningQuestions[currentScreeningIndex];
-    return !!screeningAnswers[currentQuestion?.id];
+    const q = screeningQuestions[currentScreeningIndex];
+    const v = screeningAnswers[q?.id];
+
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (Array.isArray(v)) return v.length > 0;
+    return true;
   };
 
   // Normalize question kind based on category or infer from options
@@ -1228,11 +1244,11 @@ export default function PublicSurveyPage() {
       const result: any = submitResponse;
 
       console.log(">>>>> the value of the SURVEY is : ", survey);
-      if (survey?.survey_send_by === "VENDOR") {
-        const redirectUrl = redirectVendor(token, true);
-        console.log(">>>>> the value of the REDIRECT URL is : ", redirectUrl);
-        navigator.sendBeacon(redirectUrl);
-      }
+      // if (survey?.survey_send_by === "VENDOR") {
+      //   const redirectUrl = redirectVendor(token, respondentId);
+      //   console.log(">>>>> the value of the REDIRECT URL is : ", redirectUrl);
+      //   navigator.sendBeacon(redirectUrl);
+      // }
 
       const response_id = result.data?.response?.id;
 
@@ -1245,7 +1261,8 @@ export default function PublicSurveyPage() {
               await quotaApi.markRespondentCompleted_v2(
                 surveyIdForQuota,
                 respondentId,
-                response_id
+                response_id,
+                token
               );
             console.log(
               "markRespondentCompleted_v2 is",
@@ -1948,28 +1965,66 @@ export default function PublicSurveyPage() {
                   {currentScreeningQuestion.question_text}
                 </Label>
 
-                <RadioGroup
-                  value={screeningAnswers[currentScreeningQuestion.id] || ""}
-                  onValueChange={(value) =>
-                    handleScreeningAnswerChange(
-                      currentScreeningQuestion.id,
-                      value
-                    )
-                  }
-                  className="space-y-3"
-                >
-                  {currentScreeningQuestion.options.map((option) => (
-                    <div
-                      key={option.id}
-                      className="flex items-center space-x-3"
-                    >
-                      <RadioGroupItem value={option.id} id={option.id} />
-                      <Label htmlFor={option.id} className="cursor-pointer">
-                        {option.option_text} ({option.id})
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
+                {(currentScreeningQuestion.options.length ?? 0) > 0 ? (
+                  <RadioGroup
+                    value={screeningAnswers[currentScreeningQuestion.id] || ""}
+                    onValueChange={(value) =>
+                      handleScreeningAnswerChange(
+                        currentScreeningQuestion.id,
+                        value
+                      )
+                    }
+                    className="space-y-3"
+                  >
+                    {currentScreeningQuestion.options.map((option) => (
+                      <div
+                        key={option.id}
+                        className="flex items-center space-x-3"
+                      >
+                        <RadioGroupItem value={option.id} id={option.id} />
+                        <Label htmlFor={option.id} className="cursor-pointer">
+                          {option.option_text} ({option.id})
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                ) : (
+                  // NEW: Open-ended screener input (no options)
+                  <div className="space-y-2">
+                    {/* If your API provides data_type / question_type, use it here */}
+                    {currentScreeningQuestion.data_type.toLocaleLowerCase() ===
+                    "number" ? (
+                      <Input
+                        type="number"
+                        value={
+                          screeningAnswers[currentScreeningQuestion.id] ?? ""
+                        }
+                        onChange={(e) =>
+                          handleScreeningAnswerChange(
+                            currentScreeningQuestion.id,
+                            e.target.value
+                          )
+                        }
+                        placeholder="Type your answer"
+                        className="max-w-md"
+                      />
+                    ) : (
+                      <Input
+                        value={
+                          screeningAnswers[currentScreeningQuestion.id] ?? ""
+                        }
+                        onChange={(e) =>
+                          handleScreeningAnswerChange(
+                            currentScreeningQuestion.id,
+                            e.target.value
+                          )
+                        }
+                        placeholder="Type your answer"
+                        className="max-w-md"
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

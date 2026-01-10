@@ -347,6 +347,7 @@ export interface SavedScreeningQuestionInterface {
   question_text: string;
   question_type: string;
   vendor_question_id?: string;
+  data_type: string;
   options: Array<{
     id: string;
     option_text: string;
@@ -1861,12 +1862,26 @@ export const quotaApi = {
   markRespondentCompleted_v2: async (
     surveyId: string,
     respondent_id: string,
-    response_id: string
+    response_id: string,
+    token: string
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/complete_v2`, {
       method: "POST",
-      body: JSON.stringify({ respondent_id, response_id }),
+      body: JSON.stringify({ respondent_id, response_id, token }),
     });
+  },
+
+  // POST /api/quota/:surveyId/terminate_v2 - Mark respondent as terminated
+  markRespondentTerminated_v2: async (
+    shareToken: string, // only send ShareToken if survey is SendBy->VENDOR
+    respondent_id: string | null
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(
+      `/api/quota/terminate_v2?shareToken=${shareToken}&respondent_id=${respondent_id}`,
+      {
+        method: "GET",
+      }
+    );
   },
 };
 

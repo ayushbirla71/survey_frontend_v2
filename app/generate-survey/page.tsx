@@ -129,6 +129,16 @@ type RawQuotaOptionTarget = {
   target?: number | string | null;
 };
 
+type RawQuotaBucket = {
+  bucketId?: string;
+  id?: string;
+  label?: string | null;
+  operator?: string | null;
+  value?: any;
+  target?: number | string | null;
+  current?: number | string | null;
+};
+
 type RawQuotaScreeningQuestion = {
   questionId?: string;
   question_id?: string;
@@ -138,6 +148,8 @@ type RawQuotaScreeningQuestion = {
   optionTargets?: RawQuotaOptionTarget[];
   option_targets?: RawQuotaOptionTarget[];
   optiontargets?: RawQuotaOptionTarget[];
+
+  buckets?: RawQuotaBucket[];
 };
 
 type RawQuotaConfigNew = {
@@ -525,49 +537,51 @@ export default function GenerateSurvey() {
   useEffect(() => {
     if (!rawQuotaConfig) return;
 
+    // CHANGED inside useEffect that builds `loaded`
     const loaded: EnhancedQuotaAudience = {
       enabled: Boolean((rawQuotaConfig.totaltarget ?? 0) > 0),
       totalTarget: rawQuotaConfig.totaltarget ?? null,
-      vendorId: rawQuotaConfig.vendorId ?? rawQuotaConfig.vendor_id ?? null,
-      countryCode:
-        rawQuotaConfig.countryCode ?? rawQuotaConfig.country_code ?? null,
+      vendorId: rawQuotaConfig.vendorId ?? null,
+      countryCode: rawQuotaConfig.countryCode ?? null,
       language: rawQuotaConfig.language ?? null,
+
       screening: Array.isArray(rawQuotaConfig.screeningquestions)
         ? rawQuotaConfig.screeningquestions
-            .map((sq): EnhancedQuotaAudience["screening"][number] | null => {
+            .map((sq) => {
               const questionId =
-                sq.questionId ??
-                sq.question_id ??
-                sq.questionid ??
-                sq.id ??
-                null;
+                sq.questionId ?? sq.questionid ?? sq.id ?? null;
               if (!questionId) return null;
 
-              const rawTargets =
-                sq.optionTargets ?? sq.option_targets ?? sq.optiontargets;
-
+              const rawTargets = sq.optionTargets ?? sq.optiontargets ?? [];
               const optionTargets = Array.isArray(rawTargets)
                 ? rawTargets
                     .map((t) => {
-                      const optionId =
-                        t.optionId ?? t.option_id ?? t.optionid ?? t.id ?? null;
+                      const optionId = t.optionId ?? t.optionid ?? t.id ?? null;
                       if (!optionId) return null;
-
                       return { optionId, target: Number(t.target ?? 0) };
                     })
-                    .filter(
-                      (x): x is { optionId: string; target: number } =>
-                        x !== null
-                    )
-                : undefined;
+                    .filter(Boolean)
+                : [];
 
-              return { questionId, optionTargets };
+              // NEW: buckets
+              const rawBuckets = sq.buckets ?? [];
+              const buckets = Array.isArray(rawBuckets)
+                ? rawBuckets
+                    .map((b) => ({
+                      label: b.label ?? "",
+                      operator: (b.operator ?? "BETWEEN") as any,
+                      value: b.value ?? (b.operator === "IN" ? [] : {}),
+                      target: Number(b.target ?? 0),
+                    }))
+                    .filter((b) => b.target >= 0)
+                : [];
+
+              return { questionId, optionTargets, buckets };
             })
-            .filter(
-              (x): x is EnhancedQuotaAudience["screening"][number] => x !== null
-            )
+            .filter(Boolean)
         : [],
     };
+
     // console.log(">>>>> the value of the LOADED QUOTA AUDIENCE is : ", loaded);
 
     setQuotaAudience(loaded);
@@ -1233,10 +1247,19 @@ export default function GenerateSurvey() {
       screening: q.screening.map((s) => ({
         questionId: s.questionId,
         vendorQuestionId: s.vendorQuestionId ?? null,
+
         optionTargets: (s.optionTargets ?? []).map((t) => ({
           optionId: t.optionId,
           vendorOptionId: t.vendorOptionId ?? null,
           target: t.target,
+        })),
+
+        // NEW
+        buckets: (s.buckets ?? []).map((b) => ({
+          label: b.label ?? null,
+          operator: b.operator,
+          value: b.value,
+          target: b.target,
         })),
       })),
     };

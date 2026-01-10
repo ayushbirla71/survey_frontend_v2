@@ -11,6 +11,21 @@ export type ApiScreeningOption = {
   vendor_option_id?: string | null;
 };
 
+export type QuotaBucketOperator =
+  | "BETWEEN"
+  | "IN"
+  | "EQ"
+  | "GTE"
+  | "LTE"
+  | "INTERSECTS";
+
+export type QuotaBucket = {
+  label?: string | null;
+  operator: QuotaBucketOperator;
+  value: any; // BETWEEN: {min,max} | IN: string[] | EQ: string/number
+  target: number;
+};
+
 export type ApiScreeningQuestion = {
   id: string;
   country_code: string;
@@ -45,6 +60,7 @@ export type QuotaScreeningQuestion = {
   questionId: string;
   vendorQuestionId?: string | null;
   optionTargets?: QuotaOptionTarget[];
+  buckets?: QuotaBucket[];
 };
 
 // Updated QuotaAudience type to include filter fields
@@ -176,6 +192,40 @@ function validateQuota(
       );
       if (sum !== quotaAudience.totalTarget) {
         return `Targets for "${q.question_text}" must sum to total target (${quotaAudience.totalTarget}). Current sum: ${sum}.`;
+      }
+      continue;
+    }
+
+    // open-ended questions -> buckets
+    const buckets = s.buckets ?? [];
+    if (buckets.length === 0)
+      return `Please add at least 1 bucket for "${q.question_text}".`;
+    const sum = buckets.reduce(
+      (acc, b) => acc + (Number.isFinite(b.target) ? b.target : 0),
+      0
+    );
+    if (sum !== quotaAudience.totalTarget) {
+      return `Bucket targets for "${q.question_text}" must sum to total target ${quotaAudience.totalTarget}. Current sum ${sum}.`;
+    }
+    // Optional: basic operator validation (recommended)
+    for (const b of buckets) {
+      if (b.operator === "BETWEEN") {
+        const min = Number(b.value?.min);
+        const max = Number(b.value?.max);
+        if (!Number.isFinite(min) || !Number.isFinite(max))
+          return `Bucket "${b.label ?? ""}" in "${
+            q.question_text
+          }" must have numeric min/max.`;
+        if (min > max)
+          return `Bucket "${b.label ?? ""}" in "${
+            q.question_text
+          }" has min > max.`;
+      }
+      if (b.operator === "IN" || b.operator === "INTERSECTS") {
+        if (!Array.isArray(b.value) || b.value.length === 0)
+          return `Bucket "${b.label ?? ""}" in "${
+            q.question_text
+          }" must have a non-empty list.`;
       }
     }
   }
@@ -541,6 +591,22 @@ export default function EnhancedQuotaAudienceSelector({
         : {
             questionId: q.id,
             vendorQuestionId: q.vendor_question_id ?? undefined,
+            buckets: [
+              // default bucket
+              q.data_type === "NUMBER"
+                ? {
+                    label: "18-24",
+                    operator: "BETWEEN",
+                    value: { min: 18, max: 24 },
+                    target: total,
+                  }
+                : {
+                    label: "Allowed",
+                    operator: "IN",
+                    value: [],
+                    target: total,
+                  },
+            ],
           };
 
       onQuotaAudienceUpdate(
@@ -559,6 +625,61 @@ export default function EnhancedQuotaAudienceSelector({
         })
       );
     }
+  };
+
+  const addBucket = (questionId: string) => {
+    onQuotaAudienceUpdate(
+      withFilters({
+        ...quotaAudience,
+        screening: quotaAudience.screening.map((s) => {
+          if (s.questionId !== questionId) return s;
+
+          const nextBuckets = [
+            ...(s.buckets ?? []),
+            {
+              label: "",
+              operator: "BETWEEN",
+              value: { min: 18, max: 24 },
+              target: 0,
+            },
+          ];
+
+          return { ...s, buckets: nextBuckets };
+        }),
+      })
+    );
+  };
+
+  const removeBucket = (questionId: string, idx: number) => {
+    onQuotaAudienceUpdate(
+      withFilters({
+        ...quotaAudience,
+        screening: quotaAudience.screening.map((s) => {
+          if (s.questionId !== questionId) return s;
+          const next = (s.buckets ?? []).filter((_, i) => i !== idx);
+          return { ...s, buckets: next };
+        }),
+      })
+    );
+  };
+
+  const updateBucket = (
+    questionId: string,
+    idx: number,
+    patch: Partial<QuotaBucket>
+  ) => {
+    onQuotaAudienceUpdate(
+      withFilters({
+        ...quotaAudience,
+        screening: quotaAudience.screening.map((s) => {
+          if (s.questionId !== questionId) return s;
+          const next = (s.buckets ?? []).map((b, i) =>
+            i === idx ? { ...b, ...patch } : b
+          );
+          return { ...s, buckets: next };
+        }),
+      })
+    );
   };
 
   const setOptionTarget = (
@@ -891,6 +1012,171 @@ export default function EnhancedQuotaAudienceSelector({
                                 </div>
                               );
                             })}
+                          </div>
+                        ) : null}
+
+                        {/* NEW: Open-ended bucket UI */}
+                        {selected && !q.options?.length ? (
+                          <div className="mt-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-gray-600">
+                                Bucket targets must sum to total target{" "}
+                                {quotaAudience.totalTarget ?? 0}.
+                              </div>
+                              <button
+                                type="button"
+                                className="rounded border px-2 py-1 text-xs"
+                                onClick={() => addBucket(q.id)}
+                              >
+                                + Add bucket
+                              </button>
+                            </div>
+
+                            {(screeningEntry?.buckets ?? []).map((b, idx) => (
+                              <div
+                                key={idx}
+                                className="rounded border p-2 space-y-2"
+                              >
+                                <div className="grid grid-cols-12 gap-2 items-center">
+                                  <input
+                                    className="col-span-4 rounded border px-2 py-1 text-sm"
+                                    placeholder="Label (e.g. 18-24)"
+                                    value={b.label ?? ""}
+                                    onChange={(e) =>
+                                      updateBucket(q.id, idx, {
+                                        label: e.target.value,
+                                      })
+                                    }
+                                  />
+
+                                  <select
+                                    className="col-span-3 rounded border px-2 py-1 text-sm"
+                                    value={b.operator}
+                                    onChange={(e) => {
+                                      const op = e.target.value as any;
+                                      // reset value shape when operator changes
+                                      const nextValue =
+                                        op === "BETWEEN"
+                                          ? { min: 18, max: 24 }
+                                          : op === "IN" || op === "INTERSECTS"
+                                          ? []
+                                          : "";
+                                      updateBucket(q.id, idx, {
+                                        operator: op,
+                                        value: nextValue,
+                                      });
+                                    }}
+                                  >
+                                    {/* simple defaults; you can restrict based on q.data_type */}
+                                    <option value="BETWEEN">BETWEEN</option>
+                                    <option value="IN">IN</option>
+                                    <option value="EQ">EQ</option>
+                                    <option value="GTE">GTE</option>
+                                    <option value="LTE">LTE</option>
+                                    <option value="INTERSECTS">
+                                      INTERSECTS
+                                    </option>
+                                  </select>
+
+                                  <input
+                                    type="number"
+                                    className="col-span-3 rounded border px-2 py-1 text-sm"
+                                    value={b.target ?? 0}
+                                    onChange={(e) =>
+                                      updateBucket(q.id, idx, {
+                                        target: Math.max(
+                                          0,
+                                          Math.trunc(
+                                            Number(e.target.value || 0)
+                                          )
+                                        ),
+                                      })
+                                    }
+                                  />
+
+                                  <button
+                                    type="button"
+                                    className="col-span-2 rounded border px-2 py-1 text-xs"
+                                    onClick={() => removeBucket(q.id, idx)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+
+                                {b.operator === "BETWEEN" ? (
+                                  <div className="grid grid-cols-12 gap-2">
+                                    <input
+                                      type="number"
+                                      className="col-span-6 rounded border px-2 py-1 text-sm"
+                                      placeholder="Min"
+                                      value={b.value?.min ?? ""}
+                                      onChange={(e) =>
+                                        updateBucket(q.id, idx, {
+                                          value: {
+                                            ...b.value,
+                                            min: Number(e.target.value),
+                                          },
+                                        })
+                                      }
+                                    />
+                                    <input
+                                      type="number"
+                                      className="col-span-6 rounded border px-2 py-1 text-sm"
+                                      placeholder="Max"
+                                      value={b.value?.max ?? ""}
+                                      onChange={(e) =>
+                                        updateBucket(q.id, idx, {
+                                          value: {
+                                            ...b.value,
+                                            max: Number(e.target.value),
+                                          },
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                ) : null}
+
+                                {b.operator === "IN" ||
+                                b.operator === "INTERSECTS" ? (
+                                  <textarea
+                                    className="w-full rounded border px-2 py-1 text-sm"
+                                    placeholder="Comma-separated values (e.g. 132001,110001)"
+                                    value={
+                                      Array.isArray(b.value)
+                                        ? b.value.join(",")
+                                        : ""
+                                    }
+                                    onChange={(e) => {
+                                      const arr = e.target.value
+                                        .split(",")
+                                        .map((x) => x.trim())
+                                        .filter(Boolean);
+                                      updateBucket(q.id, idx, { value: arr });
+                                    }}
+                                  />
+                                ) : null}
+
+                                {b.operator === "EQ" ||
+                                b.operator === "GTE" ||
+                                b.operator === "LTE" ? (
+                                  <input
+                                    className="w-full rounded border px-2 py-1 text-sm"
+                                    placeholder="Value"
+                                    value={
+                                      typeof b.value === "string" ||
+                                      typeof b.value === "number"
+                                        ? String(b.value)
+                                        : ""
+                                    }
+                                    onChange={(e) =>
+                                      updateBucket(q.id, idx, {
+                                        value: e.target.value,
+                                      })
+                                    }
+                                  />
+                                ) : null}
+                              </div>
+                            ))}
                           </div>
                         ) : null}
                       </div>
