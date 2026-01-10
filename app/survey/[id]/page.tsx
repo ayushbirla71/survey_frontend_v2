@@ -36,10 +36,11 @@ import {
   responseApi,
   shareApi,
   quotaApi,
-  QuotaConfig,
   ScreeningQuestion,
   QuotaCheckRequest,
   vendorsApi,
+  SavedScreeningQuestionInterface,
+  QuotaCheckRequest_v2,
 } from "@/lib/api";
 import RankingQuestion from "@/components/ranking-question";
 import { cn } from "@/lib/utils";
@@ -55,18 +56,6 @@ interface AnimatedStartButtonProps {
   onComplete: () => void;
   isReady: boolean;
   fillDuration?: number; // in milliseconds
-}
-
-interface SavedScreeningQuestionInterface {
-  id: string;
-  type: "age" | "gender" | "location" | "category";
-  question_text: string;
-  options: Array<{
-    id: string;
-    label: string;
-    value: string;
-  }>;
-  required: boolean;
 }
 
 function AnimatedStartButton({
@@ -218,129 +207,6 @@ function TermsAndConditions() {
     </div>
   );
 }
-
-// Helper function to regenerate screening questions with ALL options
-// ALWAYS shows all available options regardless of which ones have quotas set
-// Backend will check if selected option qualifies
-const regenerateScreeningQuestionsWithAllOptions = (
-  quotaConfig: QuotaConfig
-): ScreeningQuestion[] => {
-  const questions: ScreeningQuestion[] = [];
-  const savedQuestions = quotaConfig.screening_questions || [];
-
-  // Check if there are any active age quotas
-  const hasActiveAgeQuotas = (quotaConfig.age_quotas || []).some(
-    (q) =>
-      (q.target_count && q.target_count > 0) ||
-      (q.target_percentage && q.target_percentage > 0)
-  );
-
-  if (hasActiveAgeQuotas) {
-    // Get custom question text if saved, otherwise use default
-    const savedAgeQuestion = savedQuestions.find((sq) => sq.type === "age");
-    // ALWAYS use DEFAULT_AGE_GROUPS to show ALL age options
-    // This ensures proper screening - user can select any age group
-    // Backend will check if their selection qualifies
-    questions.push({
-      id: "screening_age",
-      type: "age",
-      question_text:
-        savedAgeQuestion?.question_text || "What is your age group?",
-      options: DEFAULT_AGE_GROUPS.map((q, idx) => ({
-        id: `age_option_${idx}`,
-        label: q.max_age >= 100 ? `${q.min_age}+` : `${q.min_age}-${q.max_age}`,
-        value: `${q.min_age}-${q.max_age}`,
-      })),
-      required: true,
-    });
-  }
-
-  // Check if there are any active gender quotas
-  const hasActiveGenderQuotas = (quotaConfig.gender_quotas || []).some(
-    (q) =>
-      (q.target_count && q.target_count > 0) ||
-      (q.target_percentage && q.target_percentage > 0)
-  );
-
-  if (hasActiveGenderQuotas) {
-    const savedGenderQuestion = savedQuestions.find(
-      (sq) => sq.type === "gender"
-    );
-    // ALWAYS use DEFAULT_GENDERS to show ALL gender options
-    // This ensures proper screening - user can select any gender
-    // Backend will check if their selection qualifies
-    questions.push({
-      id: "screening_gender",
-      type: "gender",
-      question_text:
-        savedGenderQuestion?.question_text || "What is your gender?",
-      options: DEFAULT_GENDERS.map((q, idx) => ({
-        id: `gender_option_${idx}`,
-        label: GENDER_LABELS[q.gender] || q.gender,
-        value: q.gender,
-      })),
-      required: true,
-    });
-  }
-
-  // Check if there are any active location quotas
-  const hasActiveLocationQuotas = (quotaConfig.location_quotas || []).some(
-    (q) =>
-      (q.target_count && q.target_count > 0) ||
-      (q.target_percentage && q.target_percentage > 0)
-  );
-
-  if (hasActiveLocationQuotas && quotaConfig.location_quotas) {
-    const savedLocationQuestion = savedQuestions.find(
-      (sq) => sq.type === "location"
-    );
-    questions.push({
-      id: "screening_location",
-      type: "location",
-      question_text:
-        savedLocationQuestion?.question_text || "Where are you located?",
-      options: quotaConfig.location_quotas.map((q, idx) => ({
-        id: `location_option_${idx}`,
-        label:
-          [q.city, q.state, q.country].filter(Boolean).join(", ") || "Unknown",
-        value: JSON.stringify({
-          country: q.country,
-          state: q.state,
-          city: q.city,
-        }),
-      })),
-      required: true,
-    });
-  }
-
-  // Check if there are any category quotas
-  const hasActiveCategoryQuotas = (quotaConfig.category_quotas || []).some(
-    (q) =>
-      (q.target_count && q.target_count > 0) ||
-      (q.target_percentage && q.target_percentage > 0)
-  );
-
-  if (hasActiveCategoryQuotas) {
-    const savedCategoryQuestion = savedQuestions.find(
-      (sq): sq is SavedScreeningQuestionInterface => sq.type === "category"
-    );
-    questions.push({
-      id: "screening_category",
-      type: "category",
-      question_text:
-        savedCategoryQuestion?.question_text ||
-        "Which industry do you work in?",
-      options: (savedCategoryQuestion?.options || []).map((q, idx) => ({
-        id: `category_option_${idx}`,
-        label: q.label,
-        value: q.value,
-      })),
-      required: true,
-    });
-  }
-
-  return questions;
-};
 
 interface QuestionMedia {
   id?: string;
@@ -895,9 +761,8 @@ export default function PublicSurveyPage() {
   const dataLoadingStartedRef = useRef(false);
 
   // Screening questions state
-  const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
   const [screeningQuestions, setScreeningQuestions] = useState<
-    ScreeningQuestion[]
+    SavedScreeningQuestionInterface[]
   >([]);
   const [screeningAnswers, setScreeningAnswers] = useState<
     Record<string, string>
@@ -912,41 +777,6 @@ export default function PublicSurveyPage() {
   const [isSurveyInProgress, setIsSurveyInProgress] = useState(false);
 
   const hasScreeningQuestions = screeningQuestions.length > 0;
-
-  // Extract category IDs from questions
-  const categoryIds = useMemo(() => {
-    if (!survey) return [];
-    const set = new Set<string>();
-    survey.questions.forEach((q) => {
-      if (q.categoryId) set.add(q.categoryId);
-    });
-    return Array.from(set);
-  }, [survey]);
-
-  // Fetch category kinds when survey is loaded
-  useEffect(() => {
-    if (categoryIds.length === 0) return;
-
-    const fetchKinds = async () => {
-      try {
-        const json = await categoriesApi.getQuestionCategories();
-        console.log("JSON is", json);
-
-        const arr = Array.isArray(json?.data) ? json.data : [];
-        const result = arr.reduce((acc: KindsMap, item: any) => {
-          const nk = normKindStr(item?.type_name ?? "") ?? "short answer";
-          acc[item.id] = nk;
-          return acc;
-        }, {});
-        console.log("Result is", result);
-        setKindsMap(result);
-      } catch (e) {
-        console.warn("Failed to load category kinds:", e);
-      }
-    };
-
-    fetchKinds();
-  }, [categoryIds.join(",")]);
 
   // Load all data when start page mounts (during button animation)
   useEffect(() => {
@@ -972,35 +802,21 @@ export default function PublicSurveyPage() {
 
         setSurveyIdForQuota(surveyId);
 
-        // // Step 2: Load survey and questions in parallel
-        // const [surveyData, questionsResponse] = await Promise.all([
-        //   surveyApi.getSurvey(surveyId),
-        //   questionApi.getQuestions(surveyId),
-        // ]);
-        // console.log("Survey data:", surveyData);
-        // console.log("Questions response:", questionsResponse);
-
         // Fetch quota config for screening questions
         try {
-          const quotaResponse = await quotaApi.getQuota(surveyId);
-          if (quotaResponse.data) {
-            setQuotaConfig(quotaResponse.data);
-            // Regenerate screening questions with ALL options (not just qualifying ones)
-            // This ensures proper screening - users who select non-qualifying options will be filtered out
-            const regeneratedQuestions =
-              regenerateScreeningQuestionsWithAllOptions(quotaResponse.data);
-            if (regeneratedQuestions.length > 0) {
-              setScreeningQuestions(regeneratedQuestions);
-              setScreeningPhase(true);
-              setIsQualified(null);
-            } else {
-              // No screening questions needed, skip to main survey
-              setScreeningQuestions([]);
-              setScreeningPhase(false);
-              setIsQualified(true);
-            }
+          const quotaScreeningQuestionsResponse =
+            await quotaApi.getQuotaScreeningQuestions(surveyId);
+          if (quotaScreeningQuestionsResponse.data) {
+            console.log(
+              "Quota screening questions response data is",
+              quotaScreeningQuestionsResponse.data
+            );
+            setScreeningQuestions(
+              quotaScreeningQuestionsResponse?.data?.data ?? []
+            );
+            setScreeningPhase(true);
+            setIsQualified(null);
           } else {
-            // No quota config, skip screening
             setScreeningQuestions([]);
             setScreeningPhase(false);
             setIsQualified(true);
@@ -1051,6 +867,7 @@ export default function PublicSurveyPage() {
     loadAllData();
   }, [token]);
 
+  // PREVENT CLOSING of Tab without CONSENT
   useEffect(() => {
     if (!isSurveyInProgress) return;
 
@@ -1073,30 +890,22 @@ export default function PublicSurveyPage() {
     };
   }, [isSurveyInProgress, token]);
 
-  // // Handle start button click
-  // const handleStartSurvey = useCallback(() => {
-  //   if (dataReady && survey) {
-  //     setShowStartPage(false);
-  //   }
-  // }, [dataReady, survey]);
-  // Handle start button click
-
   const handleStartSurvey = useCallback(async () => {
     if (!dataReady || !survey) return;
 
     // call checkQualification once before letting the user into the survey
-    if (!hasScreeningQuestions && quotaConfig && isQualified !== false) {
+    if (!hasScreeningQuestions && isQualified !== false) {
       console.log("No screening questions, checking qualification");
-      await checkQualification();
+      const isQualify = await checkQualification();
       // If quota-full or not qualified, checkQualification will redirect or set isQualified=false
-      if (isQualified == false) {
+      if (isQualify == false) {
         return;
       }
     }
 
     setIsSurveyInProgress(true);
     setShowStartPage(false);
-  }, [dataReady, survey, hasScreeningQuestions, quotaConfig, isQualified]);
+  }, [dataReady, survey, hasScreeningQuestions, isQualified]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers((prev) => ({
@@ -1113,107 +922,25 @@ export default function PublicSurveyPage() {
     }));
   };
 
-  // // Check if user qualifies based on screening answers
-  // const checkQualification = async () => {
-  //   if (!surveyIdForQuota) return;
-
-  //   setCheckingQualification(true);
-  //   try {
-  //     // Build the quota check request from screening answers
-  //     const checkRequest: QuotaCheckRequest = {};
-
-  //     // Map screening answers to quota check fields
-  //     screeningQuestions.forEach((sq) => {
-  //       const answer = screeningAnswers[sq.id];
-  //       if (!answer) return;
-
-  //       if (sq.type === "age") {
-  //         // Parse age range from answer (e.g., "18-24")
-  //         const [min, max] = answer.split("-").map(Number);
-  //         checkRequest.age = Math.floor((min + max) / 2); // Use midpoint
-  //       } else if (sq.type === "gender") {
-  //         // Map gender string to enum value
-  //         const genderMap: Record<
-  //           string,
-  //           "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
-  //         > = {
-  //           male: "MALE",
-  //           female: "FEMALE",
-  //           other: "OTHER",
-  //           prefer_not_to_say: "PREFER_NOT_TO_SAY",
-  //         };
-  //         checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
-  //       } else if (sq.type === "location") {
-  //         // Parse location - could be country, state, or city
-  //         checkRequest.location = { country: answer };
-  //       } else if (sq.type === "category") {
-  //         checkRequest.surveyCategoryId = answer;
-  //       }
-  //     });
-
-  //     checkRequest.vendor_respondent_id = token;
-
-  //     const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
-  //     console.log(">>>>> the value of the CHECK QUOTA RESULT is : ", result);
-  //     if (result.data?.qualified) {
-  //       setRespondentId(result.data?.respondent_id ?? null);
-  //       setIsQualified(true);
-  //       setScreeningPhase(false);
-  //       toast.success("You qualify for this survey!");
-  //     } else {
-  //       // Redirect to terminated URL if available, otherwise use internal terminated page
-  //       if (result.data?.status == "QUOTA_FULL") {
-  //         router.push("/survey/terminated?reason=quota_full");
-  //         return;
-  //       }
-  //       if (quotaConfig?.terminated_url) {
-  //         window.location.href = quotaConfig.terminated_url;
-  //       } else {
-  //         router.push("/survey/terminated?reason=not_qualified");
-  //       }
-  //       setIsQualified(false);
-  //     }
-  //   } catch (err: any) {
-  //     console.error("Error checking qualification:", err);
-  //     // On error, allow user to proceed (fail open)
-  //     setIsQualified(true);
-  //     setScreeningPhase(false);
-  //   } finally {
-  //     setCheckingQualification(false);
-  //   }
-  // };
   // Check if user qualifies based on screening answers
   const checkQualification = async () => {
     if (!surveyIdForQuota) return;
 
     setCheckingQualification(true);
     try {
-      const checkRequest: QuotaCheckRequest = {};
+      const checkRequest: QuotaCheckRequest_v2 = { screeningAnswers: [] };
 
       // support both with and without screening questions
       if (hasScreeningQuestions) {
         screeningQuestions.forEach((sq) => {
           const answer = screeningAnswers[sq.id];
+          console.log(">>>>> the value of the SCREENING ANSWERS is : ", answer);
           if (!answer) return;
-          if (sq.type === "age") {
-            const [min, max] = answer.split("-").map(Number);
-            checkRequest.age = Math.floor((min + max) / 2);
-          } else if (sq.type === "gender") {
-            const genderMap: Record<
-              string,
-              "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY"
-            > = {
-              male: "MALE",
-              female: "FEMALE",
-              other: "OTHER",
-              prefer_not_to_say: "PREFER_NOT_TO_SAY",
-            };
-            checkRequest.gender = genderMap[answer.toLowerCase()] || "OTHER";
-          } else if (sq.type === "location") {
-            checkRequest.location = { country: answer };
-          } else if (sq.type === "category") {
-            checkRequest.surveyCategoryId = answer;
-          }
+          checkRequest.screeningAnswers.push({
+            screeningQuestionId: sq.id,
+            screeningOptionId: answer,
+            answerValue: answer,
+          });
         });
       } else {
         // No screening questions: still call quota API using just vendor_respondent_id
@@ -1222,7 +949,10 @@ export default function PublicSurveyPage() {
 
       checkRequest.vendor_respondent_id = token;
 
-      const result = await quotaApi.checkQuota(surveyIdForQuota, checkRequest);
+      const result = await quotaApi.checkQuota_v2(
+        surveyIdForQuota,
+        checkRequest
+      );
       console.log(">>>> CHECK QUOTA RESULT:", result);
 
       if (result.data?.qualified) {
@@ -1230,35 +960,36 @@ export default function PublicSurveyPage() {
         setIsQualified(true);
         setScreeningPhase(false);
         toast.success("You qualify for this survey!");
+
+        return true;
       } else {
         setIsSurveyInProgress(false);
         if (result.data?.status == "QUOTA_FULL") {
           router.push("/survey/terminated?reason=quota_full");
-          return;
+          return false;
         }
-        if (quotaConfig?.terminated_url) {
-          window.location.href = quotaConfig.terminated_url;
-        } else {
-          router.push("/survey/terminated?reason=not_qualified");
-        }
+        router.push("/survey/terminated?reason=not_qualified");
         setIsQualified(false);
+        return false;
       }
     } catch (err: any) {
       console.error("Error checking qualification:", err);
-      setIsQualified(true);
+      router.push("/survey/terminated?reason=not_qualified");
+      setIsQualified(false);
       setScreeningPhase(false);
+      return false;
     } finally {
       setCheckingQualification(false);
     }
   };
 
   // Navigate screening questions
-  const nextScreeningQuestion = () => {
+  const nextScreeningQuestion = async () => {
     if (currentScreeningIndex < screeningQuestions.length - 1) {
       setCurrentScreeningIndex((prev) => prev + 1);
     } else {
       // All screening questions answered, check qualification
-      checkQualification();
+      await checkQualification();
     }
   };
 
@@ -1426,7 +1157,7 @@ export default function PublicSurveyPage() {
     setCurrentScreeningIndex(0);
 
     setIsSurveyInProgress(false);
-    // DO NOT TOUCH: surveySettings, survey, quotaConfig, etc.
+    // DO NOT TOUCH: surveySettings, survey, etc.
   };
 
   const handleSubmit = async () => {
@@ -1511,13 +1242,13 @@ export default function PublicSurveyPage() {
         if (respondentId && surveyIdForQuota && response_id) {
           try {
             const markRespondentCompletedResult =
-              await quotaApi.markRespondentCompleted(
+              await quotaApi.markRespondentCompleted_v2(
                 surveyIdForQuota,
                 respondentId,
                 response_id
               );
             console.log(
-              "markRespondentCompleted is",
+              "markRespondentCompleted_v2 is",
               markRespondentCompletedResult
             );
           } catch (markError) {
@@ -2229,12 +1960,12 @@ export default function PublicSurveyPage() {
                 >
                   {currentScreeningQuestion.options.map((option) => (
                     <div
-                      key={option.value}
+                      key={option.id}
                       className="flex items-center space-x-3"
                     >
-                      <RadioGroupItem value={option.value} id={option.value} />
-                      <Label htmlFor={option.value} className="cursor-pointer">
-                        {option.label}
+                      <RadioGroupItem value={option.id} id={option.id} />
+                      <Label htmlFor={option.id} className="cursor-pointer">
+                        {option.option_text} ({option.id})
                       </Label>
                     </div>
                   ))}

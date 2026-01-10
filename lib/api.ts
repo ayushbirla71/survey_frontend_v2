@@ -234,6 +234,15 @@ export interface QuotaCheckRequest {
   surveyCategoryId?: string;
 }
 
+export interface QuotaCheckRequest_v2 {
+  vendor_respondent_id?: string;
+  screeningAnswers: {
+    screeningQuestionId: string;
+    screeningOptionId?: string;
+    answerValue?: string;
+  }[];
+}
+
 export interface QuotaCheckResponse {
   qualified: boolean;
   reason?: string;
@@ -332,6 +341,19 @@ export type UpdateScreeningQuestionDto = {
   options: { option_text: string; order_index: number }[];
   is_active?: boolean;
 };
+
+export interface SavedScreeningQuestionInterface {
+  id: string;
+  question_text: string;
+  question_type: string;
+  vendor_question_id?: string;
+  options: Array<{
+    id: string;
+    option_text: string;
+    vendor_option_id?: string;
+    order_index: number;
+  }>;
+}
 
 // Base API function with error handling and authentication
 async function apiRequest<T>(
@@ -1815,6 +1837,36 @@ export const quotaApi = {
   // GET /api/quota/:surveyId/quota - Get quota
   getQuota_v2: async (surveyId: string): Promise<ApiResponse<any>> => {
     return apiRequest(`/api/quota/${surveyId}/quota_v2`);
+  },
+
+  // GET /api/quota/:surveyId/quota-screening-questions - Get Quota Screening Questons
+  getQuotaScreeningQuestions: async (
+    surveyId: string
+  ): Promise<ApiResponse<ApiResponse<SavedScreeningQuestionInterface[]>>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota-screening-questions`);
+  },
+
+  // POST /api/quota/:surveyId/check_v2 - Check if respondent qualifies
+  checkQuota_v2: async (
+    surveyId: string,
+    respondentData: QuotaCheckRequest_v2
+  ): Promise<ApiResponse<QuotaCheckResponse>> => {
+    return apiRequest(`/api/quota/${surveyId}/check_v2`, {
+      method: "POST",
+      body: JSON.stringify(respondentData),
+    });
+  },
+
+  // POST /api/quota/:surveyId/complete_v2 - Mark respondent as completed
+  markRespondentCompleted_v2: async (
+    surveyId: string,
+    respondent_id: string,
+    response_id: string
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/complete_v2`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, response_id }),
+    });
   },
 };
 
