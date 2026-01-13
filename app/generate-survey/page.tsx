@@ -1417,7 +1417,7 @@ export default function GenerateSurvey() {
       }
 
       const updateVendorJobStatus = await vendorsApi.updateVendorJobStatus(
-        vendorsAudience.vendorId,
+        originalQuotaAudience.vendorId,
         createdSurvey.id,
         1
       );

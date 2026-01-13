@@ -1879,7 +1879,7 @@ export const quotaApi = {
     return apiRequest(
       `/api/quota/terminate_v2?shareToken=${shareToken}&respondent_id=${respondent_id}`,
       {
-        method: "GET",
+        method: "POST",
       }
     );
   },

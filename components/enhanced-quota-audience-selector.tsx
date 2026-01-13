@@ -223,9 +223,7 @@ function validateQuota(
       }
       if (b.operator === "IN" || b.operator === "INTERSECTS") {
         if (!Array.isArray(b.value) || b.value.length === 0)
-          return `Bucket "${b.label ?? ""}" in "${
-            q.question_text
-          }" must have a non-empty list.`;
+          return `Bucket ${b.label ?? ""} must have at least one zipcode.`;
       }
     }
   }
@@ -1138,22 +1136,85 @@ export default function EnhancedQuotaAudienceSelector({
 
                                 {b.operator === "IN" ||
                                 b.operator === "INTERSECTS" ? (
-                                  <textarea
-                                    className="w-full rounded border px-2 py-1 text-sm"
-                                    placeholder="Comma-separated values (e.g. 132001,110001)"
-                                    value={
-                                      Array.isArray(b.value)
-                                        ? b.value.join(",")
-                                        : ""
-                                    }
-                                    onChange={(e) => {
-                                      const arr = e.target.value
-                                        .split(",")
-                                        .map((x) => x.trim())
-                                        .filter(Boolean);
-                                      updateBucket(q.id, idx, { value: arr });
-                                    }}
-                                  />
+                                  <div className="space-y-2">
+                                    <div className="text-xs text-gray-600">
+                                      Zipcodes (add multiple):
+                                    </div>
+                                    <div className="space-y-1">
+                                      {Array.isArray(b.value) ? (
+                                        b.value.map((zip, zipIdx) => (
+                                          <div
+                                            key={zipIdx}
+                                            className="flex items-center gap-2"
+                                          >
+                                            <input
+                                              type="number"
+                                              className="flex-1 rounded border px-2 py-1 text-sm"
+                                              placeholder={`Zipcode ${
+                                                zipIdx + 1
+                                              }`}
+                                              value={zip}
+                                              onChange={(e) => {
+                                                const newZips = [
+                                                  ...(b.value || []),
+                                                ];
+                                                newZips[zipIdx] =
+                                                  e.target.value;
+                                                updateBucket(q.id, idx, {
+                                                  value: newZips,
+                                                });
+                                              }}
+                                            />
+                                            {b.value.length > 1 && (
+                                              <button
+                                                type="button"
+                                                className="h-8 w-8 rounded border text-xs text-red-600 hover:bg-red-50"
+                                                onClick={() => {
+                                                  const newZips = (
+                                                    b.value || []
+                                                  ).filter(
+                                                    (_, i) => i !== zipIdx
+                                                  );
+                                                  updateBucket(q.id, idx, {
+                                                    value: newZips,
+                                                  });
+                                                }}
+                                              >
+                                                ×
+                                              </button>
+                                            )}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <input
+                                          type="number"
+                                          className="w-full rounded border px-2 py-1 text-sm"
+                                          placeholder="Enter first zipcode"
+                                          defaultValue={String(b.value || "")}
+                                          onChange={(e) =>
+                                            updateBucket(q.id, idx, {
+                                              value: [e.target.value],
+                                            })
+                                          }
+                                        />
+                                      )}
+                                      <button
+                                        type="button"
+                                        className="w-full rounded border border-dashed px-2 py-1 text-xs text-gray-600 hover:border-gray-400 hover:text-gray-800"
+                                        onClick={() => {
+                                          const newZips = [
+                                            ...(b.value || []),
+                                            "",
+                                          ];
+                                          updateBucket(q.id, idx, {
+                                            value: newZips,
+                                          });
+                                        }}
+                                      >
+                                        + Add another zipcode
+                                      </button>
+                                    </div>
+                                  </div>
                                 ) : null}
 
                                 {b.operator === "EQ" ||

@@ -897,7 +897,6 @@ export default function PublicSurveyPage() {
       }
     }
 
-    setIsSurveyInProgress(true);
     setShowStartPage(false);
   }, [dataReady, survey, hasScreeningQuestions, isQualified]);
 
@@ -968,6 +967,7 @@ export default function PublicSurveyPage() {
 
       if (result.data?.qualified) {
         setRespondentId(result.data?.respondent_id ?? null);
+        setIsSurveyInProgress(true);
         setIsQualified(true);
         setScreeningPhase(false);
         toast.success("You qualify for this survey!");
@@ -1983,7 +1983,7 @@ export default function PublicSurveyPage() {
                       >
                         <RadioGroupItem value={option.id} id={option.id} />
                         <Label htmlFor={option.id} className="cursor-pointer">
-                          {option.option_text} ({option.id})
+                          {option.option_text}
                         </Label>
                       </div>
                     ))}
