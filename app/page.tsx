@@ -718,7 +718,8 @@ export default function Dashboard() {
                       {/* Show Share button for DRAFT and SCHEDULED surveys */}
                       {survey.status === "PUBLISHED" &&
                         survey.share_tokens?.length === 1 &&
-                        survey.survey_send_by !== "VENDOR" && (
+                        survey.survey_send_by !== "VENDOR" &&
+                        survey.survey_send_by !== "AGENT" && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -728,6 +729,7 @@ export default function Dashboard() {
                           </Button>
                         )}
                       {survey.status === "PUBLISHED" &&
+                        survey.survey_send_by === "AGENT" &&
                         survey.share_tokens?.length > 1 && (
                           <Button
                             variant="ghost"

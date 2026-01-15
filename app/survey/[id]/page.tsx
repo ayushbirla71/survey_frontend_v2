@@ -890,11 +890,11 @@ export default function PublicSurveyPage() {
     // call checkQualification once before letting the user into the survey
     if (!hasScreeningQuestions && isQualified !== false) {
       console.log("No screening questions, checking qualification");
-      const isQualify = await checkQualification();
-      // If quota-full or not qualified, checkQualification will redirect or set isQualified=false
-      if (isQualify == false) {
-        return;
-      }
+      // const isQualify = await checkQualification();
+      // // If quota-full or not qualified, checkQualification will redirect or set isQualified=false
+      // if (isQualify == false) {
+      //   return;
+      // }
     }
 
     setShowStartPage(false);
@@ -921,6 +921,7 @@ export default function PublicSurveyPage() {
       const checkRequest: QuotaCheckRequest_v2 = {
         screeningAnswers: [],
         vendor_respondent_id: token,
+        shareToken: token,
       };
 
       // support both with and without screening questions
@@ -958,6 +959,7 @@ export default function PublicSurveyPage() {
       }
 
       checkRequest.vendor_respondent_id = token;
+      checkRequest.shareToken = token;
 
       const result = await quotaApi.checkQuota_v2(
         surveyIdForQuota,

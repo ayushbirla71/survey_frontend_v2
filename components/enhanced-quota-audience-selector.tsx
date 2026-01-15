@@ -1,6 +1,10 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { screeningQuestionsApi, vendorsApi } from "@/lib/api";
+import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
+import { Button } from "./ui/button";
+import { Download } from "lucide-react";
 
 /** =========================
  * API types (your format)
@@ -83,7 +87,7 @@ export type QuotaAudienceSelectorProps = {
   surveySettings: SurveySettings;
   quotaAudience: QuotaAudience;
   onQuotaAudienceUpdate: (next: QuotaAudience) => void;
-  onUserUniqueIdsUpdate?: (ids: string[]) => void;
+  onUserUniqueIdsUpdate: (userUniqueIds: string[]) => void;
   onValidationError?: (message: string | null) => void;
   categories?: { id: string; name: string }[];
   isEditMode?: boolean;
@@ -172,14 +176,29 @@ function rebalanceToTotal(
 
 function validateQuota(
   quotaAudience: QuotaAudience,
-  questions: ApiScreeningQuestion[]
+  questions: ApiScreeningQuestion[],
+  surveySettings: SurveySettings,
+  file: File | null,
+  fileData: any[]
 ): string | null {
+  // Check AGENT mode validation (runs regardless of quota enabled)
+  const isAgentMode = surveySettings?.survey_send_by === "AGENT"; // Access surveySettings (add as param)
+  if (isAgentMode && !file) {
+    // !file check
+    return "Please upload an Excel file with user IDs for Agent mode";
+  }
+
   if (!quotaAudience.enabled) return null;
   if (!quotaAudience.totalTarget || quotaAudience.totalTarget <= 0) {
     return "Total target must be > 0.";
   }
   if (!quotaAudience.screening || quotaAudience.screening.length === 0) {
     return "Please select at least 1 screening question.";
+  }
+  if (isAgentMode && file) {
+    if (fileData.length != quotaAudience.totalTarget) {
+      return "Total target must be equal to the number of user IDs in the Excel file.";
+    }
   }
   for (const s of quotaAudience.screening) {
     const q = questions.find((qq) => qq.id === s.questionId);
@@ -289,6 +308,9 @@ export default function EnhancedQuotaAudienceSelector({
   const [vendorId, setVendorId] = React.useState<string>(
     quotaAudience.vendorId || ""
   );
+
+  const [file, setFile] = React.useState<File | null>(null);
+  const [fileData, setFileData] = React.useState<any[]>([]);
 
   const withFilters = React.useCallback(
     (next: QuotaAudience): QuotaAudience => ({
@@ -504,9 +526,15 @@ export default function EnhancedQuotaAudienceSelector({
 
   // Validation callback
   React.useEffect(() => {
-    const msg = validateQuota(quotaAudience, questions);
+    const msg = validateQuota(
+      quotaAudience,
+      questions,
+      surveySettings,
+      file,
+      fileData
+    );
     onValidationError?.(msg);
-  }, [quotaAudience, questions, onValidationError]);
+  }, [quotaAudience, questions, onValidationError, surveySettings, file]);
 
   const activeGroup = grouped.find((g) => g.categoryId === activeCategoryId);
 
@@ -636,7 +664,7 @@ export default function EnhancedQuotaAudienceSelector({
             ...(s.buckets ?? []),
             {
               label: "",
-              operator: "BETWEEN",
+              operator: "BETWEEN" as const,
               value: { min: 18, max: 24 },
               target: 0,
             },
@@ -749,506 +777,622 @@ export default function EnhancedQuotaAudienceSelector({
     });
   };
 
+  // File handling for AGENT mode
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
+      if (
+        !selectedFile.name.endsWith(".xlsx") &&
+        !selectedFile.name.endsWith(".xls")
+      ) {
+        toast.error("Please upload a valid Excel file (.xlsx or .xls)");
+        setFile(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+          console.log(">>>>>> the value of the JSON DATA is : ", jsonData);
+          setFileData(jsonData);
+
+          if (
+            !jsonData.length ||
+            !jsonData[0].hasOwnProperty("userUniqueIds")
+          ) {
+            toast.error(
+              'Excel file must contain a column named "userUniqueIds"'
+            );
+            setFile(null);
+            return;
+          }
+
+          setFile(selectedFile);
+          const userUniqueIds = jsonData.map((row) => row.userUniqueIds);
+          onUserUniqueIdsUpdate(userUniqueIds);
+          toast.success("Excel file uploaded successfully!");
+        } catch (err) {
+          toast.error("Error reading Excel file. Please upload a valid file.");
+          setFile(null);
+        }
+      };
+      reader.readAsArrayBuffer(selectedFile);
+    }
+  };
+
+  const handleDownloadDummyExcel = () => {
+    try {
+      const excelData = ["9013kjn9832nsd89sds", "879fgdf990fd7gsd98"];
+      const worksheetData = [
+        ["userUniqueIds"],
+        ...excelData.map((item: any) => [item]),
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
+      XLSX.writeFile(workbook, "Agent Users List Template.xlsx");
+    } catch (error) {
+      toast.error("Failed to download Excel");
+    }
+  };
+
   const isBlockingLoading =
     quotaAudience.enabled &&
     (vendorsQuery.isFetching || questionsQuery.isFetching) &&
     (isVendorFlow ? true : Boolean(questionsPayload));
 
   return (
-    <div className="w-full rounded border p-4">
-      <LoadingModal
-        open={isBlockingLoading}
-        title="Fetching screening questions"
-        message="Please wait until all questions are loaded."
-      />
-
-      {/* Enable quota */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <input
-            id="quotaEnabled"
-            type="checkbox"
-            checked={quotaAudience.enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
-          <label htmlFor="quotaEnabled" className="font-medium">
-            Enable quota
-          </label>
-        </div>
-
-        {quotaAudience.enabled && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Total target:</label>
+    <div>
+      {/* AGENT mode */}
+      {surveySettings.survey_send_by == "AGENT" && (
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-slate-800 mb-2">
+            Agent Mode
+          </h2>
+          <p className="text-slate-500">
+            Please select the Excel File with the user unique Id's list
+          </p>
+          <div className="mt-2 flex gap-3">
+            <label
+              htmlFor="excel-upload"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md mt-4 cursor-pointer"
+            >
+              Upload Excel
+            </label>
             <input
-              type="number"
-              min={1}
-              value={quotaAudience.totalTarget ?? ""}
-              onChange={(e) => setTotalTarget(parseFloat(e.target.value) || 0)}
-              className="w-28 rounded border px-2 py-1"
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileChange}
+              className="hidden"
             />
-          </div>
-        )}
-      </div>
-
-      {/* Filters */}
-      {quotaAudience.enabled && (
-        <div className="mt-4 grid grid-cols-12 gap-3 rounded border p-3">
-          {isVendorFlow && (
-            <div className="col-span-12 md:col-span-4">
-              <label className="mb-1 block text-xs text-gray-600">Vendor</label>
-              <select
-                className="w-full rounded border px-2 py-2 text-sm"
-                value={vendorId}
-                onChange={(e) => handleVendorChange(e.target.value)}
-              >
-                <option value="">Select vendor</option>
-                {(vendorsQuery.data ?? []).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
-              </select>
-              {vendorsQuery.isError && (
-                <div className="mt-1 text-xs text-red-600">
-                  Failed to load vendors.
-                </div>
-              )}
-            </div>
-          )}
-
-          <div
-            className={`col-span-12 md:col-span-4 ${
-              !isVendorFlow ? "md:col-span-6" : ""
-            }`}
-          >
-            <label className="mb-1 block text-xs text-gray-600">Country</label>
-            <select
-              className="w-full rounded border px-2 py-2 text-sm"
-              value={countryCode}
-              onChange={(e) => handleCountryChange(e.target.value)}
+            <Button
+              variant="outline"
+              onClick={handleDownloadDummyExcel}
+              className="h-10 px-4 py-2 rounded-md mt-4"
             >
-              <option value="IN">IN</option>
-              <option value="US">US</option>
-              <option value="GB">GB</option>
-            </select>
+              <Download className="h-4 w-4 mr-2" />
+              Download Excel Template
+            </Button>
           </div>
-
-          <div
-            className={`col-span-12 md:col-span-4 ${
-              !isVendorFlow ? "md:col-span-6" : ""
-            }`}
-          >
-            <label className="mb-1 block text-xs text-gray-600">Language</label>
-            <select
-              className="w-full rounded border px-2 py-2 text-sm"
-              value={language}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-            >
-              <option value="ENGLISH">ENGLISH</option>
-              <option value="HINDI">HINDI</option>
-            </select>
-          </div>
-
-          <div className="col-span-12 text-xs text-gray-600">
-            Source:{" "}
-            <span className="font-medium">
-              {isVendorFlow ? "VENDOR" : "SYSTEM"}
-            </span>
-          </div>
-
-          {isVendorFlow && !vendorId && (
-            <div className="col-span-12 text-xs text-amber-700">
-              Select a vendor to load screening questions.
-            </div>
+          {file && (
+            <p className="text-green-500 mt-2">
+              File uploaded successfully: {file.name}
+            </p>
           )}
         </div>
       )}
 
-      {/* Body */}
-      {!quotaAudience.enabled ? (
-        <div className="mt-3 text-sm text-gray-600">
-          Turn on quota to configure screening.
-        </div>
-      ) : questionsQuery.isError ? (
-        <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          Failed to load screening questions.
-        </div>
-      ) : !questionsPayload ? (
-        <div className="mt-4 text-sm text-gray-600">
-          {isVendorFlow
-            ? "Choose vendor/country/language to load questions."
-            : "Choose country/language to load questions."}
-        </div>
-      ) : (
-        <div className="mt-4 grid grid-cols-12 gap-4">
-          {/* Left */}
-          <div className="col-span-4 rounded border">
-            <div className="border-b px-3 py-2 text-sm font-medium">
-              {isVendorFlow ? "Vendor categories" : "Questions"}
-            </div>
-            {grouped.length === 0 ? (
-              <div className="px-3 py-3 text-sm">No questions found.</div>
-            ) : (
-              <ul className="max-h-[420px] overflow-auto">
-                {grouped.map((g) => (
-                  <li key={g.categoryId}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategoryId(g.categoryId)}
-                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                        g.categoryId === activeCategoryId
-                          ? "bg-gray-100"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <span className="truncate">{g.categoryName}</span>
-                      <span className="ml-2 rounded bg-gray-200 px-2 py-[2px] text-xs">
-                        {g.questions.length}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+      {/* Quota Enable/Disable Toggle */}
+      <div className="w-full rounded border p-4">
+        <LoadingModal
+          open={isBlockingLoading}
+          title="Fetching screening questions"
+          message="Please wait until all questions are loaded."
+        />
+
+        {/* Enable quota */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <input
+              id="quotaEnabled"
+              type="checkbox"
+              checked={quotaAudience.enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            <label htmlFor="quotaEnabled" className="font-medium">
+              Enable quota
+            </label>
           </div>
 
-          {/* Right */}
-          <div className="col-span-8 rounded border">
-            <div className="border-b px-3 py-2 text-sm font-medium">
-              {activeGroup ? activeGroup.categoryName : "Questions"}
+          {quotaAudience.enabled && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm">Total target:</label>
+              <input
+                type="number"
+                min={1}
+                value={quotaAudience.totalTarget ?? ""}
+                onChange={(e) =>
+                  setTotalTarget(parseFloat(e.target.value) || 0)
+                }
+                className="w-28 rounded border px-2 py-1"
+              />
             </div>
-            {!activeGroup ? (
-              <div className="px-3 py-3 text-sm text-gray-600">
-                Select a group.
-              </div>
-            ) : (
-              <div className="max-h-[420px] overflow-auto p-3">
-                <div className="space-y-3">
-                  {activeGroup.questions.map((q) => {
-                    const selected = Boolean(
-                      getScreeningEntry(quotaAudience, q.id)
-                    );
-                    const screeningEntry = getScreeningEntry(
-                      quotaAudience,
-                      q.id
-                    );
+          )}
+        </div>
 
-                    return (
-                      <div
-                        key={q.id}
-                        // Add visual indicator for selected questions
-                        className={`rounded border p-3 transition-all ${
-                          selected
-                            ? "border-violet-500 bg-violet-50 shadow-sm"
-                            : "border-gray-200 bg-white hover:border-gray-300"
+        {/* Filters */}
+        {quotaAudience.enabled && (
+          <div className="mt-4 grid grid-cols-12 gap-3 rounded border p-3">
+            {isVendorFlow && (
+              <div className="col-span-12 md:col-span-4">
+                <label className="mb-1 block text-xs text-gray-600">
+                  Vendor
+                </label>
+                <select
+                  className="w-full rounded border px-2 py-2 text-sm"
+                  value={vendorId}
+                  onChange={(e) => handleVendorChange(e.target.value)}
+                >
+                  <option value="">Select vendor</option>
+                  {(vendorsQuery.data ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+                {vendorsQuery.isError && (
+                  <div className="mt-1 text-xs text-red-600">
+                    Failed to load vendors.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div
+              className={`col-span-12 md:col-span-4 ${
+                !isVendorFlow ? "md:col-span-6" : ""
+              }`}
+            >
+              <label className="mb-1 block text-xs text-gray-600">
+                Country
+              </label>
+              <select
+                className="w-full rounded border px-2 py-2 text-sm"
+                value={countryCode}
+                onChange={(e) => handleCountryChange(e.target.value)}
+              >
+                <option value="IN">IN</option>
+                <option value="US">US</option>
+                <option value="GB">GB</option>
+              </select>
+            </div>
+
+            <div
+              className={`col-span-12 md:col-span-4 ${
+                !isVendorFlow ? "md:col-span-6" : ""
+              }`}
+            >
+              <label className="mb-1 block text-xs text-gray-600">
+                Language
+              </label>
+              <select
+                className="w-full rounded border px-2 py-2 text-sm"
+                value={language}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+              >
+                <option value="ENGLISH">ENGLISH</option>
+                <option value="HINDI">HINDI</option>
+              </select>
+            </div>
+
+            <div className="col-span-12 text-xs text-gray-600">
+              Source:{" "}
+              <span className="font-medium">
+                {isVendorFlow ? "VENDOR" : "SYSTEM"}
+              </span>
+            </div>
+
+            {isVendorFlow && !vendorId && (
+              <div className="col-span-12 text-xs text-amber-700">
+                Select a vendor to load screening questions.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Body */}
+        {!quotaAudience.enabled ? (
+          <div className="mt-3 text-sm text-gray-600">
+            Turn on quota to configure screening.
+          </div>
+        ) : questionsQuery.isError ? (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            Failed to load screening questions.
+          </div>
+        ) : !questionsPayload ? (
+          <div className="mt-4 text-sm text-gray-600">
+            {isVendorFlow
+              ? "Choose vendor/country/language to load questions."
+              : "Choose country/language to load questions."}
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-12 gap-4">
+            {/* Left */}
+            <div className="col-span-4 rounded border">
+              <div className="border-b px-3 py-2 text-sm font-medium">
+                {isVendorFlow ? "Vendor categories" : "Questions"}
+              </div>
+              {grouped.length === 0 ? (
+                <div className="px-3 py-3 text-sm">No questions found.</div>
+              ) : (
+                <ul className="max-h-[420px] overflow-auto">
+                  {grouped.map((g) => (
+                    <li key={g.categoryId}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategoryId(g.categoryId)}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                          g.categoryId === activeCategoryId
+                            ? "bg-gray-100"
+                            : "hover:bg-gray-50"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium">
-                              {q.question_text}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              {q.question_key} • {q.question_type}
-                              {q.options?.length
-                                ? ` • ${q.options.length} options`
-                                : ""}
-                            </div>
-                          </div>
-                          <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={(e) =>
-                                toggleScreeningQuestion(q, e.target.checked)
-                              }
-                              // Style checkbox for selected state
-                              className="cursor-pointer"
-                            />
-                            <span
-                              className={
-                                selected ? "text-violet-700 font-medium" : ""
-                              }
-                            >
-                              Use in screening
-                            </span>
-                          </label>
-                        </div>
+                        <span className="truncate">{g.categoryName}</span>
+                        <span className="ml-2 rounded bg-gray-200 px-2 py-[2px] text-xs">
+                          {g.questions.length}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
-                        {selected && q.options?.length ? (
-                          <div className="mt-3 space-y-2">
-                            <div className="text-xs text-gray-600">
-                              Per-option targets must sum to total target (
-                              {quotaAudience.totalTarget ?? 0}).
-                            </div>
-                            {q.options.map((opt) => {
-                              const t =
-                                screeningEntry?.optionTargets?.find(
-                                  (x) => x.optionId === opt.id
-                                )?.target ?? 0;
-                              return (
-                                <div
-                                  key={opt.id}
-                                  className="flex items-center justify-between gap-3"
-                                >
-                                  <div className="text-sm">
-                                    {normalizeOptionLabel(opt)}
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={t}
-                                    onChange={(e) =>
-                                      setOptionTarget(
-                                        q.id,
-                                        opt.id,
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-28 rounded border px-2 py-1"
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
+            {/* Right */}
+            <div className="col-span-8 rounded border">
+              <div className="border-b px-3 py-2 text-sm font-medium">
+                {activeGroup ? activeGroup.categoryName : "Questions"}
+              </div>
+              {!activeGroup ? (
+                <div className="px-3 py-3 text-sm text-gray-600">
+                  Select a group.
+                </div>
+              ) : (
+                <div className="max-h-[420px] overflow-auto p-3">
+                  <div className="space-y-3">
+                    {activeGroup.questions.map((q) => {
+                      const selected = Boolean(
+                        getScreeningEntry(quotaAudience, q.id)
+                      );
+                      const screeningEntry = getScreeningEntry(
+                        quotaAudience,
+                        q.id
+                      );
 
-                        {/* NEW: Open-ended bucket UI */}
-                        {selected && !q.options?.length ? (
-                          <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-600">
-                                Bucket targets must sum to total target{" "}
-                                {quotaAudience.totalTarget ?? 0}.
+                      return (
+                        <div
+                          key={q.id}
+                          // Add visual indicator for selected questions
+                          className={`rounded border p-3 transition-all ${
+                            selected
+                              ? "border-violet-500 bg-violet-50 shadow-sm"
+                              : "border-gray-200 bg-white hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium">
+                                {q.question_text}
                               </div>
-                              <button
-                                type="button"
-                                className="rounded border px-2 py-1 text-xs"
-                                onClick={() => addBucket(q.id)}
-                              >
-                                + Add bucket
-                              </button>
+                              <div className="text-xs text-gray-600">
+                                {q.question_key} • {q.question_type}
+                                {q.options?.length
+                                  ? ` • ${q.options.length} options`
+                                  : ""}
+                              </div>
                             </div>
-
-                            {(screeningEntry?.buckets ?? []).map((b, idx) => (
-                              <div
-                                key={idx}
-                                className="rounded border p-2 space-y-2"
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={(e) =>
+                                  toggleScreeningQuestion(q, e.target.checked)
+                                }
+                                // Style checkbox for selected state
+                                className="cursor-pointer"
+                              />
+                              <span
+                                className={
+                                  selected ? "text-violet-700 font-medium" : ""
+                                }
                               >
-                                <div className="grid grid-cols-12 gap-2 items-center">
-                                  <input
-                                    className="col-span-4 rounded border px-2 py-1 text-sm"
-                                    placeholder="Label (e.g. 18-24)"
-                                    value={b.label ?? ""}
-                                    onChange={(e) =>
-                                      updateBucket(q.id, idx, {
-                                        label: e.target.value,
-                                      })
-                                    }
-                                  />
+                                Use in screening
+                              </span>
+                            </label>
+                          </div>
 
-                                  <select
-                                    className="col-span-3 rounded border px-2 py-1 text-sm"
-                                    value={b.operator}
-                                    onChange={(e) => {
-                                      const op = e.target.value as any;
-                                      // reset value shape when operator changes
-                                      const nextValue =
-                                        op === "BETWEEN"
-                                          ? { min: 18, max: 24 }
-                                          : op === "IN" || op === "INTERSECTS"
-                                          ? []
-                                          : "";
-                                      updateBucket(q.id, idx, {
-                                        operator: op,
-                                        value: nextValue,
-                                      });
-                                    }}
+                          {selected && q.options?.length ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="text-xs text-gray-600">
+                                Per-option targets must sum to total target (
+                                {quotaAudience.totalTarget ?? 0}).
+                              </div>
+                              {q.options.map((opt) => {
+                                const t =
+                                  screeningEntry?.optionTargets?.find(
+                                    (x) => x.optionId === opt.id
+                                  )?.target ?? 0;
+                                return (
+                                  <div
+                                    key={opt.id}
+                                    className="flex items-center justify-between gap-3"
                                   >
-                                    {/* simple defaults; you can restrict based on q.data_type */}
-                                    <option value="BETWEEN">BETWEEN</option>
-                                    <option value="IN">IN</option>
-                                    <option value="EQ">EQ</option>
-                                    <option value="GTE">GTE</option>
-                                    <option value="LTE">LTE</option>
-                                    <option value="INTERSECTS">
-                                      INTERSECTS
-                                    </option>
-                                  </select>
-
-                                  <input
-                                    type="number"
-                                    className="col-span-3 rounded border px-2 py-1 text-sm"
-                                    value={b.target ?? 0}
-                                    onChange={(e) =>
-                                      updateBucket(q.id, idx, {
-                                        target: Math.max(
-                                          0,
-                                          Math.trunc(
-                                            Number(e.target.value || 0)
-                                          )
-                                        ),
-                                      })
-                                    }
-                                  />
-
-                                  <button
-                                    type="button"
-                                    className="col-span-2 rounded border px-2 py-1 text-xs"
-                                    onClick={() => removeBucket(q.id, idx)}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-
-                                {b.operator === "BETWEEN" ? (
-                                  <div className="grid grid-cols-12 gap-2">
+                                    <div className="text-sm">
+                                      {normalizeOptionLabel(opt)}
+                                    </div>
                                     <input
                                       type="number"
-                                      className="col-span-6 rounded border px-2 py-1 text-sm"
-                                      placeholder="Min"
-                                      value={b.value?.min ?? ""}
+                                      min={0}
+                                      value={t}
                                       onChange={(e) =>
-                                        updateBucket(q.id, idx, {
-                                          value: {
-                                            ...b.value,
-                                            min: Number(e.target.value),
-                                          },
-                                        })
+                                        setOptionTarget(
+                                          q.id,
+                                          opt.id,
+                                          parseFloat(e.target.value) || 0
+                                        )
                                       }
-                                    />
-                                    <input
-                                      type="number"
-                                      className="col-span-6 rounded border px-2 py-1 text-sm"
-                                      placeholder="Max"
-                                      value={b.value?.max ?? ""}
-                                      onChange={(e) =>
-                                        updateBucket(q.id, idx, {
-                                          value: {
-                                            ...b.value,
-                                            max: Number(e.target.value),
-                                          },
-                                        })
-                                      }
+                                      className="w-28 rounded border px-2 py-1"
                                     />
                                   </div>
-                                ) : null}
+                                );
+                              })}
+                            </div>
+                          ) : null}
 
-                                {b.operator === "IN" ||
-                                b.operator === "INTERSECTS" ? (
-                                  <div className="space-y-2">
-                                    <div className="text-xs text-gray-600">
-                                      Zipcodes (add multiple):
+                          {/* NEW: Open-ended bucket UI */}
+                          {selected && !q.options?.length ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs text-gray-600">
+                                  Bucket targets must sum to total target{" "}
+                                  {quotaAudience.totalTarget ?? 0}.
+                                </div>
+                                <button
+                                  type="button"
+                                  className="rounded border px-2 py-1 text-xs"
+                                  onClick={() => addBucket(q.id)}
+                                >
+                                  + Add bucket
+                                </button>
+                              </div>
+
+                              {(screeningEntry?.buckets ?? []).map((b, idx) => (
+                                <div
+                                  key={idx}
+                                  className="rounded border p-2 space-y-2"
+                                >
+                                  <div className="grid grid-cols-12 gap-2 items-center">
+                                    <input
+                                      className="col-span-4 rounded border px-2 py-1 text-sm"
+                                      placeholder="Label (e.g. 18-24)"
+                                      value={b.label ?? ""}
+                                      onChange={(e) =>
+                                        updateBucket(q.id, idx, {
+                                          label: e.target.value,
+                                        })
+                                      }
+                                    />
+
+                                    <select
+                                      className="col-span-3 rounded border px-2 py-1 text-sm"
+                                      value={b.operator}
+                                      onChange={(e) => {
+                                        const op = e.target.value as any;
+                                        // reset value shape when operator changes
+                                        const nextValue =
+                                          op === "BETWEEN"
+                                            ? { min: 18, max: 24 }
+                                            : op === "IN" || op === "INTERSECTS"
+                                            ? []
+                                            : "";
+                                        updateBucket(q.id, idx, {
+                                          operator: op,
+                                          value: nextValue,
+                                        });
+                                      }}
+                                    >
+                                      {/* simple defaults; you can restrict based on q.data_type */}
+                                      <option value="BETWEEN">BETWEEN</option>
+                                      <option value="IN">IN</option>
+                                      <option value="EQ">EQ</option>
+                                      <option value="GTE">GTE</option>
+                                      <option value="LTE">LTE</option>
+                                      <option value="INTERSECTS">
+                                        INTERSECTS
+                                      </option>
+                                    </select>
+
+                                    <input
+                                      type="number"
+                                      className="col-span-3 rounded border px-2 py-1 text-sm"
+                                      value={b.target ?? 0}
+                                      onChange={(e) =>
+                                        updateBucket(q.id, idx, {
+                                          target: Math.max(
+                                            0,
+                                            Math.trunc(
+                                              Number(e.target.value || 0)
+                                            )
+                                          ),
+                                        })
+                                      }
+                                    />
+
+                                    <button
+                                      type="button"
+                                      className="col-span-2 rounded border px-2 py-1 text-xs"
+                                      onClick={() => removeBucket(q.id, idx)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+
+                                  {b.operator === "BETWEEN" ? (
+                                    <div className="grid grid-cols-12 gap-2">
+                                      <input
+                                        type="number"
+                                        className="col-span-6 rounded border px-2 py-1 text-sm"
+                                        placeholder="Min"
+                                        value={b.value?.min ?? ""}
+                                        onChange={(e) =>
+                                          updateBucket(q.id, idx, {
+                                            value: {
+                                              ...b.value,
+                                              min: Number(e.target.value),
+                                            },
+                                          })
+                                        }
+                                      />
+                                      <input
+                                        type="number"
+                                        className="col-span-6 rounded border px-2 py-1 text-sm"
+                                        placeholder="Max"
+                                        value={b.value?.max ?? ""}
+                                        onChange={(e) =>
+                                          updateBucket(q.id, idx, {
+                                            value: {
+                                              ...b.value,
+                                              max: Number(e.target.value),
+                                            },
+                                          })
+                                        }
+                                      />
                                     </div>
-                                    <div className="space-y-1">
-                                      {Array.isArray(b.value) ? (
-                                        b.value.map((zip, zipIdx) => (
-                                          <div
-                                            key={zipIdx}
-                                            className="flex items-center gap-2"
-                                          >
-                                            <input
-                                              type="number"
-                                              className="flex-1 rounded border px-2 py-1 text-sm"
-                                              placeholder={`Zipcode ${
-                                                zipIdx + 1
-                                              }`}
-                                              value={zip}
-                                              onChange={(e) => {
-                                                const newZips = [
-                                                  ...(b.value || []),
-                                                ];
-                                                newZips[zipIdx] =
-                                                  e.target.value;
-                                                updateBucket(q.id, idx, {
-                                                  value: newZips,
-                                                });
-                                              }}
-                                            />
-                                            {b.value.length > 1 && (
-                                              <button
-                                                type="button"
-                                                className="h-8 w-8 rounded border text-xs text-red-600 hover:bg-red-50"
-                                                onClick={() => {
-                                                  const newZips = (
-                                                    b.value || []
-                                                  ).filter(
-                                                    (_, i) => i !== zipIdx
-                                                  );
+                                  ) : null}
+
+                                  {b.operator === "IN" ||
+                                  b.operator === "INTERSECTS" ? (
+                                    <div className="space-y-2">
+                                      <div className="text-xs text-gray-600">
+                                        Zipcodes (add multiple):
+                                      </div>
+                                      <div className="space-y-1">
+                                        {Array.isArray(b.value) ? (
+                                          b.value.map((zip, zipIdx) => (
+                                            <div
+                                              key={zipIdx}
+                                              className="flex items-center gap-2"
+                                            >
+                                              <input
+                                                type="number"
+                                                className="flex-1 rounded border px-2 py-1 text-sm"
+                                                placeholder={`Zipcode ${
+                                                  zipIdx + 1
+                                                }`}
+                                                value={zip}
+                                                onChange={(e) => {
+                                                  const newZips = [
+                                                    ...(b.value || []),
+                                                  ];
+                                                  newZips[zipIdx] =
+                                                    e.target.value;
                                                   updateBucket(q.id, idx, {
                                                     value: newZips,
                                                   });
                                                 }}
-                                              >
-                                                ×
-                                              </button>
-                                            )}
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <input
-                                          type="number"
-                                          className="w-full rounded border px-2 py-1 text-sm"
-                                          placeholder="Enter first zipcode"
-                                          defaultValue={String(b.value || "")}
-                                          onChange={(e) =>
+                                              />
+                                              {b.value.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  className="h-8 w-8 rounded border text-xs text-red-600 hover:bg-red-50"
+                                                  onClick={() => {
+                                                    const newZips = (
+                                                      b.value || []
+                                                    ).filter(
+                                                      (_: any, i: number) =>
+                                                        i !== zipIdx
+                                                    );
+                                                    updateBucket(q.id, idx, {
+                                                      value: newZips,
+                                                    });
+                                                  }}
+                                                >
+                                                  ×
+                                                </button>
+                                              )}
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <input
+                                            type="number"
+                                            className="w-full rounded border px-2 py-1 text-sm"
+                                            placeholder="Enter first zipcode"
+                                            defaultValue={String(b.value || "")}
+                                            onChange={(e) =>
+                                              updateBucket(q.id, idx, {
+                                                value: [e.target.value],
+                                              })
+                                            }
+                                          />
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="w-full rounded border border-dashed px-2 py-1 text-xs text-gray-600 hover:border-gray-400 hover:text-gray-800"
+                                          onClick={() => {
+                                            const newZips = [
+                                              ...(b.value || []),
+                                              "",
+                                            ];
                                             updateBucket(q.id, idx, {
-                                              value: [e.target.value],
-                                            })
-                                          }
-                                        />
-                                      )}
-                                      <button
-                                        type="button"
-                                        className="w-full rounded border border-dashed px-2 py-1 text-xs text-gray-600 hover:border-gray-400 hover:text-gray-800"
-                                        onClick={() => {
-                                          const newZips = [
-                                            ...(b.value || []),
-                                            "",
-                                          ];
-                                          updateBucket(q.id, idx, {
-                                            value: newZips,
-                                          });
-                                        }}
-                                      >
-                                        + Add another zipcode
-                                      </button>
+                                              value: newZips,
+                                            });
+                                          }}
+                                        >
+                                          + Add another zipcode
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                ) : null}
+                                  ) : null}
 
-                                {b.operator === "EQ" ||
-                                b.operator === "GTE" ||
-                                b.operator === "LTE" ? (
-                                  <input
-                                    className="w-full rounded border px-2 py-1 text-sm"
-                                    placeholder="Value"
-                                    value={
-                                      typeof b.value === "string" ||
-                                      typeof b.value === "number"
-                                        ? String(b.value)
-                                        : ""
-                                    }
-                                    onChange={(e) =>
-                                      updateBucket(q.id, idx, {
-                                        value: e.target.value,
-                                      })
-                                    }
-                                  />
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                                  {b.operator === "EQ" ||
+                                  b.operator === "GTE" ||
+                                  b.operator === "LTE" ? (
+                                    <input
+                                      className="w-full rounded border px-2 py-1 text-sm"
+                                      placeholder="Value"
+                                      value={
+                                        typeof b.value === "string" ||
+                                        typeof b.value === "number"
+                                          ? String(b.value)
+                                          : ""
+                                      }
+                                      onChange={(e) =>
+                                        updateBucket(q.id, idx, {
+                                          value: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

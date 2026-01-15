@@ -62,6 +62,9 @@ import VendorAudience, {
   VendorAudienceData,
 } from "@/components/vendor-audience";
 import EnhancedQuotaAudienceSelector, {
+  QuotaBucketOperator,
+  QuotaOptionTarget,
+  QuotaScreeningQuestion,
   type QuotaAudience as EnhancedQuotaAudience,
 } from "@/components/enhanced-quota-audience-selector";
 
@@ -122,11 +125,10 @@ interface ShareToken {
 }
 
 type RawQuotaOptionTarget = {
-  optionId?: string;
-  option_id?: string;
-  optionid?: string;
   id?: string;
+  optionId?: string;
   target?: number | string | null;
+  vendorOptionId?: string | null;
 };
 
 type RawQuotaBucket = {
@@ -140,15 +142,10 @@ type RawQuotaBucket = {
 };
 
 type RawQuotaScreeningQuestion = {
-  questionId?: string;
-  question_id?: string;
-  questionid?: string;
   id?: string;
-
+  questionId?: string;
+  vendorQuestionId?: string;
   optionTargets?: RawQuotaOptionTarget[];
-  option_targets?: RawQuotaOptionTarget[];
-  optiontargets?: RawQuotaOptionTarget[];
-
   buckets?: RawQuotaBucket[];
 };
 
@@ -252,6 +249,8 @@ export default function GenerateSurvey() {
   const [step4Loading, setStep4Loading] = useState(false);
   const [publishLoadingOverlay, setPublishLoadingOverlay] = useState(false);
   const [excelData, setExcelData] = useState<ShareToken[] | null>(null);
+  const [generatingAgentExcel, setGeneratingAgentExcel] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [quotaValidationError, setQuotaValidationError] = useState<
     string | null
   >(null);
@@ -535,57 +534,49 @@ export default function GenerateSurvey() {
   }, [isEditMode, editSurveyId]);
 
   useEffect(() => {
-    if (!rawQuotaConfig) return;
+    if (!rawQuotaConfig?.screeningquestions) {
+      setQuotaAudience((prev) => ({ ...prev, screening: [] }));
+      return;
+    }
 
-    // CHANGED inside useEffect that builds `loaded`
-    const loaded: EnhancedQuotaAudience = {
-      enabled: Boolean((rawQuotaConfig.totaltarget ?? 0) > 0),
-      totalTarget: rawQuotaConfig.totaltarget ?? null,
+    const transformedScreening: QuotaScreeningQuestion[] =
+      rawQuotaConfig.screeningquestions
+        .filter(
+          (raw): raw is RawQuotaScreeningQuestion =>
+            raw != null && raw.questionId != null
+        )
+        .map((raw) => ({
+          questionId: raw.questionId!,
+          vendorQuestionId: raw.vendorQuestionId ?? undefined,
+          optionTargets: raw.optionTargets
+            ?.map((opt) => ({
+              optionId: opt.optionId ?? "",
+              target: Number(opt.target ?? 0),
+              vendorOptionId: opt.vendorOptionId ?? undefined,
+            }))
+            .filter(Boolean) as QuotaOptionTarget[], // Remove nulls after transformation
+          buckets:
+            raw.buckets?.map((bucket) => ({
+              label: bucket.label ?? "",
+              operator: bucket.operator as QuotaBucketOperator, // Cast safely since UI only allows valid operators
+              value:
+                bucket.value ??
+                (bucket.operator === "BETWEEN" ? { min: 0, max: 0 } : []),
+              target: Number(bucket.target ?? 0),
+            })) ?? [],
+        }));
+
+    setQuotaAudience((prev) => ({
+      ...prev,
+      enabled: Boolean(rawQuotaConfig.totaltarget),
+      totalTarget: rawQuotaConfig.totaltarget
+        ? Number(rawQuotaConfig.totaltarget)
+        : 0,
+      screening: transformedScreening,
       vendorId: rawQuotaConfig.vendorId ?? null,
       countryCode: rawQuotaConfig.countryCode ?? null,
       language: rawQuotaConfig.language ?? null,
-
-      screening: Array.isArray(rawQuotaConfig.screeningquestions)
-        ? rawQuotaConfig.screeningquestions
-            .map((sq) => {
-              const questionId =
-                sq.questionId ?? sq.questionid ?? sq.id ?? null;
-              if (!questionId) return null;
-
-              const rawTargets = sq.optionTargets ?? sq.optiontargets ?? [];
-              const optionTargets = Array.isArray(rawTargets)
-                ? rawTargets
-                    .map((t) => {
-                      const optionId = t.optionId ?? t.optionid ?? t.id ?? null;
-                      if (!optionId) return null;
-                      return { optionId, target: Number(t.target ?? 0) };
-                    })
-                    .filter(Boolean)
-                : [];
-
-              // NEW: buckets
-              const rawBuckets = sq.buckets ?? [];
-              const buckets = Array.isArray(rawBuckets)
-                ? rawBuckets
-                    .map((b) => ({
-                      label: b.label ?? "",
-                      operator: (b.operator ?? "BETWEEN") as any,
-                      value: b.value ?? (b.operator === "IN" ? [] : {}),
-                      target: Number(b.target ?? 0),
-                    }))
-                    .filter((b) => b.target >= 0)
-                : [];
-
-              return { questionId, optionTargets, buckets };
-            })
-            .filter(Boolean)
-        : [],
-    };
-
-    // console.log(">>>>> the value of the LOADED QUOTA AUDIENCE is : ", loaded);
-
-    setQuotaAudience(loaded);
-    setOriginalQuotaAudience(structuredClone(loaded));
+    }));
   }, [rawQuotaConfig]);
 
   useEffect(() => {
@@ -712,7 +703,7 @@ export default function GenerateSurvey() {
 
   const generatePublicLink = async () => {
     if (!createdSurvey?.id) return;
-
+    setGeneratingAgentExcel(true);
     try {
       const body: {
         surveyId: string;
@@ -749,6 +740,8 @@ export default function GenerateSurvey() {
       setPublicLink(localPublicLink);
       setShareCode(createdSurvey.id);
       toast.warning("API unavailable, using local survey link");
+    } finally {
+      setGeneratingAgentExcel(false);
     }
   };
 
@@ -1386,23 +1379,30 @@ export default function GenerateSurvey() {
 
   const handleDownloadExcel = () => {
     if (!excelData) return;
+    setDownloadingExcel(true);
+    try {
+      // Prepare worksheet data, header row first
+      const worksheetData = [
+        ["userUniqueId", "surveyLink"], // header row
+        ...excelData.map((item: any) => [
+          item.agentUserUniqueId,
+          item.token_hash,
+        ]),
+      ];
 
-    // Prepare worksheet data, header row first
-    const worksheetData = [
-      ["userUniqueId", "surveyLink"], // header row
-      ...excelData.map((item: any) => [
-        item.agentUserUniqueId,
-        item.token_hash,
-      ]),
-    ];
+      // Create worksheet and workbook
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "SurveyLinks");
-
-    // Trigger download
-    XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+      // Trigger download
+      XLSX.writeFile(workbook, "SurveyLinks.xlsx");
+    } catch (error: any) {
+      console.error("Error downloading Excel:", error);
+      toast.error("Failed to download Excel");
+    } finally {
+      setTimeout(() => setDownloadingExcel(false), 500);
+    }
   };
 
   const handleVendorValidationError = (error: string | null) => {
@@ -1413,6 +1413,11 @@ export default function GenerateSurvey() {
     try {
       if (!createdSurvey?.id) {
         toast.error("Survey not found. Please go back to Step 1.");
+        return;
+      }
+
+      if (!originalQuotaAudience?.vendorId) {
+        toast.error("Vendor ID not found. Please try again.");
         return;
       }
 
@@ -2341,10 +2346,20 @@ export default function GenerateSurvey() {
                           <Button
                             onClick={generatePublicLink}
                             size="lg"
+                            disabled={generatingAgentExcel}
                             className="bg-violet-600 hover:bg-violet-700"
                           >
-                            <LinkIcon className="mr-2 h-4 w-4" />
-                            Generate Agent Users Link Excel
+                            {generatingAgentExcel ? (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                Generating Excel...
+                              </>
+                            ) : (
+                              <>
+                                <LinkIcon className="mr-2 h-4 w-4" />
+                                Generate Agent Users Link Excel
+                              </>
+                            )}
                           </Button>
                           <p className="text-sm text-slate-500 mt-2">
                             Create a file for each user with a link that
@@ -2356,9 +2371,18 @@ export default function GenerateSurvey() {
                           <Button
                             onClick={handleDownloadExcel}
                             size="lg"
+                            disabled={downloadingExcel}
                             className="bg-green-600 hover:bg-green-700"
                           >
-                            Download Links Excel
+                            {/* *** NEW *** Conditional spinner/text */}
+                            {downloadingExcel ? (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>Download Links Excel</>
+                            )}
                           </Button>
                         </div>
                       )}

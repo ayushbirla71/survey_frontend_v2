@@ -107,7 +107,7 @@ export interface SurveyResponse {
 }
 
 export interface SurveyResponseResult {
-  isPublic: boolean;
+  isPublic?: boolean;
   title: string;
   description: string;
   individualResponses: any[];
@@ -115,9 +115,21 @@ export interface SurveyResponseResult {
   responseTimeline: any[];
   stats: {
     totalResponses: number;
-    completionRate: number;
+    completionRate: number | string;
     avgTime: number;
     npsScore: number;
+  };
+  quota: {
+    target_count: number;
+    current_count: number;
+    qualified_count: number;
+    terminated_count: number;
+    quota_full_count: number;
+  };
+  demographics?: {
+    age: any[];
+    gender: any[];
+    location: any[];
   };
 }
 
@@ -236,6 +248,7 @@ export interface QuotaCheckRequest {
 
 export interface QuotaCheckRequest_v2 {
   vendor_respondent_id?: string;
+  shareToken?: string;
   screeningAnswers: {
     screeningQuestionId: string;
     screeningOptionId?: string;
