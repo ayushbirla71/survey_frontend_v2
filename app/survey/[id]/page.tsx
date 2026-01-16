@@ -978,12 +978,22 @@ export default function PublicSurveyPage() {
       } else {
         setIsSurveyInProgress(false);
         if (result.data?.status == "QUOTA_FULL") {
-          router.push("/survey/terminated?reason=quota_full");
+          if (result.data.redirect_url) {
+            window.location.href = result.data.redirect_url;
+            return false;
+          } else {
+            router.push("/survey/terminated?reason=quota_full");
+            return false;
+          }
+        }
+        if (result.data?.redirect_url) {
+          window.location.href = result.data.redirect_url;
+          return false;
+        } else {
+          router.push("/survey/terminated?reason=not_qualified");
+          setIsQualified(false);
           return false;
         }
-        router.push("/survey/terminated?reason=not_qualified");
-        setIsQualified(false);
-        return false;
       }
     } catch (err: any) {
       console.error("Error checking qualification:", err);
@@ -1270,6 +1280,13 @@ export default function PublicSurveyPage() {
               "markRespondentCompleted_v2 is",
               markRespondentCompletedResult
             );
+
+            if (markRespondentCompletedResult.data?.redirect_url) {
+              setTimeout(() => {
+                window.location.href = markRespondentCompletedResult.data
+                  ?.redirect_url as string;
+              }, 0);
+            }
           } catch (markError) {
             // Log error but don't fail the submission
             console.error("Error marking respondent completed:", markError);

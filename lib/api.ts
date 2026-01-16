@@ -1877,7 +1877,7 @@ export const quotaApi = {
     respondent_id: string,
     response_id: string,
     token: string
-  ): Promise<ApiResponse<{ message: string }>> => {
+  ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/complete_v2`, {
       method: "POST",
       body: JSON.stringify({ respondent_id, response_id, token }),
@@ -1888,7 +1888,7 @@ export const quotaApi = {
   markRespondentTerminated_v2: async (
     shareToken: string, // only send ShareToken if survey is SendBy->VENDOR
     respondent_id: string | null
-  ): Promise<ApiResponse<{ message: string }>> => {
+  ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
     return apiRequest(
       `/api/quota/terminate_v2?shareToken=${shareToken}&respondent_id=${respondent_id}`,
       {
