@@ -24,7 +24,12 @@ import Link from "next/link";
 import { BarChart, LineChart, PieChart } from "@/components/ui/chart";
 import { surveyResults } from "@/lib/assist-data";
 import { useParams, useRouter } from "next/navigation";
-import { surveyResultsApi, apiWithFallback, responseApi } from "@/lib/api";
+import {
+  surveyResultsApi,
+  apiWithFallback,
+  responseApi,
+  SurveyResponseResult,
+} from "@/lib/api";
 import { useApi, usePaginatedApi } from "@/hooks/useApi";
 import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
@@ -193,7 +198,7 @@ export default function SurveyResults() {
   // }, [surveyId]);
 
   // Use API data if available, otherwise use demo data
-  let survey = null;
+  let survey: SurveyResponseResult | null = null;
   if (resultsData && resultsData.isPublic === false) {
     window.location.href = "/auth/login";
     return;
@@ -211,6 +216,13 @@ export default function SurveyResults() {
         completionRate: resultsData.stats.completionRate || "0",
         avgTime: 0,
         npsScore: resultsData.stats.npsScore || 0,
+      },
+      quota: {
+        target_count: resultsData.quota.target_count || 0,
+        current_count: resultsData.quota.current_count || 0,
+        qualified_count: resultsData.quota.qualified_count || 0,
+        terminated_count: resultsData.quota.terminated_count || 0,
+        quota_full_count: resultsData.quota.quota_full_count || 0,
       },
       questionResults: resultsData.questionResults || [],
       demographics: {
@@ -243,7 +255,7 @@ export default function SurveyResults() {
     };
   } else {
     // Fallback to demo data
-    survey = surveyResults["survey-1"];
+    console.log("No survey data available");
   }
 
   // const handleExport = async (format: "csv" | "json") => {
@@ -342,9 +354,9 @@ export default function SurveyResults() {
           </Button>
           <div className="flex-1">
             <h1 className="text-3xl font-bold text-slate-800">
-              {survey.title}
+              {survey?.title}
             </h1>
-            <p className="text-slate-500">{survey.description}</p>
+            <p className="text-slate-500">{survey?.description}</p>
           </div>
           <div className="flex gap-2 pdf-hide">
             <Button
@@ -417,7 +429,7 @@ export default function SurveyResults() {
               <Users className="mr-3 h-8 w-8 text-blue-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {resultsLoading ? "..." : survey.stats?.totalResponses || 0}
+                  {resultsLoading ? "..." : survey?.stats?.totalResponses || 0}
                 </p>
                 <p className="text-sm text-slate-500">Total Responses</p>
               </div>
@@ -429,7 +441,7 @@ export default function SurveyResults() {
               <CheckCircle className="mr-3 h-8 w-8 text-green-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {resultsLoading ? "..." : survey.stats?.completionRate || 0}%
+                  {resultsLoading ? "..." : survey?.stats?.completionRate || 0}%
                 </p>
                 <p className="text-sm text-slate-500">Completion Rate</p>
               </div>
@@ -441,7 +453,7 @@ export default function SurveyResults() {
               <Clock className="mr-3 h-8 w-8 text-orange-500" />
               <div>
                 <p className="text-2xl font-bold">
-                  {resultsLoading ? "..." : survey.stats?.avgTime || 0} min
+                  {resultsLoading ? "..." : survey?.stats?.avgTime || 0} min
                 </p>
                 <p className="text-sm text-slate-500">Avg. Time</p>
               </div>
@@ -452,7 +464,7 @@ export default function SurveyResults() {
             <CardContent className="flex items-center p-4">
               <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-violet-100">
                 <span className="text-sm font-bold text-violet-600">
-                  {resultsLoading ? "..." : survey.stats?.npsScore || 0}
+                  {resultsLoading ? "..." : survey?.stats?.npsScore || 0}
                 </span>
               </div>
               <div>
@@ -463,6 +475,80 @@ export default function SurveyResults() {
           </Card>
         </div>
       </div>
+
+      {/* Quota Details */}
+      {survey?.quota && survey?.quota?.target_count > 0 && (
+        <div className="mt-6 mb-6">
+          <h2>Quota Details</h2>
+          <div className="mt-3 grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardContent className="flex items-center p-4">
+                <Users className="mr-3 h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {resultsLoading ? "..." : survey?.quota?.target_count || 0}
+                  </p>
+                  <p className="text-sm text-slate-500">Total Target</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="flex items-center p-4">
+                <Users className="mr-3 h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {resultsLoading ? "..." : survey?.quota?.current_count || 0}
+                  </p>
+                  <p className="text-sm text-slate-500">Completed Survey</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="flex items-center p-4">
+                <Users className="mr-3 h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {resultsLoading
+                      ? "..."
+                      : survey?.quota?.qualified_count || 0}
+                  </p>
+                  <p className="text-sm text-slate-500">Qualified Survey</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="flex items-center p-4">
+                <Users className="mr-3 h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {resultsLoading
+                      ? "..."
+                      : survey?.quota?.terminated_count || 0}{" "}
+                  </p>
+                  <p className="text-sm text-slate-500">Total Terminated</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="flex items-center p-4">
+                <Users className="mr-3 h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {resultsLoading
+                      ? "..."
+                      : survey?.quota?.quota_full_count || 0}
+                  </p>
+                  <p className="text-sm text-slate-500">Total Quota-Full</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>{" "}
+        </div>
+      )}
 
       {/* Survey Details */}
       <Tabs defaultValue="overview" className="space-y-4">
@@ -480,7 +566,7 @@ export default function SurveyResults() {
             </div>
           ) : (
             /* Question Results */
-            survey.questionResults?.map((question: any, index: number) => (
+            survey?.questionResults?.map((question: any, index: number) => (
               <Card key={index}>
                 <CardHeader>
                   <CardTitle className="text-lg">{question.question}</CardTitle>
@@ -803,7 +889,7 @@ export default function SurveyResults() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {(survey.individualResponses || []).map(
+                  {(survey?.individualResponses || []).map(
                     (response: any, index: number) => (
                       <div
                         key={response.id || index}
@@ -866,7 +952,7 @@ export default function SurveyResults() {
                 </CardHeader>
                 <CardContent>
                   <PieChart
-                    data={survey.demographics?.age || []}
+                    data={survey?.demographics?.age || []}
                     index="ageGroup"
                     categories={["count"]}
                     colors={["violet", "indigo", "emerald", "amber", "rose"]}
@@ -881,7 +967,7 @@ export default function SurveyResults() {
                 </CardHeader>
                 <CardContent>
                   <PieChart
-                    data={survey.demographics?.gender || []}
+                    data={survey?.demographics?.gender || []}
                     index="gender"
                     categories={["count"]}
                     colors={["violet", "indigo", "emerald"]}
@@ -896,7 +982,7 @@ export default function SurveyResults() {
                 </CardHeader>
                 <CardContent>
                   <BarChart
-                    data={survey.demographics?.location || []}
+                    data={survey?.demographics?.location || []}
                     index="location"
                     categories={["count"]}
                     colors={["violet"]}
@@ -912,7 +998,7 @@ export default function SurveyResults() {
                 </CardHeader>
                 <CardContent>
                   <LineChart
-                    data={survey.responseTimeline || []}
+                    data={survey?.responseTimeline || []}
                     index="date"
                     categories={["responses"]}
                     colors={["violet"]}

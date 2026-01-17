@@ -107,7 +107,7 @@ export interface SurveyResponse {
 }
 
 export interface SurveyResponseResult {
-  isPublic: boolean;
+  isPublic?: boolean;
   title: string;
   description: string;
   individualResponses: any[];
@@ -115,9 +115,21 @@ export interface SurveyResponseResult {
   responseTimeline: any[];
   stats: {
     totalResponses: number;
-    completionRate: number;
+    completionRate: number | string;
     avgTime: number;
     npsScore: number;
+  };
+  quota: {
+    target_count: number;
+    current_count: number;
+    qualified_count: number;
+    terminated_count: number;
+    quota_full_count: number;
+  };
+  demographics?: {
+    age: any[];
+    gender: any[];
+    location: any[];
   };
 }
 
@@ -234,6 +246,16 @@ export interface QuotaCheckRequest {
   surveyCategoryId?: string;
 }
 
+export interface QuotaCheckRequest_v2 {
+  vendor_respondent_id?: string;
+  shareToken?: string;
+  screeningAnswers: {
+    screeningQuestionId: string;
+    screeningOptionId?: string;
+    answerValue?: string;
+  }[];
+}
+
 export interface QuotaCheckResponse {
   qualified: boolean;
   reason?: string;
@@ -272,6 +294,79 @@ export interface Vendor {
   updated_at: string;
   api_configs: VendorApiConfig[];
   question_library: any[];
+}
+
+export type QuestionSource = "CUSTOM" | "SYSTEM" | "VENDOR";
+
+export type ScreenQuestionOption = {
+  id: string;
+  option_text: string;
+  vendor_option_id?: string | null;
+  order_index: number;
+};
+
+export type ScreeningQuestionDefinition = {
+  id: string;
+  country_code: string;
+  language: string;
+  question_key: string;
+  question_text: string;
+  question_type: string;
+  data_type: string;
+  source: QuestionSource;
+  vendorId?: string | null;
+  vendor_question_id?: string | null;
+
+  primary_vendor_category_id?: string | null;
+  primary_vendor_category_name?: string | null;
+
+  categories_meta?: any;
+
+  is_active: boolean;
+  created_at: string;
+
+  options: ScreenQuestionOption[];
+};
+
+/** DTOs for create/edit */
+export type CreateScreeningQuestionDto = {
+  source: "CUSTOM" | "SYSTEM"; // block vendor creation
+  country_code: string;
+  language: string;
+
+  question_key: string;
+  question_text: string;
+  question_type: ScreeningQuestionDefinition["question_type"];
+  data_type: ScreeningQuestionDefinition["data_type"];
+
+  options: { option_text: string; order_index: number }[];
+};
+
+export type UpdateScreeningQuestionDto = {
+  country_code: string;
+  language: string;
+
+  question_key: string;
+  question_text: string;
+  question_type: ScreeningQuestionDefinition["question_type"];
+  data_type: ScreeningQuestionDefinition["data_type"];
+
+  options: { option_text: string; order_index: number }[];
+  is_active?: boolean;
+};
+
+export interface SavedScreeningQuestionInterface {
+  id: string;
+  question_text: string;
+  question_type: string;
+  vendor_question_id?: string;
+  data_type: string;
+  options: Array<{
+    id: string;
+    option_text: string;
+    vendor_option_id?: string;
+    order_index: number;
+  }>;
 }
 
 // Base API function with error handling and authentication
@@ -1702,50 +1797,9 @@ export const audienceApi = {
 
 // Quota Management APIs
 export const quotaApi = {
-  // POST /api/quota/surveys/:surveyId/quota - Create quota configuration
-  createQuota: async (
-    surveyId: string,
-    quotaConfig: Omit<
-      QuotaConfig,
-      "id" | "surveyId" | "created_at" | "updated_at"
-    >
-  ): Promise<ApiResponse<QuotaConfig>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "POST",
-      body: JSON.stringify(quotaConfig),
-    });
-  },
-
   // GET /api/quota/surveys/:surveyId/quota - Get quota configuration
   getQuota: async (surveyId: string): Promise<ApiResponse<QuotaConfig>> => {
     return apiRequest(`/api/quota/surveys/${surveyId}/quota`);
-  },
-
-  // PUT /api/quota/surveys/:surveyId/quota - Update quota configuration
-  updateQuota: async (
-    surveyId: string,
-    quotaConfig: Partial<QuotaConfig>
-  ): Promise<ApiResponse<QuotaConfig>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "PUT",
-      body: JSON.stringify(quotaConfig),
-    });
-  },
-
-  // DELETE /api/quota/surveys/:surveyId/quota - Delete quota configuration
-  deleteQuota: async (
-    surveyId: string
-  ): Promise<ApiResponse<{ message: string }>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/quota`, {
-      method: "DELETE",
-    });
-  },
-
-  // GET /api/quota/surveys/:surveyId/status - Get quota fill status
-  getQuotaStatus: async (
-    surveyId: string
-  ): Promise<ApiResponse<QuotaStatus>> => {
-    return apiRequest(`/api/quota/surveys/${surveyId}/status`);
   },
 
   // POST /api/quota/:surveyId/check - Check if respondent qualifies
@@ -1781,6 +1835,66 @@ export const quotaApi = {
       method: "POST",
       body: JSON.stringify({ respondent_id, reason }),
     });
+  },
+
+  // POST /api/quota/:surveyId/quota - Create/Update quota
+  updateQuota_v2: async (
+    surveyId: string,
+    currentPayload: any
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota_v2`, {
+      method: "POST",
+      body: JSON.stringify(currentPayload),
+    });
+  },
+
+  // GET /api/quota/:surveyId/quota - Get quota
+  getQuota_v2: async (surveyId: string): Promise<ApiResponse<any>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota_v2`);
+  },
+
+  // GET /api/quota/:surveyId/quota-screening-questions - Get Quota Screening Questons
+  getQuotaScreeningQuestions: async (
+    surveyId: string
+  ): Promise<ApiResponse<ApiResponse<SavedScreeningQuestionInterface[]>>> => {
+    return apiRequest(`/api/quota/${surveyId}/quota-screening-questions`);
+  },
+
+  // POST /api/quota/:surveyId/check_v2 - Check if respondent qualifies
+  checkQuota_v2: async (
+    surveyId: string,
+    respondentData: QuotaCheckRequest_v2
+  ): Promise<ApiResponse<QuotaCheckResponse>> => {
+    return apiRequest(`/api/quota/${surveyId}/check_v2`, {
+      method: "POST",
+      body: JSON.stringify(respondentData),
+    });
+  },
+
+  // POST /api/quota/:surveyId/complete_v2 - Mark respondent as completed
+  markRespondentCompleted_v2: async (
+    surveyId: string,
+    respondent_id: string,
+    response_id: string,
+    token: string
+  ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
+    return apiRequest(`/api/quota/${surveyId}/complete_v2`, {
+      method: "POST",
+      body: JSON.stringify({ respondent_id, response_id, token }),
+    });
+  },
+
+  // POST /api/quota/:surveyId/terminate_v2 - Mark respondent as terminated
+  markRespondentTerminated_v2: async (
+    shareToken: string, // only send ShareToken if survey is SendBy->VENDOR
+    respondent_id: string | null
+  ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
+    return apiRequest(
+      `/api/quota/terminate_v2?shareToken=${shareToken}&respondent_id=${respondent_id}`,
+      {
+        method: "POST",
+      }
+    );
   },
 };
 
@@ -1906,6 +2020,54 @@ export const vendorsApi = {
     return apiRequest(`/api/vendors/${vendorId}/updateVendorJobStatus`, {
       method: "PATCH",
       body: JSON.stringify({ surveyId, status }),
+    });
+  },
+};
+
+// Screening Questions API
+export const screeningQuestionsApi = {
+  // GET /api/screening-questions
+  getScreeningQuestions: async (params: {
+    source: QuestionSource;
+    vendorId?: string;
+    countryCode?: string;
+    language?: string;
+  }): Promise<ApiResponse<ApiResponse<ScreeningQuestionDefinition[]>>> => {
+    return apiRequest(
+      `/api/screening-questions?source=${params.source}&vendorId=${params.vendorId}&countryCode=${params.countryCode}&language=${params.language}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  // POST /api/screening-questions
+  createScreeningQuestion: async (
+    questionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions`, {
+      method: "POST",
+      body: JSON.stringify(questionData),
+    });
+  },
+
+  // PUT /api/screening-questions/:id
+  updateScreeningQuestion: async (
+    id: string,
+    questionData: any
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(questionData),
+    });
+  },
+
+  // DELETE /api/screening-questions/:id
+  deleteScreeningQuestion: async (
+    id: string
+  ): Promise<ApiResponse<ApiResponse<any>>> => {
+    return apiRequest(`/api/screening-questions/${id}`, {
+      method: "DELETE",
     });
   },
 };

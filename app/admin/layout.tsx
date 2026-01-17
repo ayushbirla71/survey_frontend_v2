@@ -43,6 +43,42 @@ export default function AdminLayout({
                 Manage Vendors
               </Link>
             </li>
+            <li>
+              <Link
+                href="/admin/screening-questions"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/admin/screening-questions"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Manage Screening Questions
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/admin/facebook-live"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/admin/facebook-live"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                facebook Live
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/admin/youtube-live"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/admin/youtube-live"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Youtube Live
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>
