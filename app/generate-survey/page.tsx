@@ -68,6 +68,9 @@ import EnhancedQuotaAudienceSelector, {
   type QuotaAudience as EnhancedQuotaAudience,
 } from "@/components/enhanced-quota-audience-selector";
 
+const envMax = Number(process.env.NEXT_PUBLIC_SURVEY_DESCRIPTION_MAX_CHARS);
+const MAX_CHARS = Number.isFinite(envMax) ? envMax : 1000;
+
 // (only if you do not already have a similar type)
 type QuestionWithOptions = {
   id: string;
@@ -273,7 +276,7 @@ export default function GenerateSurvey() {
   } = useApi(() => {
     return apiWithFallback(
       () => categoriesApi.getCategories(),
-      demoData.categories
+      demoData.categories,
     );
   }, []); // Add empty dependency array to prevent infinite re-renders
   // console.log(">>>>>>>>> the value of the CATEGORIES is  : ", categories);
@@ -281,8 +284,8 @@ export default function GenerateSurvey() {
   const { data: questionCategories } = useApi(() =>
     apiWithFallback(
       () => categoriesApi.getQuestionCategories(),
-      demoData.question_categories
-    )
+      demoData.question_categories,
+    ),
   );
   // normalize questionCategories
   const safeQuestionCategories = Array.isArray(questionCategories)
@@ -316,18 +319,18 @@ export default function GenerateSurvey() {
   //   })
   // );
 
-  const {
-    mutate: createSurvey,
-    loading: createSurveyLoading,
-    error: createError,
-  } = useMutation(surveyApi.createSurvey);
+  // const {
+  //   mutate: createSurvey,
+  //   loading: createSurveyLoading,
+  //   error: createError,
+  // } = useMutation(surveyApi.createSurvey);
 
   const {
     mutate: updateSurvey,
     loading: updateLoading,
     error: updateError,
   } = useMutation((params: { surveyId: string; surveyData: any }) =>
-    surveyApi.updateSurvey(params.surveyId, params.surveyData)
+    surveyApi.updateSurvey(params.surveyId, params.surveyData),
   );
 
   // const {
@@ -344,13 +347,13 @@ export default function GenerateSurvey() {
 
   const displayCategories = categories || demoData.categories;
   const filteredCategories = displayCategories.filter((cat: any) =>
-    cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    cat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   // Helper function to get category name from ID
   const getCategoryName = (categoryId: string) => {
     const category = displayCategories.find(
-      (cat: any) => cat.id === categoryId
+      (cat: any) => cat.id === categoryId,
     );
     return category ? category.name : categoryId;
   };
@@ -359,7 +362,7 @@ export default function GenerateSurvey() {
     if (!categoryId) return "";
 
     const qc = (safeQuestionCategories as any[])?.find(
-      (qcat) => qcat.id === categoryId
+      (qcat) => qcat.id === categoryId,
     );
     return qc ? String(qc.type_name).trim() : String(categoryId);
   };
@@ -446,7 +449,7 @@ export default function GenerateSurvey() {
                 min_rank_required: q.min_rank_required ?? null,
                 max_rank_allowed: q.max_rank_allowed ?? null,
               };
-            }
+            },
           );
 
           setQuestions(mappedQuestions);
@@ -480,7 +483,7 @@ export default function GenerateSurvey() {
                     min_rank_required: q.min_rank_required ?? 1,
                     max_rank_allowed:
                       q.max_rank_allowed ?? q.options?.length ?? 0,
-                  })
+                  }),
                 );
 
               setQuestions(normalizedAiQuestions);
@@ -516,8 +519,29 @@ export default function GenerateSurvey() {
 
           // backend may return wrapped or direct
           const quotaConfig = (quotaResponse as any)?.data ?? quotaResponse;
+          console.log(
+            ">>>>> the value of the QUOTA CONFIGURATION is : ",
+            quotaConfig,
+          );
 
           setRawQuotaConfig(quotaConfig as RawQuotaConfigNew);
+
+          const originalQuota = {
+            enabled: Boolean(quotaConfig.totaltarget),
+            totalTarget: quotaConfig.totaltarget
+              ? Number(quotaConfig.totaltarget)
+              : 0,
+            screening: quotaConfig.screeningquestions ?? [],
+            vendorId: quotaConfig.vendorId ?? quotaConfig.vendor_id ?? null,
+            countryCode:
+              quotaConfig.country_code ?? quotaConfig.countryCode ?? null,
+            language: quotaConfig.language ?? null,
+          };
+          console.log(
+            ">>>>> the value of the ORIGINAL QUOTA AUDIENCE is : ",
+            originalQuota,
+          );
+          setOriginalQuotaAudience(originalQuota);
         } catch (quotaError) {
           console.warn("Could not load quota configuration:", quotaError);
           setRawQuotaConfig(null);
@@ -543,7 +567,7 @@ export default function GenerateSurvey() {
       rawQuotaConfig.screeningquestions
         .filter(
           (raw): raw is RawQuotaScreeningQuestion =>
-            raw != null && raw.questionId != null
+            raw != null && raw.questionId != null,
         )
         .map((raw) => ({
           questionId: raw.questionId!,
@@ -574,7 +598,8 @@ export default function GenerateSurvey() {
         : 0,
       screening: transformedScreening,
       vendorId: rawQuotaConfig.vendorId ?? null,
-      countryCode: rawQuotaConfig.countryCode ?? null,
+      countryCode:
+        rawQuotaConfig.country_code ?? rawQuotaConfig.countryCode ?? null,
       language: rawQuotaConfig.language ?? null,
     }));
   }, [rawQuotaConfig]);
@@ -690,13 +715,13 @@ export default function GenerateSurvey() {
   };
 
   const handleQuotaAudienceUpdate = (
-    updatedQuotaAudience: EnhancedQuotaAudience
+    updatedQuotaAudience: EnhancedQuotaAudience,
   ) => {
     setQuotaAudience(updatedQuotaAudience);
   };
 
   const handleVendorAudienceUpdate = (
-    updatedVendorAudience: VendorAudienceData
+    updatedVendorAudience: VendorAudienceData,
   ) => {
     setVendorsAudience(updatedVendorAudience);
   };
@@ -805,7 +830,7 @@ export default function GenerateSurvey() {
 
   // Map question types to supported backend types (TEXT, IMAGE, VIDEO, AUDIO)
   const mapQuestionType = (
-    questionType: string
+    questionType: string,
   ): "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" => {
     const typeMap: Record<string, "TEXT" | "IMAGE" | "VIDEO" | "AUDIO"> = {
       TEXT: "TEXT",
@@ -886,11 +911,11 @@ export default function GenerateSurvey() {
           "lastSurveyTitle",
           `${getCategoryName(surveyCategoryId)
             .toLowerCase()
-            .replace(/\s+/g, "-")}_survey`
+            .replace(/\s+/g, "-")}_survey`,
         );
         localStorage.setItem(
           "lastSurveyAudience",
-          audience.targetCount.toString()
+          audience.targetCount.toString(),
         );
         localStorage.setItem(
           "lastSurveyData",
@@ -898,7 +923,7 @@ export default function GenerateSurvey() {
             ...createdSurvey,
             status: "PUBLISHED",
             // settings: updateData.settings,
-          })
+          }),
         );
 
         toast.success("Survey published successfully!");
@@ -933,7 +958,7 @@ export default function GenerateSurvey() {
       "lastSurveyTitle",
       `${getCategoryName(surveyCategoryId)
         .toLowerCase()
-        .replace(/\s+/g, "-")}_survey`
+        .replace(/\s+/g, "-")}_survey`,
     );
     localStorage.setItem("lastSurveyAudience", audience.targetCount.toString());
     localStorage.setItem("lastSurveyData", JSON.stringify(surveyData));
@@ -952,7 +977,7 @@ export default function GenerateSurvey() {
 
     // Save to localStorage to persist across page reloads
     const existingSurveys = JSON.parse(
-      localStorage.getItem("sentSurveys") || "[]"
+      localStorage.getItem("sentSurveys") || "[]",
     );
     existingSurveys.unshift(newSurvey);
     localStorage.setItem("sentSurveys", JSON.stringify(existingSurveys));
@@ -1053,12 +1078,12 @@ export default function GenerateSurvey() {
                   ...prev,
                   ...aiQuestions.filter(
                     (q: QuestionWithOptions) =>
-                      !existingIds.has(q.id.toString())
+                      !existingIds.has(q.id.toString()),
                   ),
                 ];
                 // ensure they are ordered by order_index
                 return merged.sort(
-                  (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+                  (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
                 );
               });
             }
@@ -1085,8 +1110,10 @@ export default function GenerateSurvey() {
           surveyData.settings = surveySettings.publicSettings;
         }
         // Create new survey
-        const result = await createSurvey(surveyData);
-        // console.log("Create result:", result);
+        const createSurveyResult = await surveyApi.createSurvey(surveyData);
+        console.log("Create Survey result:", createSurveyResult);
+
+        const result = createSurveyResult.data;
         if (result && (result as any)?.survey && (result as any)?.survey?.id) {
           setCreatedSurvey((result as any).survey);
           const aiQuestions = result.aiGeneratedQuestions;
@@ -1100,12 +1127,12 @@ export default function GenerateSurvey() {
               const merged = [
                 ...prev,
                 ...aiQuestions.filter(
-                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString()),
                 ),
               ];
               // ensure they are ordered by order_index
               return merged.sort(
-                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
               );
             });
 
@@ -1115,21 +1142,21 @@ export default function GenerateSurvey() {
               const merged = [
                 ...prev,
                 ...aiQuestions.filter(
-                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString())
+                  (q: QuestionWithOptions) => !existingIds.has(q.id.toString()),
                 ),
               ];
               // ensure they are ordered by order_index
               return merged.sort(
-                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+                (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
               );
             });
           }
           nextStep();
         }
       }
-    } catch (error) {
-      console.error("Error saving survey:", error);
-      toast.error("Failed to save survey");
+    } catch (error: any) {
+      console.error("$#Error saving survey:", error);
+      toast.error(error.message || "Failed to save survey");
     } finally {
       setStep1Loading(false);
     }
@@ -1185,7 +1212,7 @@ export default function GenerateSurvey() {
         // If for some reason survey isn't created yet, create first
         // or preserve your existing flow that ensures createdSurvey is set in step 1
         console.warn(
-          "No survey id found. Make sure Step 1 creates/sets survey."
+          "No survey id found. Make sure Step 1 creates/sets survey.",
         );
         return;
       }
@@ -1210,7 +1237,7 @@ export default function GenerateSurvey() {
       const updated = await syncSurveyQuestions(
         createdSurvey.id,
         originalQuestions,
-        questions
+        questions,
       );
       // console.log(">>>>>> the VALUE of the UPDATED QUESTIONS is : ", updated);
 
@@ -1260,9 +1287,11 @@ export default function GenerateSurvey() {
 
   const handleManualQuotaUpdate = async (
     surveyId: string,
-    q: EnhancedQuotaAudience
+    q: EnhancedQuotaAudience,
   ) => {
     try {
+      console.log(">>>>> the value of the QUOTA AUDIENCE in STEP 4 is : ", q);
+
       // If quota disabled -> skip saving quota
       if (!q.enabled) {
         console.log("Quota is disabled, skipping quota configuration");
@@ -1272,7 +1301,7 @@ export default function GenerateSurvey() {
 
       if (!q.totalTarget || q.totalTarget <= 0) {
         toast.error(
-          "Total Responses Required is mandatory when quota is enabled"
+          "Total Responses Required is mandatory when quota is enabled",
         );
         return;
       }
@@ -1283,10 +1312,18 @@ export default function GenerateSurvey() {
       }
 
       const currentPayload = buildEnhancedQuotaPayload(q);
+      console.log(
+        ">>>>> the value of the CURRENT PAYLOAD is : ",
+        currentPayload,
+      );
 
       const originalPayload = originalQuotaAudience
         ? buildEnhancedQuotaPayload(originalQuotaAudience)
         : null;
+      console.log(
+        ">>>>> the value of the ORIGINAL PAYLOAD is : ",
+        originalPayload,
+      );
 
       const hasChanged =
         !originalPayload || !deepEqual(currentPayload, originalPayload);
@@ -1310,12 +1347,12 @@ export default function GenerateSurvey() {
 
   const handleVendorAudience = async (
     surveyId: string,
-    vendorsAudience: VendorAudienceData
+    vendorsAudience: VendorAudienceData,
   ) => {
     try {
       console.log(
         ">>>>> the value of the VENDORS AUDIENCE is : ",
-        vendorsAudience
+        vendorsAudience,
       );
 
       const res = await vendorsApi.distributeSurvey(
@@ -1324,7 +1361,7 @@ export default function GenerateSurvey() {
         {
           totalTarget: vendorsAudience.totalTarget,
           distribution: vendorsAudience.screeningCriteria,
-        }
+        },
       );
       console.log(">>>>> the value of the VENDORS API RESPONSE is : ", res);
     } catch (error) {
@@ -1343,7 +1380,7 @@ export default function GenerateSurvey() {
       }
       console.log(
         ">>>>> the value of the QUOTA AUDIENCE in STEP 4 is : ",
-        quotaAudience
+        quotaAudience,
       );
 
       await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
@@ -1424,11 +1461,11 @@ export default function GenerateSurvey() {
       const updateVendorJobStatus = await vendorsApi.updateVendorJobStatus(
         originalQuotaAudience.vendorId,
         createdSurvey.id,
-        1
+        1,
       );
       console.log(
         ">>>>> the value of the UPDATE VENDOR JOB STATUS is : ",
-        updateVendorJobStatus
+        updateVendorJobStatus,
       );
 
       setIsVendorSurveyMarkPublished(true);
@@ -1436,7 +1473,7 @@ export default function GenerateSurvey() {
       console.error("Error in step 4:", error);
       toast.error(
         error.message ||
-          "Failed to mark Vendor survey as published. Please try again."
+          "Failed to mark Vendor survey as published. Please try again.",
       );
     }
   };
@@ -1618,7 +1655,9 @@ export default function GenerateSurvey() {
         )}
 
         {/* Error Display */}
-        {(categoriesError || createError || generationError) && (
+        {(categoriesError ||
+          // || createError
+          generationError) && (
           //  || configError
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center gap-2">
@@ -1627,7 +1666,7 @@ export default function GenerateSurvey() {
                 ⚠️{" "}
                 {categoriesError &&
                   `Categories API failed: ${categoriesError}. `}
-                {createError && `Survey creation failed: ${createError}. `}
+                {/* {createError && `Survey creation failed: ${createError}. `} */}
                 {generationError &&
                   `Question generation failed: ${generationError}. `}
                 {/* {configError && `Configuration failed: ${configError}. `} */}
@@ -1749,6 +1788,7 @@ export default function GenerateSurvey() {
                     placeholder="Describe what kind of survey you want to generate. Be specific about what you want to learn from your audience..."
                     className="h-32 resize-none"
                     value={description}
+                    maxLength={MAX_CHARS}
                     onChange={(e) => {
                       setDescription(e.target.value);
                       setQuestionsGenerated(false); // Reset questions when description changes
@@ -1759,6 +1799,16 @@ export default function GenerateSurvey() {
                     our mobile app, focusing on usability and feature
                     preferences."
                   </p>
+
+                  <span
+                    className={`text-xs ${
+                      description.length > MAX_CHARS * 0.9
+                        ? "text-red-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {description.length}/{MAX_CHARS}
+                  </span>
                 </div>
 
                 <div className="flex items-center mt-4 space-x-2">
@@ -1928,7 +1978,7 @@ export default function GenerateSurvey() {
                           | "BOTH"
                           | "NONE"
                           | "AGENT"
-                          | "VENDOR"
+                          | "VENDOR",
                       ) =>
                         setSurveySettings((prev: any) => ({
                           ...prev,
@@ -2228,7 +2278,7 @@ export default function GenerateSurvey() {
                 <TabsContent value="preview" className="space-y-4">
                   <SurveyPreview
                     title={`${getCategoryName(
-                      surveyCategoryId
+                      surveyCategoryId,
                     )} Survey - (${title})`}
                     description={description}
                     questions={questions}

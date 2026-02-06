@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import {
+  screeningQuestionsApi,
   Vendor,
   VendorApiConfig,
   VendorAuthType,
@@ -9,6 +10,7 @@ import {
   vendorsApi,
 } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 // app/admin/vendors/types.ts (optional)
 
 const VENDOR_KEYS: VendorKey[] = ["INNOVATEMR"];
@@ -118,6 +120,7 @@ export default function VendorsPage() {
       setShowCreateModal(false);
     } catch (err: any) {
       setError(err.message ?? "Failed to create vendor");
+      toast.error(err.message ?? "Failed to create vendor");
     }
   };
 
@@ -143,7 +146,7 @@ export default function VendorsPage() {
       const updated: Vendor = res.data?.data || (res as any).data;
 
       setVendors((prev) =>
-        prev.map((v) => (v.id === updated.id ? updated : v))
+        prev.map((v) => (v.id === updated.id ? updated : v)),
       );
       if (selectedVendor?.id === updated.id) {
         setSelectedVendor(updated);
@@ -160,13 +163,13 @@ export default function VendorsPage() {
       console.log(">>>>> the value of the VENDOR ID is : ", vendor.id);
       const res = await vendorsApi.toggleVendorActive(
         vendor.id,
-        !vendor.is_active
+        !vendor.is_active,
       );
 
       const updated: Vendor = res.data?.data || (res as any).data;
       console.log(">>>>> the value of the UPDATED is : ", updated);
       setVendors((prev) =>
-        prev.map((v) => (v.id === updated.id ? updated : v))
+        prev.map((v) => (v.id === updated.id ? updated : v)),
       );
       if (selectedVendor?.id === updated.id) {
         setSelectedVendor(updated);
@@ -182,7 +185,9 @@ export default function VendorsPage() {
       setFetchingQuestions((prev) => ({ ...prev, [vendor.id]: true }));
 
       console.log(">>>>> the value of VENDOR is : ", vendor);
-      const res = await vendorsApi.getVendorQuestions(vendor.id, {
+      const res = await screeningQuestionsApi.getScreeningQuestions({
+        source: "VENDOR",
+        vendorId: vendor.id,
         countryCode: "IN",
         language: "ENGLISH",
       });
@@ -289,7 +294,7 @@ export default function VendorsPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      {vendor.question_library?.length !== 0 ? (
+                      {vendor.question_library.length !== 0 ? (
                         <p className="text-green-600 text-xs font-medium">
                           Already Fetched
                         </p>
@@ -355,14 +360,14 @@ export default function VendorsPage() {
                   <h4 className="text-sm font-semibold mb-1">
                     API Configurations
                   </h4>
-                  {currentVendorConfigs.length === 0 ? (
+                  {currentVendorConfigs?.length === 0 ? (
                     <p className="text-xs text-red-600">
                       No API config set. Please configure API details while
                       creating the vendor.
                     </p>
                   ) : (
                     <ul className="space-y-2 text-xs">
-                      {currentVendorConfigs.map((cfg) => (
+                      {currentVendorConfigs?.map((cfg) => (
                         <li
                           key={cfg.id}
                           className="rounded border border-gray-200 p-2"
@@ -412,7 +417,7 @@ export default function VendorsPage() {
                       value={updatingVendor.name}
                       onChange={(e) =>
                         setUpdatingVendor((prev) =>
-                          prev ? { ...prev, name: e.target.value } : prev
+                          prev ? { ...prev, name: e.target.value } : prev,
                         )
                       }
                       className="w-full rounded border border-gray-300 px-2 py-1"
@@ -425,7 +430,9 @@ export default function VendorsPage() {
                       checked={updatingVendor.is_active}
                       onChange={(e) =>
                         setUpdatingVendor((prev) =>
-                          prev ? { ...prev, is_active: e.target.checked } : prev
+                          prev
+                            ? { ...prev, is_active: e.target.checked }
+                            : prev,
                         )
                       }
                       className="h-4 w-4"

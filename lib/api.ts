@@ -372,7 +372,7 @@ export interface SavedScreeningQuestionInterface {
 // Base API function with error handling and authentication
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
   // Add timeout to prevent hanging requests
   const controller = new AbortController();
@@ -399,8 +399,12 @@ async function apiRequest<T>(
       // Handle error responses
       if (response.headers.get("content-type")?.includes("application/json")) {
         const errorData = await response.json();
+        console.log(">>>>> the value of the ERROR DATA is : ", errorData);
         message =
-          errorData?.message || errorData?.error || JSON.stringify(errorData);
+          errorData?.errors[0] ||
+          errorData?.message ||
+          errorData?.error ||
+          JSON.stringify(errorData);
       }
       throw new Error(message);
     }
@@ -427,7 +431,7 @@ async function apiRequest<T>(
 // Utility function for backward compatibility with existing code
 export async function apiWithFallback<T>(
   apiCall: () => Promise<ApiResponse<T>>,
-  fallbackData: T
+  fallbackData: T,
 ): Promise<ApiResponse<T>> {
   try {
     const result = await apiCall();
@@ -503,7 +507,7 @@ export const authApi = {
 export const publicSurveyApi = {
   // GET /api/public/survey/:id
   getSurvey: async (
-    id: string
+    id: string,
   ): Promise<
     ApiResponse<{
       id: string;
@@ -544,7 +548,7 @@ export const publicSurveyApi = {
         name?: string;
         email?: string;
       };
-    }
+    },
   ): Promise<
     ApiResponse<{
       id: string;
@@ -569,7 +573,7 @@ export const publicSurveyApi = {
 
   // GET /api/public/survey/:id/thank-you
   getThankYouMessage: async (
-    id: string
+    id: string,
   ): Promise<
     ApiResponse<{
       title: string;
@@ -629,7 +633,7 @@ export const questionGenerationApi = {
 
   // GET /api/questions/static/:category
   getStaticQuestions: async (
-    category: string
+    category: string,
   ): Promise<
     ApiResponse<{
       category: string;
@@ -779,6 +783,60 @@ export const surveyApi = {
     }
   },
 
+  // // POST /api/surveys
+  // createSurvey: async (surveyData: {
+  //   title: string;
+  //   description: string;
+  //   flow_type?: "STATIC" | "INTERACTIVE" | "GAME";
+  //   survey_send_by?:
+  //     | "WHATSAPP"
+  //     | "EMAIL"
+  //     | "BOTH"
+  //     | "NONE"
+  //     | "AGENT"
+  //     | "VENDOR";
+  //   settings?: {
+  //     isAnonymous?: boolean;
+  //     showProgressBar?: boolean;
+  //     shuffleQuestions?: boolean;
+  //   };
+  //   status?: "DRAFT" | "SCHEDULED" | "PUBLISHED";
+  //   scheduled_date?: string;
+  //   scheduled_type?: "IMMEDIATE" | "SCHEDULED";
+  //   surveyCategoryId?: string;
+  //   autoGenerateQuestions?: boolean;
+  // }): Promise<{ message?: string; survey?: Survey; data: any }> => {
+  //   try {
+  //     const token = getAuthToken();
+  //     const headers: HeadersInit = {
+  //       "Content-Type": "application/json",
+  //     };
+
+  //     // Add authentication header if token exists
+  //     if (token) {
+  //       headers.Authorization = `Bearer ${token}`;
+  //     }
+
+  //     const response = await fetch(`${API_BASE_URL}/api/surveys`, {
+  //       method: "POST",
+  //       headers,
+  //       body: JSON.stringify(surveyData),
+  //     });
+  //     console.log("response is", response);
+
+  //     if (!response.ok) {
+  //       throw new Error(`HTTP error! status: ${response.status}`);
+  //     }
+
+  //     const data = await response.json();
+  //     console.log("data is", data);
+  //     return { data };
+  //   } catch (error: any) {
+  //     console.error("API request failed:", error);
+  //     throw error;
+  //   }
+  // },
+
   // POST /api/surveys
   createSurvey: async (surveyData: {
     title: string;
@@ -801,36 +859,18 @@ export const surveyApi = {
     scheduled_type?: "IMMEDIATE" | "SCHEDULED";
     surveyCategoryId?: string;
     autoGenerateQuestions?: boolean;
-  }): Promise<{ message?: string; survey?: Survey; data: any }> => {
-    try {
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-
-      // Add authentication header if token exists
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/surveys`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(surveyData),
-      });
-      console.log("response is", response);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("data is", data);
-      return { data };
-    } catch (error) {
-      console.error("API request failed:", error);
-      throw error;
-    }
+  }): Promise<
+    ApiResponse<{
+      message?: string;
+      survey?: Survey;
+      data: any;
+      aiGeneratedQuestions?: any;
+    }>
+  > => {
+    return apiRequest("/api/surveys", {
+      method: "POST",
+      body: JSON.stringify(surveyData),
+    });
   },
 
   // PUT /api/surveys/{surveyId}
@@ -850,7 +890,7 @@ export const surveyApi = {
       status?: "DRAFT" | "SCHEDULED" | "PUBLISHED";
       scheduled_date?: string;
       scheduled_type?: "IMMEDIATE" | "SCHEDULED";
-    }
+    },
   ): Promise<{ message: string; aiGeneratedQuestions: any }> => {
     try {
       const token = getAuthToken();
@@ -889,7 +929,7 @@ export const surveyApi = {
 
   // DELETE /api/surveys/{surveyId}
   deleteSurvey: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/surveys/${surveyId}`, {
       method: "DELETE",
@@ -929,7 +969,7 @@ export const questionApi = {
 
   // GET /api/questions/survey/{surveyId}
   getQuestionsBySurvey: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<Question[]>> => {
     return apiRequest(`/api/questions/survey/${surveyId}`);
   },
@@ -941,7 +981,7 @@ export const questionApi = {
   // same as GET /api/questions?id=question456
   getQuestions: async (
     surveyId?: string,
-    id?: string
+    id?: string,
   ): Promise<ApiResponse<Question[]>> => {
     try {
       // Build query params using URLSearchParams for cleaner handling
@@ -989,7 +1029,7 @@ export const questionApi = {
       allow_partial_rank?: boolean;
       min_rank_required?: number;
       max_rank_allowed?: number;
-    }
+    },
   ): Promise<ApiResponse<Question>> => {
     return apiRequest(`/api/questions/${questionId}`, {
       method: "PUT",
@@ -999,7 +1039,7 @@ export const questionApi = {
 
   // DELETE /api/questions/{questionId}
   deleteQuestion: async (
-    questionId: string
+    questionId: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/questions/${questionId}`, {
       method: "DELETE",
@@ -1016,7 +1056,7 @@ export const surveyShareApi = {
       expiresAt?: string;
       maxResponses?: number;
       requireAuth?: boolean;
-    }
+    },
   ): Promise<
     ApiResponse<{
       publicUrl: string;
@@ -1033,7 +1073,7 @@ export const surveyShareApi = {
 
   // GET /api/surveys/{surveyId}/share-settings
   getShareSettings: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<
     ApiResponse<{
       isPublic: boolean;
@@ -1055,7 +1095,7 @@ export const surveyShareApi = {
       expiresAt?: string;
       maxResponses?: number;
       requireAuth?: boolean;
-    }
+    },
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/surveys/${surveyId}/share-settings`, {
       method: "PUT",
@@ -1065,7 +1105,7 @@ export const surveyShareApi = {
 
   // DELETE /api/surveys/{surveyId}/public-link
   revokePublicLink: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/surveys/${surveyId}/public-link`, {
       method: "DELETE",
@@ -1137,14 +1177,14 @@ export const responseApi = {
 
   // GET /api/responses/survey/{surveyId}
   getResponsesBySurvey: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<SurveyResponse[]>> => {
     return apiRequest(`/api/responses/survey/${surveyId}`);
   },
 
   // GET /api/responses/{responseId}
   getSurveyResults: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<SurveyResponseResult>> => {
     return apiRequest(`/api/responses/surveys/${surveyId}/results`);
   },
@@ -1153,7 +1193,7 @@ export const responseApi = {
 export const mediaUploadApi = {
   // POST /api/upload/media
   uploadMedia: async (
-    file: File
+    file: File,
   ): Promise<ApiResponse<MediaUploadResponse>> => {
     const token = getAuthToken();
     const formData = new FormData();
@@ -1172,7 +1212,7 @@ export const mediaUploadApi = {
   },
   // DELETE /api/upload/media/:mediaId
   deleteMedia: async (
-    mediaId: string
+    mediaId: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     const token = getAuthToken();
     const headers: HeadersInit = {};
@@ -1213,7 +1253,7 @@ export const shareApi = {
 
   // GET /api/share/validate/{token}
   validateShareToken: async (
-    token: string
+    token: string,
   ): Promise<ApiResponse<{ surveyId: string; survey: Survey }>> => {
     return apiRequest(`/api/share/validate/${token}`);
   },
@@ -1223,7 +1263,7 @@ export const shareApi = {
 export const analyticsApi = {
   // GET /api/analytics/survey/{surveyId}
   getSurveyAnalytics: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1238,7 +1278,7 @@ export const analyticsApi = {
   // GET /api/analytics/survey/{surveyId}/questions/{questionId?}
   getQuestionAnalytics: async (
     surveyId: string,
-    questionId?: string
+    questionId?: string,
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1258,7 +1298,7 @@ export const analyticsApi = {
 
   // GET /api/analytics/survey/{surveyId}/audience
   getAudienceAnalytics: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1279,7 +1319,7 @@ export const analyticsApi = {
     data: {
       campaignName?: string;
       selectedAudience?: string[];
-    }
+    },
   ): Promise<
     ApiResponse<{
       survey: {
@@ -1316,7 +1356,7 @@ export const analyticsApi = {
         options?: string[];
         required: boolean;
       }>;
-    }
+    },
   ): Promise<ApiResponse<{ id: string; updatedAt: string }>> => {
     return apiRequest(`/api/surveys/${id}`, {
       method: "PUT",
@@ -1326,7 +1366,7 @@ export const analyticsApi = {
 
   // DELETE /api/surveys/:id
   deleteSurvey: async (
-    id: string
+    id: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/surveys/${id}`, {
       method: "DELETE",
@@ -1335,7 +1375,7 @@ export const analyticsApi = {
 
   // POST /api/surveys/:id/duplicate
   duplicateSurvey: async (
-    id: string
+    id: string,
   ): Promise<
     ApiResponse<{
       id: string;
@@ -1350,7 +1390,7 @@ export const analyticsApi = {
 
   // POST /api/surveys/:id/send
   sendSurvey: async (
-    id: string
+    id: string,
   ): Promise<
     ApiResponse<{
       sentCount: number;
@@ -1376,7 +1416,7 @@ export const surveyResultsApi = {
       questionId?: string;
       sortBy?: string;
       sortOrder?: "asc" | "desc";
-    }
+    },
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1428,7 +1468,7 @@ export const surveyResultsApi = {
 
   // GET /api/survey-results/:surveyId/summary - Get Survey Results Summary
   getSummary: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1446,7 +1486,7 @@ export const surveyResultsApi = {
   // GET /api/survey-results/:surveyId/questions/:questionId - Get Question-wise Results
   getQuestionResults: async (
     surveyId: string,
-    questionId: string
+    questionId: string,
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1465,12 +1505,12 @@ export const surveyResultsApi = {
     }>
   > => {
     return apiRequest(
-      `/api/survey-results/${surveyId}/questions/${questionId}`
+      `/api/survey-results/${surveyId}/questions/${questionId}`,
     );
   },
 
   exportResults: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<SurveyResponseResult>> => {
     return apiRequest(`/api/responses/surveys/${surveyId}/export`);
   },
@@ -1498,7 +1538,7 @@ export const surveyResultsApi = {
   // GET /api/survey-results/:surveyId/responses/:responseId - Get Response Details
   getResponseDetails: async (
     surveyId: string,
-    responseId: string
+    responseId: string,
   ): Promise<
     ApiResponse<{
       id: string;
@@ -1532,7 +1572,7 @@ export const surveyResultsApi = {
     }>
   > => {
     return apiRequest(
-      `/api/survey-results/${surveyId}/responses/${responseId}`
+      `/api/survey-results/${surveyId}/responses/${responseId}`,
     );
   },
 
@@ -1544,7 +1584,7 @@ export const surveyResultsApi = {
       answerValue: string;
       page?: number;
       limit?: number;
-    }
+    },
   ): Promise<
     ApiResponse<{
       surveyId: string;
@@ -1573,7 +1613,7 @@ export const surveyResultsApi = {
     if (params.limit) queryParams.append("limit", params.limit.toString());
 
     return apiRequest(
-      `/api/survey-results/${surveyId}/filtered?${queryParams.toString()}`
+      `/api/survey-results/${surveyId}/filtered?${queryParams.toString()}`,
     );
   },
 
@@ -1584,7 +1624,7 @@ export const surveyResultsApi = {
     params?: {
       page?: number;
       limit?: number;
-    }
+    },
   ): Promise<
     PaginatedResponse<{
       id: string;
@@ -1610,7 +1650,7 @@ export const surveyResultsApi = {
   // GET /api/surveys/:id/export
   exportSurveyData: async (
     id: string,
-    format: "csv" | "excel" | "pdf" | "json"
+    format: "csv" | "excel" | "pdf" | "json",
   ): Promise<Blob> => {
     const token = getAuthToken();
     const headers: HeadersInit = {};
@@ -1623,7 +1663,7 @@ export const surveyResultsApi = {
       `${API_BASE_URL}/api/surveys/${id}/export?format=${format}`,
       {
         headers,
-      }
+      },
     );
 
     if (!response.ok) {
@@ -1699,7 +1739,7 @@ export const audienceApi = {
 
   // POST /api/audience/import
   importAudience: async (
-    file: File
+    file: File,
   ): Promise<
     ApiResponse<{
       imported: number;
@@ -1805,7 +1845,7 @@ export const quotaApi = {
   // POST /api/quota/:surveyId/check - Check if respondent qualifies
   checkQuota: async (
     surveyId: string,
-    respondentData: QuotaCheckRequest
+    respondentData: QuotaCheckRequest,
   ): Promise<ApiResponse<QuotaCheckResponse>> => {
     return apiRequest(`/api/quota/${surveyId}/check`, {
       method: "POST",
@@ -1817,7 +1857,7 @@ export const quotaApi = {
   markRespondentCompleted: async (
     surveyId: string,
     respondent_id: string,
-    response_id: string
+    response_id: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/complete`, {
       method: "POST",
@@ -1829,7 +1869,7 @@ export const quotaApi = {
   markRespondentTerminated: async (
     surveyId: string,
     respondent_id: string,
-    reason: string
+    reason: string,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/terminate`, {
       method: "POST",
@@ -1840,7 +1880,7 @@ export const quotaApi = {
   // POST /api/quota/:surveyId/quota - Create/Update quota
   updateQuota_v2: async (
     surveyId: string,
-    currentPayload: any
+    currentPayload: any,
   ): Promise<ApiResponse<{ message: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/quota_v2`, {
       method: "POST",
@@ -1855,7 +1895,7 @@ export const quotaApi = {
 
   // GET /api/quota/:surveyId/quota-screening-questions - Get Quota Screening Questons
   getQuotaScreeningQuestions: async (
-    surveyId: string
+    surveyId: string,
   ): Promise<ApiResponse<ApiResponse<SavedScreeningQuestionInterface[]>>> => {
     return apiRequest(`/api/quota/${surveyId}/quota-screening-questions`);
   },
@@ -1863,7 +1903,7 @@ export const quotaApi = {
   // POST /api/quota/:surveyId/check_v2 - Check if respondent qualifies
   checkQuota_v2: async (
     surveyId: string,
-    respondentData: QuotaCheckRequest_v2
+    respondentData: QuotaCheckRequest_v2,
   ): Promise<ApiResponse<QuotaCheckResponse>> => {
     return apiRequest(`/api/quota/${surveyId}/check_v2`, {
       method: "POST",
@@ -1876,7 +1916,7 @@ export const quotaApi = {
     surveyId: string,
     respondent_id: string,
     response_id: string,
-    token: string
+    token: string,
   ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
     return apiRequest(`/api/quota/${surveyId}/complete_v2`, {
       method: "POST",
@@ -1887,13 +1927,13 @@ export const quotaApi = {
   // POST /api/quota/:surveyId/terminate_v2 - Mark respondent as terminated
   markRespondentTerminated_v2: async (
     shareToken: string, // only send ShareToken if survey is SendBy->VENDOR
-    respondent_id: string | null
+    respondent_id: string | null,
   ): Promise<ApiResponse<{ message: string; redirect_url?: string }>> => {
     return apiRequest(
       `/api/quota/terminate_v2?shareToken=${shareToken}&respondent_id=${respondent_id}`,
       {
         method: "POST",
-      }
+      },
     );
   },
 };
@@ -1967,7 +2007,7 @@ export const vendorsApi = {
     updates: {
       name?: string;
       is_active?: boolean;
-    }
+    },
   ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
     return apiRequest(`/api/vendors/${id}`, {
       method: "PATCH",
@@ -1978,7 +2018,7 @@ export const vendorsApi = {
   // PATCH /api/vendors/:id/toggle-active
   toggleVendorActive: async (
     id: string,
-    is_active: boolean
+    is_active: boolean,
   ): Promise<ApiResponse<ApiResponse<Vendor>>> => {
     return apiRequest(`/api/vendors/${id}/toggle`, {
       method: "PATCH",
@@ -1989,13 +2029,13 @@ export const vendorsApi = {
   // GET /api/vendors/:vendorId/questions
   getVendorQuestions: async (
     vendorId: string,
-    params?: { countryCode?: string; language?: string }
+    params?: { countryCode?: string; language?: string },
   ): Promise<ApiResponse<ApiResponse<any[]>>> => {
     return apiRequest(
       `/api/vendors/${vendorId}/questions?countryCode=${params?.countryCode}&language=${params?.language}`,
       {
         method: "GET",
-      }
+      },
     );
   },
 
@@ -2003,7 +2043,7 @@ export const vendorsApi = {
   distributeSurvey: async (
     vendorId: string,
     surveyId: string,
-    distributionData: any
+    distributionData: any,
   ): Promise<ApiResponse<ApiResponse<any>>> => {
     return apiRequest(`/api/vendors/${vendorId}/distribute`, {
       method: "POST",
@@ -2015,7 +2055,7 @@ export const vendorsApi = {
   updateVendorJobStatus: async (
     vendorId: string,
     surveyId: string,
-    status: number
+    status: number,
   ): Promise<ApiResponse<ApiResponse<any>>> => {
     return apiRequest(`/api/vendors/${vendorId}/updateVendorJobStatus`, {
       method: "PATCH",
@@ -2037,13 +2077,13 @@ export const screeningQuestionsApi = {
       `/api/screening-questions?source=${params.source}&vendorId=${params.vendorId}&countryCode=${params.countryCode}&language=${params.language}`,
       {
         method: "GET",
-      }
+      },
     );
   },
 
   // POST /api/screening-questions
   createScreeningQuestion: async (
-    questionData: any
+    questionData: any,
   ): Promise<ApiResponse<ApiResponse<any>>> => {
     return apiRequest(`/api/screening-questions`, {
       method: "POST",
@@ -2054,7 +2094,7 @@ export const screeningQuestionsApi = {
   // PUT /api/screening-questions/:id
   updateScreeningQuestion: async (
     id: string,
-    questionData: any
+    questionData: any,
   ): Promise<ApiResponse<ApiResponse<any>>> => {
     return apiRequest(`/api/screening-questions/${id}`, {
       method: "PATCH",
@@ -2064,7 +2104,7 @@ export const screeningQuestionsApi = {
 
   // DELETE /api/screening-questions/:id
   deleteScreeningQuestion: async (
-    id: string
+    id: string,
   ): Promise<ApiResponse<ApiResponse<any>>> => {
     return apiRequest(`/api/screening-questions/${id}`, {
       method: "DELETE",
