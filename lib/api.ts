@@ -1251,10 +1251,22 @@ export const shareApi = {
     });
   },
 
+  //POST /api/share/test-token
+  testToken: async (
+    surveyId: string,
+  ): Promise<ApiResponse<{ message: string; data: string }>> => {
+    return apiRequest(`/api/share/test-token`, {
+      method: "POST",
+      body: JSON.stringify({ surveyId }),
+    });
+  },
+
   // GET /api/share/validate/{token}
   validateShareToken: async (
     token: string,
-  ): Promise<ApiResponse<{ surveyId: string; survey: Survey }>> => {
+  ): Promise<
+    ApiResponse<{ surveyId: string; survey: Survey; isTest: boolean }>
+  > => {
     return apiRequest(`/api/share/validate/${token}`);
   },
 };

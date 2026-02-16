@@ -25,7 +25,6 @@ export default function RankingQuestion({
    * rankMap:
    * optionId -> rank number (1-based)
    */
-  console.log(">>>>> the value of the QUESTION**  is : ", question);
   // Initial order = option order
   const {
     id: questionId,
@@ -97,7 +96,7 @@ export default function RankingQuestion({
             onClick={() => handleClick(opt.id)}
             className={cn(
               "p-3 cursor-pointer select-none",
-              rank ? "border-violet-500 bg-violet-50" : "hover:bg-slate-50"
+              rank ? "border-violet-500 bg-violet-50" : "hover:bg-slate-50",
             )}
           >
             <div className="flex gap-3 items-start">
@@ -107,7 +106,7 @@ export default function RankingQuestion({
                   "w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold shrink-0 mt-1",
                   rank
                     ? "bg-violet-600 text-white"
-                    : "border border-dashed text-slate-400"
+                    : "border border-dashed text-slate-400",
                 )}
               >
                 {rank ?? "–"}

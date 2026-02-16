@@ -67,6 +67,7 @@ import EnhancedQuotaAudienceSelector, {
   QuotaScreeningQuestion,
   type QuotaAudience as EnhancedQuotaAudience,
 } from "@/components/enhanced-quota-audience-selector";
+import SurveyTest from "@/components/survey-test";
 
 const envMax = Number(process.env.NEXT_PUBLIC_SURVEY_DESCRIPTION_MAX_CHARS);
 const MAX_CHARS = Number.isFinite(envMax) ? envMax : 1000;
@@ -1933,6 +1934,12 @@ export default function GenerateSurvey() {
           {step === 3 && (
             <div className="p-8">
               <div className="mb-6">
+                <SurveyTest
+                  surveyId={isEditMode ? editSurveyId : createdSurvey.id}
+                />
+              </div>
+
+              <div className="mb-6">
                 <h2 className="text-xl font-semibold text-slate-800 mb-2">
                   Survey Settings
                 </h2>
@@ -2261,13 +2268,17 @@ export default function GenerateSurvey() {
               </div>
 
               <Tabs defaultValue="preview" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-1">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger
                     value="preview"
                     className="flex items-center gap-2"
                   >
                     <Eye className="h-4 w-4" />
                     Preview Survey
+                  </TabsTrigger>
+                  <TabsTrigger value="test" className="flex items-center gap-2">
+                    <Code className="h-4 w-4" />
+                    Test Survey
                   </TabsTrigger>
                   {/* <TabsTrigger value="code" className="flex items-center gap-2">
                     <Code className="h-4 w-4" />
@@ -2283,6 +2294,11 @@ export default function GenerateSurvey() {
                     description={description}
                     questions={questions}
                     fetchKinds={fetchKinds}
+                  />
+                </TabsContent>
+                <TabsContent value="test" className="space-y-4">
+                  <SurveyTest
+                    surveyId={isEditMode ? editSurveyId : createdSurvey.id}
                   />
                 </TabsContent>
 
