@@ -330,7 +330,6 @@ export function OptionMediaDisplay({
   media: OptionMedia | null | undefined;
   fullWidth?: boolean;
 }) {
-  console.log(">>>>> the value of the FULL WIDTH is : ", fullWidth);
   if (!media || !media.url) return null;
 
   const mediaType = (media.type || "").toUpperCase();
@@ -339,7 +338,7 @@ export function OptionMediaDisplay({
     <div
       className={cn(
         "mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50",
-        fullWidth ? "w-full" : "max-w-[200px]"
+        fullWidth ? "w-full" : "max-w-[200px]",
       )}
     >
       {mediaType === "IMAGE" && (
@@ -348,7 +347,7 @@ export function OptionMediaDisplay({
           alt={media.meta?.originalname || "Option image"}
           className={cn(
             "object-contain mx-auto",
-            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]"
+            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]",
           )}
         />
       )}
@@ -358,7 +357,7 @@ export function OptionMediaDisplay({
           controls
           className={cn(
             "mx-auto",
-            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]"
+            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]",
           )}
         />
       )}
@@ -556,7 +555,7 @@ function CheckboxGridQuestion({
       const rowAnswers = gridAnswer[currentRow.id] || [];
       if (rowAnswers.length === 0) {
         toast.error(
-          "Please select at least one option for this row before proceeding"
+          "Please select at least one option for this row before proceeding",
         );
         return;
       }
@@ -700,7 +699,7 @@ function inferFromOptions(q: Question): GKind | null {
 
   // Grid if options carry row/column pair references
   const hasGridPairs = opts.some(
-    (o) => o.rowQuestionOptionId || o.columnQuestionOptionId
+    (o) => o.rowQuestionOptionId || o.columnQuestionOptionId,
   );
   if (hasGridPairs) {
     return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
@@ -759,7 +758,7 @@ export default function PublicSurveyPage() {
     SavedScreeningQuestionInterface[]
   >([]);
   const [screeningAnswers, setScreeningAnswers] = useState<Record<string, any>>(
-    {}
+    {},
   );
   const [currentScreeningIndex, setCurrentScreeningIndex] = useState(0);
   const [screeningPhase, setScreeningPhase] = useState(true); // Start with screening
@@ -769,6 +768,7 @@ export default function PublicSurveyPage() {
   const [respondentId, setRespondentId] = useState<string | null>(null);
   const [shouldAutoRestart, setShouldAutoRestart] = useState(false);
   const [isSurveyInProgress, setIsSurveyInProgress] = useState(false);
+  const [isTestUrl, setIsTestUrl] = useState(false);
 
   const hasScreeningQuestions = screeningQuestions.length > 0;
 
@@ -789,6 +789,7 @@ export default function PublicSurveyPage() {
 
         const surveyId = result.data.surveyId;
         const surveyData = result.data;
+        setIsTestUrl(result.data.isTest);
         console.log(">>>> the value of the SURVEY DATA is : ", surveyData);
         if (surveyData.survey.settings?.autoReloadOnSubmit) {
           setShouldAutoRestart(true);
@@ -803,10 +804,10 @@ export default function PublicSurveyPage() {
           if (quotaScreeningQuestionsResponse.data) {
             console.log(
               "Quota screening questions response data is",
-              quotaScreeningQuestionsResponse.data
+              quotaScreeningQuestionsResponse.data,
             );
             setScreeningQuestions(
-              quotaScreeningQuestionsResponse?.data?.data ?? []
+              quotaScreeningQuestionsResponse?.data?.data ?? [],
             );
             setScreeningPhase(true);
             setIsQualified(null);
@@ -828,7 +829,7 @@ export default function PublicSurveyPage() {
 
           // Sort the questions
           const sortedQuestions = questionsArray.sort(
-            (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0)
+            (a: any, b: any) => (a.order_index || 0) - (b.order_index || 0),
           );
           console.log("Sorted questions:", sortedQuestions);
 
@@ -918,6 +919,22 @@ export default function PublicSurveyPage() {
 
     setCheckingQualification(true);
     try {
+      // Bypassing the CheckQuota API call for test URL
+      if (isTestUrl) {
+        console.log(
+          ">>>> Skipping Checking the quota Qualification for the TEST Survey.",
+        );
+        setRespondentId(null);
+        setIsSurveyInProgress(true);
+        setIsQualified(true);
+        setScreeningPhase(false);
+        toast.success("You qualify for this survey!");
+
+        return true;
+      }
+
+      // Otherwise have to check the Qualification
+
       const checkRequest: QuotaCheckRequest_v2 = {
         screeningAnswers: [],
         vendor_respondent_id: token,
@@ -950,7 +967,7 @@ export default function PublicSurveyPage() {
               : {
                   screeningQuestionId: sq.id,
                   answerValue: answer, // number/string/string[]
-                }
+                },
           );
         });
       } else {
@@ -963,7 +980,7 @@ export default function PublicSurveyPage() {
 
       const result = await quotaApi.checkQuota_v2(
         surveyIdForQuota,
-        checkRequest
+        checkRequest,
       );
       console.log(">>>> CHECK QUOTA RESULT:", result);
 
@@ -1036,7 +1053,11 @@ export default function PublicSurveyPage() {
 
   // Normalize question kind based on category or infer from options
   const normalizeKind = (q: Question): GKind => {
-    const byCat = q.categoryId ? kindsMap[q.categoryId] : undefined;
+    const byCat = q.categoryId
+      ? q.category
+        ? q.category.type_name
+        : kindsMap[q.categoryId]
+      : undefined;
     if (byCat) return byCat;
 
     const inferred = inferFromOptions(q);
@@ -1061,7 +1082,7 @@ export default function PublicSurveyPage() {
       if (question.category?.type_name.toLowerCase() === "ranking") {
         if (value.length < question?.min_rank_required) {
           toast.error(
-            `Please rank at least ${question.min_rank_required} options`
+            `Please rank at least ${question.min_rank_required} options`,
           );
           return false;
         }
@@ -1191,9 +1212,18 @@ export default function PublicSurveyPage() {
   const handleSubmit = async () => {
     if (!survey) return;
 
+    // Will not save the Response for the TEST URL
+    if (isTestUrl) {
+      console.log("Skipping Saving the RESPONSE for the test Surveys.");
+      setIsSurveyInProgress(false);
+      setSubmitted(true);
+      toast.success("Survey submitted successfully!");
+      return;
+    }
+
     // Validate all required questions are answered
     const unansweredRequired = survey.questions.filter(
-      (q) => q.required && !isQuestionAnswered(q)
+      (q) => q.required && !isQuestionAnswered(q),
     );
 
     if (unansweredRequired.length > 0) {
@@ -1235,7 +1265,7 @@ export default function PublicSurveyPage() {
             questionId,
             answer_value: answerValue,
           };
-        }
+        },
       );
 
       const responseData = {
@@ -1248,9 +1278,8 @@ export default function PublicSurveyPage() {
 
       // Submit response without authentication (public survey)
       // const submitResponse = await responseApi.submitResponse(responseData);
-      const submitResponse = await responseApi.submitResponseWithToken(
-        responseData
-      );
+      const submitResponse =
+        await responseApi.submitResponseWithToken(responseData);
       console.log("submitResponse is", submitResponse.data);
 
       const result: any = submitResponse;
@@ -1274,11 +1303,11 @@ export default function PublicSurveyPage() {
                 surveyIdForQuota,
                 respondentId,
                 response_id,
-                token
+                token,
               );
             console.log(
               "markRespondentCompleted_v2 is",
-              markRespondentCompletedResult
+              markRespondentCompletedResult,
             );
 
             if (markRespondentCompletedResult.data?.redirect_url) {
@@ -1407,7 +1436,7 @@ export default function PublicSurveyPage() {
                     } else {
                       handleAnswerChange(
                         question.id,
-                        currentAnswers.filter((a: string) => a !== option.id)
+                        currentAnswers.filter((a: string) => a !== option.id),
                       );
                     }
                   }}
@@ -1990,7 +2019,7 @@ export default function PublicSurveyPage() {
                     onValueChange={(value) =>
                       handleScreeningAnswerChange(
                         currentScreeningQuestion.id,
-                        value
+                        value,
                       )
                     }
                     className="space-y-3"
@@ -2021,7 +2050,7 @@ export default function PublicSurveyPage() {
                         onChange={(e) =>
                           handleScreeningAnswerChange(
                             currentScreeningQuestion.id,
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="Type your answer"
@@ -2035,7 +2064,7 @@ export default function PublicSurveyPage() {
                         onChange={(e) =>
                           handleScreeningAnswerChange(
                             currentScreeningQuestion.id,
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="Type your answer"

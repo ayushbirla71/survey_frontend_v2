@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Star } from "lucide-react";
 import RankingQuestion from "./ranking-question";
+import { Button } from "./ui/button";
 
 type GridLabel = { id?: string; text: string };
 
@@ -240,7 +241,7 @@ function inferFromOptions(q: ApiQuestion): GKind | null {
 
   // Grid if options carry row/column pair references
   const hasGridPairs = opts.some(
-    (o) => o.rowQuestionOptionId || o.columnQuestionOptionId
+    (o) => o.rowQuestionOptionId || o.columnQuestionOptionId,
   );
   if (hasGridPairs) {
     return q.allowMultipleInGrid ? "checkbox grid" : "multi-choice grid";
@@ -276,7 +277,7 @@ function extractScaleSpec(q: ApiQuestion) {
 
 function toText(
   x: string | GridLabel | { text?: string | null } | null | undefined,
-  fallback: string
+  fallback: string,
 ): string {
   if (!x) return fallback;
   if (typeof x === "string") return x || fallback;
@@ -333,11 +334,11 @@ function extractGrid(q: ApiQuestion): {
     q.columns.length
   ) {
     const rows = q.rows.map((r, i) => ({
-      id: typeof r === "string" ? `r-${i}` : r.id ?? `r-${i}`,
+      id: typeof r === "string" ? `r-${i}` : (r.id ?? `r-${i}`),
       text: toText(r as any, `Row ${i + 1}`),
     }));
     const cols = q.columns.map((c, j) => ({
-      id: typeof c === "string" ? `c-${j}` : c.id ?? `c-${j}`,
+      id: typeof c === "string" ? `c-${j}` : (c.id ?? `c-${j}`),
       text: toText(c as any, `Column ${j + 1}`),
     }));
     return { rows, cols };
@@ -361,7 +362,7 @@ function extractGrid(q: ApiQuestion): {
 function useKindsByCategory(
   categoryIds: string[],
   providedKinds?: KindsMap,
-  fetchKinds?: (ids: string[]) => Promise<KindsMap>
+  fetchKinds?: (ids: string[]) => Promise<KindsMap>,
 ) {
   const [map, setMap] = useState<KindsMap>({});
   const [loading, setLoading] = useState(false);
@@ -392,7 +393,7 @@ function useKindsByCategory(
           result = await fetchKinds(need);
         } else {
           const url = `/api/categories/kinds?ids=${encodeURIComponent(
-            need.join(",")
+            need.join(","),
           )}`;
           const res = await fetch(url);
           if (!res.ok) throw new Error(`Failed to load kinds: ${res.status}`);
@@ -467,7 +468,7 @@ export default function SurveyPreview({
   const { kindsMap, loading, error } = useKindsByCategory(
     categoryIds,
     kindsByCategoryId,
-    fetchKinds
+    fetchKinds,
   );
 
   return (
@@ -724,36 +725,35 @@ export default function SurveyPreview({
               )}
 
               {/* linear scale */}
-              {kind === "linear scale" && (
+              {/* {kind === "linear scale" && (
                 <div className="space-y-2">
                   {(() => {
                     const { min, max, fromLabel, toLabel } =
                       extractScaleSpec(q);
+                    const count = Math.max(1, max - min + 1);
+
                     return (
                       <>
-                        <RadioGroup className="flex items-center gap-3 flex-wrap">
-                          {Array.from({
-                            length: Math.max(1, max - min + 1),
-                          }).map((_, i) => {
+                        <div className="flex items-center gap-2">
+                          {Array.from({ length: count }).map((_, i) => {
                             const value = min + i;
-                            const id = `${q.id}-ls-${value}`;
+
                             return (
-                              <div
-                                className="flex items-center space-x-1"
-                                key={id}
+                              <button
+                                key={`${q.id}-ls-${value}`}
+                                type="button"
+                                disabled
+                                className={[
+                                  "h-10 w-10 rounded-md border text-sm font-medium",
+                                  "cursor-not-allowed select-none",
+                                ].join(" ")}
                               >
-                                <RadioGroupItem
-                                  value={String(value)}
-                                  id={id}
-                                  disabled
-                                />
-                                <Label htmlFor={id} className="text-slate-700">
-                                  {value}
-                                </Label>
-                              </div>
+                                {value}
+                              </button>
                             );
                           })}
-                        </RadioGroup>
+                        </div>
+
                         {(fromLabel || toLabel) && (
                           <div className="flex justify-between text-xs text-slate-500">
                             <span>{fromLabel}</span>
@@ -761,6 +761,50 @@ export default function SurveyPreview({
                           </div>
                         )}
                       </>
+                    );
+                  })()}
+                </div>
+              )} */}
+              {kind === "linear scale" && (
+                <div className="space-y-2">
+                  {(() => {
+                    const { min, max, fromLabel, toLabel } =
+                      extractScaleSpec(q);
+                    const scaleValues = [];
+                    for (let i = min; i <= max; i++) {
+                      scaleValues.push(i);
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          {fromLabel && (
+                            <span className="text-sm text-slate-600">
+                              {fromLabel}
+                            </span>
+                          )}
+                          <div className="flex gap-2">
+                            {scaleValues.map((val) => (
+                              <Button
+                                key={`${q.id}-ls-${val}`}
+                                type="button"
+                                variant={"outline"}
+                                className={[
+                                  "h-10 w-10 rounded-md border text-sm font-medium",
+                                  "cursor-not-allowed select-none hover:bg-violet-700",
+                                ].join(" ")}
+                              >
+                                {val}
+                              </Button>
+                            ))}
+                          </div>
+                          {toLabel && (
+                            <span className="text-sm text-slate-600">
+                              {toLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     );
                   })()}
                 </div>

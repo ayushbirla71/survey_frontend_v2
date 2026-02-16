@@ -43,7 +43,7 @@ export default function Dashboard() {
     error: surveysError,
     refetch: refetchSurveys,
   } = useApi<{ surveys: Survey[] }>(() =>
-    surveyApi.getAllSurveys().then((response) => ({ data: response }))
+    surveyApi.getAllSurveys().then((response) => ({ data: response })),
   );
 
   // const createExcelFile = (survey: any) => {
@@ -219,7 +219,7 @@ export default function Dashboard() {
       } else {
         // For public surveys (share_tokens.length == 1), just show info
         toast.info(
-          "This is a public survey. Use the share button to share the link."
+          "This is a public survey. Use the share button to share the link.",
         );
       }
     } catch (error) {
@@ -245,7 +245,7 @@ export default function Dashboard() {
         const workbook = prepareWorkbook(survey);
         const fileName = `${survey.title.replace(
           /[^a-z0-9]/gi,
-          "_"
+          "_",
         )}_PersonalizedLinks.xlsx`;
 
         // Generate Excel file as Blob
@@ -279,7 +279,7 @@ export default function Dashboard() {
               navigator.canShare({ files: [fileToShare] })
             ) {
               console.log(
-                "📱 Attempting to share Excel file via Web Share API..."
+                "📱 Attempting to share Excel file via Web Share API...",
               );
 
               await navigator.share({
@@ -293,7 +293,7 @@ export default function Dashboard() {
               return;
             } else {
               console.log(
-                "⚠️ File sharing not supported, falling back to download"
+                "⚠️ File sharing not supported, falling back to download",
               );
             }
           } catch (shareError: any) {
@@ -307,7 +307,7 @@ export default function Dashboard() {
           }
         } else {
           console.log(
-            "⚠️ Web Share API not available, falling back to download"
+            "⚠️ Web Share API not available, falling back to download",
           );
         }
 
@@ -315,7 +315,7 @@ export default function Dashboard() {
         console.log("📥 Downloading Excel file...");
         XLSX.writeFile(workbook, fileName);
         toast.success(
-          "Excel file downloaded! You can now share it via email or messaging apps."
+          "Excel file downloaded! You can now share it via email or messaging apps.",
         );
         console.log("✅ Excel file downloaded successfully");
       }
@@ -351,7 +351,7 @@ export default function Dashboard() {
         } else {
           // Web Share API not available, use clipboard
           console.log(
-            "📋 Web Share API not available, copying to clipboard..."
+            "📋 Web Share API not available, copying to clipboard...",
           );
           await navigator.clipboard.writeText(publicUrl);
           toast.success("Survey link copied to clipboard!");
@@ -363,7 +363,7 @@ export default function Dashboard() {
       // Provide specific error messages
       if (error.name === "NotAllowedError") {
         toast.error(
-          "Permission denied. Please allow clipboard/share access in your browser settings."
+          "Permission denied. Please allow clipboard/share access in your browser settings.",
         );
       } else if (error.name === "AbortError") {
         // User dismissed the share dialog - don't show error
@@ -392,7 +392,7 @@ export default function Dashboard() {
   const surveys = surveysResponse?.surveys || [];
   const totalResponses = surveys.reduce(
     (sum: number, survey: any) => sum + survey?.responses?.length,
-    0
+    0,
   );
   const displayStats = stats || demoData.dashboardStats;
 
@@ -646,10 +646,10 @@ export default function Dashboard() {
                             survey.status === "DRAFT"
                               ? "bg-gray-100 text-gray-700"
                               : survey.status === "SCHEDULED"
-                              ? "bg-blue-100 text-blue-700"
-                              : survey.status === "PUBLISHED"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-700"
+                                ? "bg-blue-100 text-blue-700"
+                                : survey.status === "PUBLISHED"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
                           }`}
                         >
                           {survey.status}
@@ -664,7 +664,7 @@ export default function Dashboard() {
                               {" "}
                               • Scheduled:{" "}
                               {new Date(
-                                survey.scheduled_date
+                                survey.scheduled_date,
                               ).toLocaleDateString()}
                             </>
                           )}
@@ -675,7 +675,10 @@ export default function Dashboard() {
                       {(survey.status === "DRAFT" ||
                         survey.status === "SCHEDULED" ||
                         (survey.share_tokens?.length == 0 &&
-                          survey.survey_send_by !== "VENDOR")) && (
+                          survey.survey_send_by !== "VENDOR") ||
+                        ["CREATED", "PAUSED"].includes(
+                          survey.vendorConfig?.status,
+                        )) && (
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/generate-survey?edit=${survey.id}`}>
                             <Edit className="mr-2 h-4 w-4" />
@@ -706,7 +709,10 @@ export default function Dashboard() {
                       {/* Show View Results for PUBLISHED surveys */}
                       {survey.status === "PUBLISHED" &&
                         (survey.share_tokens?.length > 0 ||
-                          survey.survey_send_by === "VENDOR") && (
+                          (survey.survey_send_by === "VENDOR" &&
+                            !["CREATED", "PAUSED"].includes(
+                              survey.vendorConfig?.status,
+                            ))) && (
                           <Button asChild variant="outline" size="sm">
                             <Link href={`/survey-results/${survey.id}`}>
                               <ExternalLink className="mr-2 h-4 w-4" />

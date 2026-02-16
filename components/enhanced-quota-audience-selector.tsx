@@ -98,10 +98,12 @@ export type QuotaAudienceSelectorProps = {
  * ========================= */
 function LoadingModal({
   open,
+  shortMessage = "Questions",
   title = "Loading",
   message = "Please wait…",
 }: {
   open: boolean;
+  shortMessage: string;
   title?: string;
   message?: string;
 }) {
@@ -114,7 +116,9 @@ function LoadingModal({
         <div className="mt-2 text-sm text-gray-600">{message}</div>
         <div className="mt-4 flex items-center gap-2">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
-          <div className="text-sm text-gray-700">Fetching questions…</div>
+          <div className="text-sm text-gray-700">
+            Fetching {shortMessage}...
+          </div>
         </div>
       </div>
     </div>
@@ -136,7 +140,8 @@ type ScreeningQuestionsPayload =
 async function fetchVendors(): Promise<Vendor[]> {
   const res = await vendorsApi.getVendors();
   const data = res.data?.data || [];
-  return data;
+  console.log(">>>>>> the value of the VENDORS data is : ", data);
+  return data.filter((d) => d.is_active == true);
 }
 
 /** =========================
@@ -153,7 +158,7 @@ function getScreeningEntry(quotaAudience: QuotaAudience, questionId: string) {
 function rebalanceToTotal(
   optionTargets: QuotaOptionTarget[],
   totalTarget: number,
-  changedOptionId?: string
+  changedOptionId?: string,
 ): QuotaOptionTarget[] {
   const sum = optionTargets.reduce((a, t) => a + t.target, 0);
   const diff = totalTarget - sum;
@@ -179,7 +184,8 @@ function validateQuota(
   questions: ApiScreeningQuestion[],
   surveySettings: SurveySettings,
   file: File | null,
-  fileData: any[]
+  fileData: any[],
+  isVendorFlow: boolean,
 ): string | null {
   // Check AGENT mode validation (runs regardless of quota enabled)
   const isAgentMode = surveySettings?.survey_send_by === "AGENT"; // Access surveySettings (add as param)
@@ -189,6 +195,12 @@ function validateQuota(
   }
 
   if (!quotaAudience.enabled) return null;
+  console.log(
+    ">>>>>> the value of the QUOTA AUDIENCE is : ------->>>>>>>> ",
+    quotaAudience,
+  );
+  if (isVendorFlow && !quotaAudience.vendorId)
+    return "Please Select the Vendor.";
   if (!quotaAudience.totalTarget || quotaAudience.totalTarget <= 0) {
     return "Total target must be > 0.";
   }
@@ -207,7 +219,7 @@ function validateQuota(
       const targets = s.optionTargets ?? [];
       const sum = targets.reduce(
         (acc, t) => acc + (Number.isFinite(t.target) ? t.target : 0),
-        0
+        0,
       );
       if (sum !== quotaAudience.totalTarget) {
         return `Targets for "${q.question_text}" must sum to total target (${quotaAudience.totalTarget}). Current sum: ${sum}.`;
@@ -221,7 +233,7 @@ function validateQuota(
       return `Please add at least 1 bucket for "${q.question_text}".`;
     const sum = buckets.reduce(
       (acc, b) => acc + (Number.isFinite(b.target) ? b.target : 0),
-      0
+      0,
     );
     if (sum !== quotaAudience.totalTarget) {
       return `Bucket targets for "${q.question_text}" must sum to total target ${quotaAudience.totalTarget}. Current sum ${sum}.`;
@@ -251,7 +263,7 @@ function validateQuota(
 
 function groupQuestionsByVendorCategory(
   questions: ApiScreeningQuestion[],
-  enabledGrouping: boolean
+  enabledGrouping: boolean,
 ): Array<{
   categoryId: string;
   categoryName: string;
@@ -279,7 +291,7 @@ function groupQuestionsByVendorCategory(
     }
   }
   return Array.from(map.values()).sort((a, b) =>
-    a.categoryName.localeCompare(b.categoryName)
+    a.categoryName.localeCompare(b.categoryName),
   );
 }
 
@@ -300,13 +312,17 @@ export default function EnhancedQuotaAudienceSelector({
 
   // Initialize filters from quotaAudience prop (from DB)
   const [countryCode, setCountryCode] = React.useState<string>(
-    quotaAudience.countryCode || "IN"
+    quotaAudience.countryCode || "IN",
+  );
+  console.log(
+    ">>>>> the value of the COUNTRY CODE in the QUOTA AUDIENCE COMPONENT is : ",
+    countryCode,
   );
   const [language, setLanguage] = React.useState<string>(
-    quotaAudience.language || "ENGLISH"
+    quotaAudience.language || "ENGLISH",
   );
   const [vendorId, setVendorId] = React.useState<string>(
-    quotaAudience.vendorId || ""
+    quotaAudience.vendorId || "",
   );
 
   const [file, setFile] = React.useState<File | null>(null);
@@ -319,7 +335,7 @@ export default function EnhancedQuotaAudienceSelector({
       countryCode: countryCode || null,
       language: language || null,
     }),
-    [isVendorFlow, vendorId, countryCode, language]
+    [isVendorFlow, vendorId, countryCode, language],
   );
 
   const prevFlowRef = React.useRef<boolean | null>(null);
@@ -381,7 +397,7 @@ export default function EnhancedQuotaAudienceSelector({
         withFilters({
           ...quotaAudience,
           screening: [],
-        })
+        }),
       );
       onValidationError?.(null);
     }
@@ -487,7 +503,7 @@ export default function EnhancedQuotaAudienceSelector({
         await screeningQuestionsApi.getScreeningQuestions(questionsPayload);
       console.log(
         "screeningQuestionsApiResponse is",
-        screeningQuestionsApiResponse
+        screeningQuestionsApiResponse,
       );
       return (screeningQuestionsApiResponse.data?.data ??
         []) as ApiScreeningQuestion[];
@@ -497,17 +513,17 @@ export default function EnhancedQuotaAudienceSelector({
   });
 
   const questions = (questionsQuery.data ?? []).filter(
-    (q) => q.is_active !== false
+    (q) => q.is_active !== false,
   );
 
   // Grouping (only vendor flow groups by primary_vendor_category_id)
   const grouped = React.useMemo(
     () => groupQuestionsByVendorCategory(questions, isVendorFlow),
-    [questions, isVendorFlow]
+    [questions, isVendorFlow],
   );
 
   const [activeCategoryId, setActiveCategoryId] = React.useState<string | null>(
-    null
+    null,
   );
 
   React.useEffect(() => {
@@ -531,7 +547,8 @@ export default function EnhancedQuotaAudienceSelector({
       questions,
       surveySettings,
       file,
-      fileData
+      fileData,
+      isVendorFlow,
     );
     onValidationError?.(msg);
   }, [quotaAudience, questions, onValidationError, surveySettings, file]);
@@ -566,7 +583,7 @@ export default function EnhancedQuotaAudienceSelector({
   const setTotalTarget = (value: number) => {
     const totalTarget = Math.max(
       0,
-      Math.trunc(Number.isFinite(value) ? value : 0)
+      Math.trunc(Number.isFinite(value) ? value : 0),
     );
 
     const nextScreening = quotaAudience.screening.map((s) => {
@@ -575,7 +592,7 @@ export default function EnhancedQuotaAudienceSelector({
 
       const optionIds = q.options.map((o) => o.id);
       const existing = new Map(
-        (s.optionTargets ?? []).map((t) => [t.optionId, t.target])
+        (s.optionTargets ?? []).map((t) => [t.optionId, t.target]),
       );
 
       const targets: QuotaOptionTarget[] = optionIds.map((id) => ({
@@ -589,13 +606,13 @@ export default function EnhancedQuotaAudienceSelector({
     });
 
     onQuotaAudienceUpdate(
-      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening })
+      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening }),
     );
   };
 
   const toggleScreeningQuestion = (
     q: ApiScreeningQuestion,
-    checked: boolean
+    checked: boolean,
   ) => {
     if (checked) {
       if (getScreeningEntry(quotaAudience, q.id)) return;
@@ -611,7 +628,7 @@ export default function EnhancedQuotaAudienceSelector({
                 vendorOptionId: o.vendor_option_id ?? null,
                 target: 0,
               })),
-              total
+              total,
             ),
           }
         : {
@@ -639,16 +656,16 @@ export default function EnhancedQuotaAudienceSelector({
         withFilters({
           ...quotaAudience,
           screening: [...quotaAudience.screening, newEntry],
-        })
+        }),
       );
     } else {
       onQuotaAudienceUpdate(
         withFilters({
           ...quotaAudience,
           screening: quotaAudience.screening.filter(
-            (s) => s.questionId !== q.id
+            (s) => s.questionId !== q.id,
           ),
-        })
+        }),
       );
     }
   };
@@ -672,7 +689,7 @@ export default function EnhancedQuotaAudienceSelector({
 
           return { ...s, buckets: nextBuckets };
         }),
-      })
+      }),
     );
   };
 
@@ -685,14 +702,14 @@ export default function EnhancedQuotaAudienceSelector({
           const next = (s.buckets ?? []).filter((_, i) => i !== idx);
           return { ...s, buckets: next };
         }),
-      })
+      }),
     );
   };
 
   const updateBucket = (
     questionId: string,
     idx: number,
-    patch: Partial<QuotaBucket>
+    patch: Partial<QuotaBucket>,
   ) => {
     onQuotaAudienceUpdate(
       withFilters({
@@ -700,18 +717,18 @@ export default function EnhancedQuotaAudienceSelector({
         screening: quotaAudience.screening.map((s) => {
           if (s.questionId !== questionId) return s;
           const next = (s.buckets ?? []).map((b, i) =>
-            i === idx ? { ...b, ...patch } : b
+            i === idx ? { ...b, ...patch } : b,
           );
           return { ...s, buckets: next };
         }),
-      })
+      }),
     );
   };
 
   const setOptionTarget = (
     questionId: string,
     optionId: string,
-    target: number
+    target: number,
   ) => {
     const totalTarget = quotaAudience.totalTarget ?? 0;
     const q = questions.find((qq) => qq.id === questionId);
@@ -722,7 +739,7 @@ export default function EnhancedQuotaAudienceSelector({
       if (s.questionId !== questionId) return s;
 
       const existing = new Map(
-        (s.optionTargets ?? []).map((t) => [t.optionId, t.target])
+        (s.optionTargets ?? []).map((t) => [t.optionId, t.target]),
       );
 
       const nextTargets: QuotaOptionTarget[] = optionIds.map((id) => ({
@@ -731,7 +748,7 @@ export default function EnhancedQuotaAudienceSelector({
           q.options.find((o) => o.id === id)?.vendor_option_id ?? null,
         target: Math.max(
           0,
-          Math.trunc(id === optionId ? target : existing.get(id) ?? 0)
+          Math.trunc(id === optionId ? target : (existing.get(id) ?? 0)),
         ),
       }));
 
@@ -742,7 +759,7 @@ export default function EnhancedQuotaAudienceSelector({
     });
 
     onQuotaAudienceUpdate(
-      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening })
+      withFilters({ ...quotaAudience, totalTarget, screening: nextScreening }),
     );
   };
 
@@ -806,7 +823,7 @@ export default function EnhancedQuotaAudienceSelector({
             !jsonData[0].hasOwnProperty("userUniqueIds")
           ) {
             toast.error(
-              'Excel file must contain a column named "userUniqueIds"'
+              'Excel file must contain a column named "userUniqueIds"',
             );
             setFile(null);
             return;
@@ -841,10 +858,13 @@ export default function EnhancedQuotaAudienceSelector({
     }
   };
 
-  const isBlockingLoading =
-    quotaAudience.enabled &&
-    (vendorsQuery.isFetching || questionsQuery.isFetching) &&
-    (isVendorFlow ? true : Boolean(questionsPayload));
+  // const isBlockingLoading =
+  //   quotaAudience.enabled &&
+  //   (vendorsQuery.isFetching || questionsQuery.isFetching) &&
+  //   (isVendorFlow ? true : Boolean(questionsPayload));
+
+  const isLoadingVendors = quotaAudience.enabled && vendorsQuery.isFetching;
+  const isLoadingQuestions = quotaAudience.enabled && questionsQuery.isFetching;
 
   return (
     <div>
@@ -890,11 +910,28 @@ export default function EnhancedQuotaAudienceSelector({
 
       {/* Quota Enable/Disable Toggle */}
       <div className="w-full rounded border p-4">
-        <LoadingModal
+        {/* <LoadingModal
           open={isBlockingLoading}
           title="Fetching screening questions"
           message="Please wait until all questions are loaded."
-        />
+        /> */}
+        {isLoadingVendors && (
+          <LoadingModal
+            open={true}
+            shortMessage="vendors"
+            title="Loading vendors"
+            message="Please wait while fetching available vendors..."
+          />
+        )}
+        {isLoadingQuestions &&
+          !isLoadingVendors && ( // Show only if not already showing vendors
+            <LoadingModal
+              open={true}
+              shortMessage="questions"
+              title="Fetching vendor questions"
+              message="Please wait until vendor questions are loaded."
+            />
+          )}
 
         {/* Enable quota */}
         <div className="flex items-center justify-between gap-3">
@@ -1068,11 +1105,11 @@ export default function EnhancedQuotaAudienceSelector({
                   <div className="space-y-3">
                     {activeGroup.questions.map((q) => {
                       const selected = Boolean(
-                        getScreeningEntry(quotaAudience, q.id)
+                        getScreeningEntry(quotaAudience, q.id),
                       );
                       const screeningEntry = getScreeningEntry(
                         quotaAudience,
-                        q.id
+                        q.id,
                       );
 
                       return (
@@ -1126,7 +1163,7 @@ export default function EnhancedQuotaAudienceSelector({
                               {q.options.map((opt) => {
                                 const t =
                                   screeningEntry?.optionTargets?.find(
-                                    (x) => x.optionId === opt.id
+                                    (x) => x.optionId === opt.id,
                                   )?.target ?? 0;
                                 return (
                                   <div
@@ -1144,7 +1181,7 @@ export default function EnhancedQuotaAudienceSelector({
                                         setOptionTarget(
                                           q.id,
                                           opt.id,
-                                          parseFloat(e.target.value) || 0
+                                          parseFloat(e.target.value) || 0,
                                         )
                                       }
                                       className="w-28 rounded border px-2 py-1"
@@ -1199,8 +1236,8 @@ export default function EnhancedQuotaAudienceSelector({
                                           op === "BETWEEN"
                                             ? { min: 18, max: 24 }
                                             : op === "IN" || op === "INTERSECTS"
-                                            ? []
-                                            : "";
+                                              ? []
+                                              : "";
                                         updateBucket(q.id, idx, {
                                           operator: op,
                                           value: nextValue,
@@ -1227,8 +1264,8 @@ export default function EnhancedQuotaAudienceSelector({
                                           target: Math.max(
                                             0,
                                             Math.trunc(
-                                              Number(e.target.value || 0)
-                                            )
+                                              Number(e.target.value || 0),
+                                            ),
                                           ),
                                         })
                                       }
@@ -1316,7 +1353,7 @@ export default function EnhancedQuotaAudienceSelector({
                                                       b.value || []
                                                     ).filter(
                                                       (_: any, i: number) =>
-                                                        i !== zipIdx
+                                                        i !== zipIdx,
                                                     );
                                                     updateBucket(q.id, idx, {
                                                       value: newZips,
