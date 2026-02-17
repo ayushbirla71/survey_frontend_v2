@@ -271,7 +271,7 @@ export interface MediaUploadResponse {
   media: any;
 }
 
-export type VendorKey = "INNOVATEMR"; // from Prisma enum VendorKey
+export type VendorKey = "INNOVATEMR" | "INNOVATEMR_TEST"; // from Prisma enum VendorKey
 
 export type VendorAuthType = "API_KEY" | "BASIC" | "OAUTH2" | "CUSTOM";
 
