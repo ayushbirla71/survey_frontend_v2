@@ -840,7 +840,7 @@ export default function EnhancedQuotaAudienceSelector({
 
       if (!q.screening || q.screening.length === 0) {
         toast.error("Please select at least 1 screening question");
-        return;
+        return false;
       }
 
       const currentPayload = buildEnhancedQuotaPayload(q);
@@ -861,7 +861,8 @@ export default function EnhancedQuotaAudienceSelector({
         !originalPayload || !deepEqual(currentPayload, originalPayload);
       if (!hasChanged) {
         console.log("No quota changes detected. Skipping updateQuota.");
-        return;
+        toast.info("No quota changes detected. Skipping updateQuota.");
+        return false;
       }
 
       // update this call signature to match your API:
@@ -869,6 +870,7 @@ export default function EnhancedQuotaAudienceSelector({
 
       handleOriginalQuotaChange(JSON.parse(JSON.stringify(q)));
       toast.success("Quota configuration updated");
+      return true;
     } catch (error: any) {
       console.error("Error updating quota:", error);
       toast.error("Failed to update quota configuration");
@@ -890,23 +892,36 @@ export default function EnhancedQuotaAudienceSelector({
     setIsAddingQuota(true);
     try {
       // await quotaApi.addQuota(createdSurvey.id!, savePayload);
-      await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+      const isChanged = await handleManualQuotaUpdate(
+        createdSurvey.id,
+        quotaAudience,
+      );
+      console.log(">>>>> the value of the isCHANGED is : ", isChanged);
 
       console.log(">>>>> SAVING the quota details.......");
 
+      if (!isChanged) {
+        setExactPrice(quotaAudience.exactPrice || null);
+        console.log(">>>>>> PRICE picked from DB.");
+        setFlowStep("priced");
+        // Notify parent Preview btn is ready
+        // onQuotaReady?.(true);
+
+        return;
+      }
       // Get EXACT pricing
       const priceRes = await quotaFeasibilityApi.getExactCost(
         createdSurvey.id!,
         vendorId,
       );
-      setExactPrice(priceRes.data?.data?.exactAmount || 0);
+      setExactPrice(priceRes.data?.data?.exactAmount || null);
       // setIsQuotaSaved(true);
       setFlowStep("priced");
 
       // Notify parent Preview btn is ready
       onQuotaReady?.(true);
 
-      toast.success(`Quota saved!`);
+      // toast.success(`Quota saved!`);
       onQuotaAudienceUpdate(withFilters({ ...quotaAudience, exactPrice: 100 }));
     } catch (error) {
       toast.error("Save quota failed");
