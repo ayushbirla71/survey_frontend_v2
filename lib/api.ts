@@ -1,3 +1,5 @@
+import { EstimatePayload } from "@/components/enhanced-quota-audience-selector";
+
 // API configuration and base functions
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -401,7 +403,7 @@ async function apiRequest<T>(
         const errorData = await response.json();
         console.log(">>>>> the value of the ERROR DATA is : ", errorData);
         message =
-          errorData?.errors[0] ||
+          errorData?.errors?.[0] ||
           errorData?.message ||
           errorData?.error ||
           JSON.stringify(errorData);
@@ -1947,6 +1949,29 @@ export const quotaApi = {
         method: "POST",
       },
     );
+  },
+};
+
+export const quotaFeasibilityApi = {
+  //  POST /api/quota/getEstimatedAmount - finds the estimated Amount for vendor distribution
+  getEstimatedAmount: async (
+    payload: EstimatePayload,
+  ): Promise<ApiResponse<ApiResponse<{ estimatedAmount: number }>>> => {
+    return apiRequest(`/api/quota/getEstimatedAmount`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // POST /api/quota/getExactPrice - finds the exact price for the survey quota
+  getExactCost: async (
+    surveyId: string,
+    vendorId: string,
+  ): Promise<ApiResponse<ApiResponse<{ exactAmount: number }>>> => {
+    return apiRequest(`/api/quota/getExactAmount`, {
+      method: "POST",
+      body: JSON.stringify({ surveyId, vendorId }),
+    });
   },
 };
 

@@ -57,7 +57,6 @@ import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
-import { deepEqual } from "@/lib/deepCompare";
 import VendorAudience, {
   VendorAudienceData,
 } from "@/components/vendor-audience";
@@ -268,6 +267,8 @@ export default function GenerateSurvey() {
   >(null);
   const [isVendorSurveyMarkPublished, setIsVendorSurveyMarkPublished] =
     useState<boolean>(false);
+  // Add state for quota readiness
+  const [isQuotaComplete, setIsQuotaComplete] = useState(false);
 
   // API calls
   const {
@@ -626,6 +627,28 @@ export default function GenerateSurvey() {
     }));
   }, [surveySettings.survey_send_by]);
 
+  // Callback implementations
+  const handleQuotaReady = (ready: boolean) => {
+    setIsQuotaComplete(ready);
+  };
+
+  // const handlePriceApproved = (approved: boolean, exactPrice?: number) => {
+  //   if (approved && exactPrice) {
+  //     // Mark DB "price approved"
+  //     markPriceApproved(createdSurvey.id!, exactPrice);
+  //   }
+  // };
+
+  // *** NEW: DB mark function ***
+  // const markPriceApproved = async (surveyId: string, price: number) => {
+  //   try {
+  //     // await quotaApi.markPriceApproved(surveyId, { approved: true, price });
+  //     toast.success("Price approved & saved!");
+  //   } catch (error) {
+  //     toast.error("Price approval failed");
+  //   }
+  // };
+
   // Generate questions when category and description are set
   // useEffect(() => {
   //   if (surveyCategoryId && description && !questionsGenerated) {
@@ -719,6 +742,14 @@ export default function GenerateSurvey() {
     updatedQuotaAudience: EnhancedQuotaAudience,
   ) => {
     setQuotaAudience(updatedQuotaAudience);
+    if (updatedQuotaAudience.exactPrice)
+      toast.success(`Exact quota cost: $${updatedQuotaAudience.exactPrice}`);
+  };
+
+  const handleOriginalQuotaChange = (
+    originalQuotaAudienceData: EnhancedQuotaAudience,
+  ) => {
+    setOriginalQuotaAudience(originalQuotaAudienceData);
   };
 
   const handleVendorAudienceUpdate = (
@@ -1257,95 +1288,6 @@ export default function GenerateSurvey() {
     }
   };
 
-  function buildEnhancedQuotaPayload(q: EnhancedQuotaAudience) {
-    // Adjust keys to your backend expectation
-    return {
-      enabled: q.enabled ?? false,
-      totalTarget: q.totalTarget ?? 0,
-      vendorId: q.vendorId ?? null,
-      countryCode: q.countryCode ?? null,
-      language: q.language ?? null,
-      screening: q.screening.map((s) => ({
-        questionId: s.questionId,
-        vendorQuestionId: s.vendorQuestionId ?? null,
-
-        optionTargets: (s.optionTargets ?? []).map((t) => ({
-          optionId: t.optionId,
-          vendorOptionId: t.vendorOptionId ?? null,
-          target: t.target,
-        })),
-
-        // NEW
-        buckets: (s.buckets ?? []).map((b) => ({
-          label: b.label ?? null,
-          operator: b.operator,
-          value: b.value,
-          target: b.target,
-        })),
-      })),
-    };
-  }
-
-  const handleManualQuotaUpdate = async (
-    surveyId: string,
-    q: EnhancedQuotaAudience,
-  ) => {
-    try {
-      console.log(">>>>> the value of the QUOTA AUDIENCE in STEP 4 is : ", q);
-
-      // If quota disabled -> skip saving quota
-      if (!q.enabled) {
-        console.log("Quota is disabled, skipping quota configuration");
-        nextStep();
-        return;
-      }
-
-      if (!q.totalTarget || q.totalTarget <= 0) {
-        toast.error(
-          "Total Responses Required is mandatory when quota is enabled",
-        );
-        return;
-      }
-
-      if (!q.screening || q.screening.length === 0) {
-        toast.error("Please select at least 1 screening question");
-        return;
-      }
-
-      const currentPayload = buildEnhancedQuotaPayload(q);
-      console.log(
-        ">>>>> the value of the CURRENT PAYLOAD is : ",
-        currentPayload,
-      );
-
-      const originalPayload = originalQuotaAudience
-        ? buildEnhancedQuotaPayload(originalQuotaAudience)
-        : null;
-      console.log(
-        ">>>>> the value of the ORIGINAL PAYLOAD is : ",
-        originalPayload,
-      );
-
-      const hasChanged =
-        !originalPayload || !deepEqual(currentPayload, originalPayload);
-      if (!hasChanged) {
-        console.log("No quota changes detected. Skipping updateQuota.");
-        nextStep();
-        return;
-      }
-
-      // IMPORTANT: update this call signature to match your API:
-      await quotaApi.updateQuota_v2(surveyId, currentPayload);
-
-      setOriginalQuotaAudience(JSON.parse(JSON.stringify(q)));
-      toast.success("Quota configuration updated");
-      nextStep();
-    } catch (error) {
-      console.error("Error updating quota:", error);
-      toast.error("Failed to update quota configuration");
-    }
-  };
-
   const handleVendorAudience = async (
     surveyId: string,
     vendorsAudience: VendorAudienceData,
@@ -1384,7 +1326,13 @@ export default function GenerateSurvey() {
         quotaAudience,
       );
 
-      await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+      // await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+
+      if (quotaAudience.enabled && !isQuotaComplete) {
+        toast.error("Complete quota flow first.");
+        return;
+      }
+      nextStep(); // Safe now
 
       // Move to next step (Preview & Publish)
       // nextStep();
@@ -2209,14 +2157,21 @@ export default function GenerateSurvey() {
               <div>
                 <EnhancedQuotaAudienceSelector
                   key={surveySettings.survey_send_by}
-                  createdSurvey={createdSurvey}
+                  createdSurvey={{
+                    ...createdSurvey,
+                    questionsCount: questions.length,
+                  }}
                   surveySettings={surveySettings}
                   quotaAudience={quotaAudience}
+                  originalQuotaAudience={originalQuotaAudience}
+                  handleOriginalQuotaChange={handleOriginalQuotaChange}
                   onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
                   onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
                   categories={categories || []}
                   onValidationError={setQuotaValidationError}
                   isEditMode={isEditMode}
+                  onQuotaReady={handleQuotaReady}
+                  // onPriceApproved={handlePriceApproved}
                 />
                 {quotaValidationError && (
                   <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
@@ -2234,7 +2189,7 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handleStep4Continue}
                   disabled={
-                    !!quotaValidationError || step4Loading
+                    !isQuotaComplete || !!quotaValidationError || step4Loading
                     // || disableContinuePreviewPublishForVendor
                   }
                   title={quotaValidationError ?? undefined}
