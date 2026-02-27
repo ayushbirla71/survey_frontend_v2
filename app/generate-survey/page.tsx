@@ -57,7 +57,6 @@ import { useApi, useMutation } from "@/hooks/useApi";
 import { syncSurveyQuestions } from "@/lib/question-sync";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
-import { deepEqual } from "@/lib/deepCompare";
 import VendorAudience, {
   VendorAudienceData,
 } from "@/components/vendor-audience";
@@ -165,6 +164,7 @@ type RawQuotaConfigNew = {
   countryCode?: string | null;
   country_code?: string | null;
   language?: string | null;
+  exactPrice?: number | null;
 };
 
 // Full-screen blocking loader
@@ -268,6 +268,9 @@ export default function GenerateSurvey() {
   >(null);
   const [isVendorSurveyMarkPublished, setIsVendorSurveyMarkPublished] =
     useState<boolean>(false);
+  // Add state for quota readiness
+  const [isQuotaComplete, setIsQuotaComplete] = useState(false);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 
   // API calls
   const {
@@ -602,6 +605,7 @@ export default function GenerateSurvey() {
       countryCode:
         rawQuotaConfig.country_code ?? rawQuotaConfig.countryCode ?? null,
       language: rawQuotaConfig.language ?? null,
+      exactPrice: rawQuotaConfig.exactPrice ?? null,
     }));
   }, [rawQuotaConfig]);
 
@@ -625,6 +629,35 @@ export default function GenerateSurvey() {
       screeningCriteria: {},
     }));
   }, [surveySettings.survey_send_by]);
+
+  // 🔥 LOCK FLOW IF PUBLISHED
+  useEffect(() => {
+    if (createdSurvey?.status === "PUBLISHED") {
+      setStep(6);
+    }
+  }, [createdSurvey?.status]);
+
+  // Callback implementations
+  const handleQuotaReady = (ready: boolean) => {
+    setIsQuotaComplete(ready);
+  };
+
+  // const handlePriceApproved = (approved: boolean, exactPrice?: number) => {
+  //   if (approved && exactPrice) {
+  //     // Mark DB "price approved"
+  //     markPriceApproved(createdSurvey.id!, exactPrice);
+  //   }
+  // };
+
+  // *** NEW: DB mark function ***
+  // const markPriceApproved = async (surveyId: string, price: number) => {
+  //   try {
+  //     // await quotaApi.markPriceApproved(surveyId, { approved: true, price });
+  //     toast.success("Price approved & saved!");
+  //   } catch (error) {
+  //     toast.error("Price approval failed");
+  //   }
+  // };
 
   // Generate questions when category and description are set
   // useEffect(() => {
@@ -704,6 +737,9 @@ export default function GenerateSurvey() {
     //   setStep(3);
     //   return;
     // }
+
+    // 🔥 Prevent navigation if published
+    if (createdSurvey?.status === "PUBLISHED") return;
     setStep(step - 1);
   };
 
@@ -719,6 +755,14 @@ export default function GenerateSurvey() {
     updatedQuotaAudience: EnhancedQuotaAudience,
   ) => {
     setQuotaAudience(updatedQuotaAudience);
+    // if (updatedQuotaAudience.exactPrice)
+    //   toast.success(`Exact quota cost: $${updatedQuotaAudience.exactPrice}`);
+  };
+
+  const handleOriginalQuotaChange = (
+    originalQuotaAudienceData: EnhancedQuotaAudience,
+  ) => {
+    setOriginalQuotaAudience(originalQuotaAudienceData);
   };
 
   const handleVendorAudienceUpdate = (
@@ -1257,95 +1301,6 @@ export default function GenerateSurvey() {
     }
   };
 
-  function buildEnhancedQuotaPayload(q: EnhancedQuotaAudience) {
-    // Adjust keys to your backend expectation
-    return {
-      enabled: q.enabled ?? false,
-      totalTarget: q.totalTarget ?? 0,
-      vendorId: q.vendorId ?? null,
-      countryCode: q.countryCode ?? null,
-      language: q.language ?? null,
-      screening: q.screening.map((s) => ({
-        questionId: s.questionId,
-        vendorQuestionId: s.vendorQuestionId ?? null,
-
-        optionTargets: (s.optionTargets ?? []).map((t) => ({
-          optionId: t.optionId,
-          vendorOptionId: t.vendorOptionId ?? null,
-          target: t.target,
-        })),
-
-        // NEW
-        buckets: (s.buckets ?? []).map((b) => ({
-          label: b.label ?? null,
-          operator: b.operator,
-          value: b.value,
-          target: b.target,
-        })),
-      })),
-    };
-  }
-
-  const handleManualQuotaUpdate = async (
-    surveyId: string,
-    q: EnhancedQuotaAudience,
-  ) => {
-    try {
-      console.log(">>>>> the value of the QUOTA AUDIENCE in STEP 4 is : ", q);
-
-      // If quota disabled -> skip saving quota
-      if (!q.enabled) {
-        console.log("Quota is disabled, skipping quota configuration");
-        nextStep();
-        return;
-      }
-
-      if (!q.totalTarget || q.totalTarget <= 0) {
-        toast.error(
-          "Total Responses Required is mandatory when quota is enabled",
-        );
-        return;
-      }
-
-      if (!q.screening || q.screening.length === 0) {
-        toast.error("Please select at least 1 screening question");
-        return;
-      }
-
-      const currentPayload = buildEnhancedQuotaPayload(q);
-      console.log(
-        ">>>>> the value of the CURRENT PAYLOAD is : ",
-        currentPayload,
-      );
-
-      const originalPayload = originalQuotaAudience
-        ? buildEnhancedQuotaPayload(originalQuotaAudience)
-        : null;
-      console.log(
-        ">>>>> the value of the ORIGINAL PAYLOAD is : ",
-        originalPayload,
-      );
-
-      const hasChanged =
-        !originalPayload || !deepEqual(currentPayload, originalPayload);
-      if (!hasChanged) {
-        console.log("No quota changes detected. Skipping updateQuota.");
-        nextStep();
-        return;
-      }
-
-      // IMPORTANT: update this call signature to match your API:
-      await quotaApi.updateQuota_v2(surveyId, currentPayload);
-
-      setOriginalQuotaAudience(JSON.parse(JSON.stringify(q)));
-      toast.success("Quota configuration updated");
-      nextStep();
-    } catch (error) {
-      console.error("Error updating quota:", error);
-      toast.error("Failed to update quota configuration");
-    }
-  };
-
   const handleVendorAudience = async (
     surveyId: string,
     vendorsAudience: VendorAudienceData,
@@ -1384,7 +1339,13 @@ export default function GenerateSurvey() {
         quotaAudience,
       );
 
-      await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+      // await handleManualQuotaUpdate(createdSurvey.id, quotaAudience);
+
+      if (quotaAudience.enabled && !isQuotaComplete) {
+        toast.error("Complete quota flow first.");
+        return;
+      }
+      nextStep(); // Safe now
 
       // Move to next step (Preview & Publish)
       // nextStep();
@@ -1913,7 +1874,11 @@ export default function GenerateSurvey() {
               />
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
-                <Button variant="outline" onClick={prevStep}>
+                <Button
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={createdSurvey?.status === "PUBLISHED"}
+                >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
@@ -2191,7 +2156,11 @@ export default function GenerateSurvey() {
               </div>
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
-                <Button variant="outline" onClick={prevStep}>
+                <Button
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={createdSurvey?.status === "PUBLISHED"}
+                >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
@@ -2209,14 +2178,21 @@ export default function GenerateSurvey() {
               <div>
                 <EnhancedQuotaAudienceSelector
                   key={surveySettings.survey_send_by}
-                  createdSurvey={createdSurvey}
+                  createdSurvey={{
+                    ...createdSurvey,
+                    questionsCount: questions.length,
+                  }}
                   surveySettings={surveySettings}
                   quotaAudience={quotaAudience}
+                  originalQuotaAudience={originalQuotaAudience}
+                  handleOriginalQuotaChange={handleOriginalQuotaChange}
                   onQuotaAudienceUpdate={handleQuotaAudienceUpdate}
                   onUserUniqueIdsUpdate={handleUserUniqueIdsUpdate}
                   categories={categories || []}
                   onValidationError={setQuotaValidationError}
                   isEditMode={isEditMode}
+                  onQuotaReady={handleQuotaReady}
+                  // onPriceApproved={handlePriceApproved}
                 />
                 {quotaValidationError && (
                   <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
@@ -2227,14 +2203,18 @@ export default function GenerateSurvey() {
               </div>
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
-                <Button variant="outline" onClick={prevStep}>
+                <Button
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={createdSurvey?.status === "PUBLISHED"}
+                >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
                 <Button
                   onClick={handleStep4Continue}
                   disabled={
-                    !!quotaValidationError || step4Loading
+                    !isQuotaComplete || !!quotaValidationError || step4Loading
                     // || disableContinuePreviewPublishForVendor
                   }
                   title={quotaValidationError ?? undefined}
@@ -2340,12 +2320,16 @@ export default function GenerateSurvey() {
               </Tabs>
 
               <div className="flex justify-between pt-8 border-t border-slate-200 mt-8">
-                <Button variant="outline" onClick={prevStep}>
+                <Button
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={createdSurvey?.status === "PUBLISHED"}
+                >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
                 <Button
-                  onClick={handlePublishSurvey}
+                  onClick={() => setShowPublishConfirm(true)}
                   size="lg"
                   disabled={publishLoading || publishLoadingOverlay}
                   className="bg-violet-600 hover:bg-violet-700"
@@ -2467,7 +2451,7 @@ export default function GenerateSurvey() {
                             className="bg-violet-600 hover:bg-violet-700"
                           >
                             <LinkIcon className="mr-2 h-4 w-4" />
-                            Mark as Published
+                            Mark Survey LIVE on Vendor
                           </Button>
                         </div>
                       ) : (
@@ -2562,6 +2546,42 @@ export default function GenerateSurvey() {
           )}
         </div>
       </div>
+
+      {/* 🔥 PUBLISH CONFIRMATION MODAL */}
+      {showPublishConfirm && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-3">
+              Confirm Publish
+            </h3>
+
+            <p className="text-sm text-slate-600 mb-6">
+              Once you publish this survey, it will become live and can no
+              longer be edited. You will not be able to return to previous steps
+              or modify questions, settings, or audience configuration.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowPublishConfirm(false)}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                className="bg-violet-600 hover:bg-violet-700"
+                onClick={async () => {
+                  setShowPublishConfirm(false);
+                  await handlePublishSurvey();
+                }}
+              >
+                Yes, Publish Survey
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
