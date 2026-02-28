@@ -2214,7 +2214,9 @@ export default function GenerateSurvey() {
                 <Button
                   onClick={handleStep4Continue}
                   disabled={
-                    !isQuotaComplete || !!quotaValidationError || step4Loading
+                    (!isQuotaComplete && isVendorFlow) ||
+                    !!quotaValidationError ||
+                    step4Loading
                     // || disableContinuePreviewPublishForVendor
                   }
                   title={quotaValidationError ?? undefined}

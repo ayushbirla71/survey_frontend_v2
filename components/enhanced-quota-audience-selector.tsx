@@ -373,6 +373,7 @@ export default function EnhancedQuotaAudienceSelector({
   const [numberOfDays, setNumberOfDays] = React.useState<number>(7); // Default 7 days Live
   const [isEstimating, setIsEstimating] = React.useState(false);
   const [isAddingQuota, setIsAddingQuota] = React.useState(false);
+  const [isQuotaFinalized, setIsQuotaFinalized] = React.useState(false);
 
   const [validationError, setValidationError] = React.useState<string | null>(
     null,
@@ -388,17 +389,22 @@ export default function EnhancedQuotaAudienceSelector({
 
   // Real-time validation for 7 fields
   const isAllFieldsFilled = React.useMemo(() => {
-    return !!(
-      vendorId &&
+    const baseFields =
       countryCode &&
       language &&
       quotaAudience.totalTarget &&
       quotaAudience.totalTarget > 0 &&
-      incidenceRate >= 0 &&
-      incidenceRate <= 100 &&
-      numberOfDays >= 1
-    );
+      numberOfDays >= 1;
+
+    if (isVendorFlow) {
+      return (
+        baseFields && vendorId && incidenceRate >= 0 && incidenceRate <= 100
+      );
+    }
+
+    return baseFields;
   }, [
+    isVendorFlow,
     vendorId,
     countryCode,
     language,
@@ -606,21 +612,24 @@ export default function EnhancedQuotaAudienceSelector({
   // Build payload for questions
   const questionsPayload: ScreeningQuestionsPayload | null =
     React.useMemo(() => {
-      if (flowStep !== "questions" || !quotaAudience.enabled) return null;
-      if (isVendorFlow && (!vendorId || !countryCode || !language)) return null;
-      if (!isVendorFlow && (!countryCode || !language)) return null;
-      return isVendorFlow
-        ? {
-            source: "VENDOR" as const,
-            vendorId: vendorId!,
-            countryCode,
-            language,
-          }
-        : { source: "SYSTEM" as const, countryCode, language };
+      if (!quotaAudience.enabled) return null;
+
+      // VENDOR FLOW → fetch only in questions step
+      if (isVendorFlow) {
+        if (flowStep !== "questions") return null;
+        if (!vendorId || !countryCode || !language) return null;
+
+        return { source: "VENDOR" as const, vendorId, countryCode, language };
+      }
+
+      // SYSTEM FLOW → fetch immediately when filters ready
+      if (!countryCode || !language) return null;
+
+      return { source: "SYSTEM" as const, countryCode, language };
     }, [
-      flowStep,
       quotaAudience.enabled,
       isVendorFlow,
+      flowStep,
       vendorId,
       countryCode,
       language,
@@ -749,7 +758,18 @@ export default function EnhancedQuotaAudienceSelector({
       return;
     }
 
-    if (!isAllFieldsFilled) return toast.error("Fill all 7 fields first.");
+    if (!isAllFieldsFilled) {
+      toast.error("Fill all 7 fields first.");
+      return;
+    }
+
+    // SYSTEM FLOW: Skip estimate completely
+    if (!isVendorFlow) {
+      setFlowStep("questions");
+      return;
+    }
+
+    // VENDOR FLOW CONTINUES NORMAL ESTIMATE
     setIsEstimating(true);
 
     try {
@@ -773,8 +793,8 @@ export default function EnhancedQuotaAudienceSelector({
       setFlowStep("estimate");
       toast.success("Estimate fetched successfully!");
     } catch (error) {
-      toast.error("Failed to fetch estimate. Check backend/InnovateMR.");
       console.error("Estimate error:", error);
+      toast.error("Failed to fetch estimate. Check backend/InnovateMR.");
     } finally {
       setIsEstimating(false);
     }
@@ -880,6 +900,8 @@ export default function EnhancedQuotaAudienceSelector({
 
   // Save Quota + Pricing API
   const handleSaveQuota = async () => {
+    if (isQuotaFinalized) return;
+
     if (validationError) {
       toast.error(validationError);
       return;
@@ -900,10 +922,20 @@ export default function EnhancedQuotaAudienceSelector({
 
       console.log(">>>>> SAVING the quota details.......");
 
+      if (!isVendorFlow) {
+        // SYSTEM FLOW: no pricing
+        setFlowStep("questions");
+        setIsQuotaFinalized(true);
+        onQuotaReady?.(true);
+        // toast.success("Quota saved successfully!");
+        return;
+      }
+
       if (!isChanged) {
         setExactPrice(quotaAudience.exactPrice || null);
         console.log(">>>>>> PRICE picked from DB.");
         setFlowStep("priced");
+        setIsQuotaFinalized(true);
         // Notify parent Preview btn is ready
         // onQuotaReady?.(true);
 
@@ -917,7 +949,7 @@ export default function EnhancedQuotaAudienceSelector({
       setExactPrice(priceRes.data?.data?.exactAmount || null);
       // setIsQuotaSaved(true);
       setFlowStep("priced");
-
+      setIsQuotaFinalized(true);
       // Notify parent Preview btn is ready
       onQuotaReady?.(true);
 
@@ -1315,23 +1347,25 @@ export default function EnhancedQuotaAudienceSelector({
             {/* TOP: ALWAYS 7 FIELDS + Check Estimate */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 border rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50">
               {/* Vendor */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
-                  Vendor *
-                </label>
-                <select
-                  value={vendorId || ""}
-                  onChange={(e) => handleVendorChange(e.target.value)}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Vendor</option>
-                  {vendorsQuery.data?.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {isVendorFlow && (
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-800">
+                    Vendor *
+                  </label>
+                  <select
+                    value={vendorId || ""}
+                    onChange={(e) => handleVendorChange(e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Vendor</option>
+                    {vendorsQuery.data?.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Country */}
               <div>
@@ -1383,26 +1417,28 @@ export default function EnhancedQuotaAudienceSelector({
               </div>
 
               {/* Incidence Rate */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
-                  Incidence Rate * (0-100)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={incidenceRate}
-                  onChange={(e) =>
-                    setIncidenceRate(
-                      Math.max(
-                        0,
-                        Math.min(100, parseInt(e.target.value) || 80),
-                      ),
-                    )
-                  }
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {isVendorFlow && (
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-800">
+                    Incidence Rate * (0-100)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={incidenceRate}
+                    onChange={(e) =>
+                      setIncidenceRate(
+                        Math.max(
+                          0,
+                          Math.min(100, parseInt(e.target.value) || 80),
+                        ),
+                      )
+                    }
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
 
               {/* Length of Survey (read-only) */}
               <div>
@@ -1439,38 +1475,51 @@ export default function EnhancedQuotaAudienceSelector({
 
             {/*  Check Estimate - DISABLED until 7 fields filled */}
             <div className="flex justify-center">
-              <Button
-                size="lg"
-                onClick={handleCheckEstimate}
-                disabled={
-                  !isAllFieldsFilled ||
-                  isEstimating ||
-                  !!validationError ||
-                  !hasEstimateInputsChanged
-                }
-                className="px-12 py-4 text-lg font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isEstimating ? "Estimating..." : "Check Estimate"}
-              </Button>
-            </div>
-
-            {/* Estimate Display + Add Questions btn */}
-            {flowStep === "estimate" && estimateCost !== null && (
-              <div className="text-center p-12 bg-gradient-to-r from-green-50 to-emerald-50 border-4 border-emerald-200 rounded-2xl">
-                <div className="text-4xl font-black text-emerald-800 mb-4">
-                  $${estimateCost.toLocaleString()}
-                </div>
-                <p className="text-xl text-gray-700 mb-8">Estimated Cost</p>
+              {isVendorFlow ? (
                 <Button
                   size="lg"
-                  onClick={handleAddQuotaQuestions}
-                  disabled={!!validationError}
-                  className="px-12 py-4 text-lg"
+                  onClick={handleCheckEstimate}
+                  disabled={
+                    !isAllFieldsFilled ||
+                    isEstimating ||
+                    !!validationError ||
+                    !hasEstimateInputsChanged
+                  }
+                  className="px-12 py-4 text-lg font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isEstimating ? "Estimating..." : "Check Estimate"}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleCheckEstimate}
+                  disabled={!isAllFieldsFilled || !!validationError}
+                  className="px-12 py-4 text-lg font-bold"
                 >
                   Add Quota Questions →
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Estimate Display + Add Questions btn */}
+            {isVendorFlow &&
+              flowStep === "estimate" &&
+              estimateCost !== null && (
+                <div className="text-center p-12 bg-gradient-to-r from-green-50 to-emerald-50 border-4 border-emerald-200 rounded-2xl">
+                  <div className="text-4xl font-black text-emerald-800 mb-4">
+                    $${estimateCost.toLocaleString()}
+                  </div>
+                  <p className="text-xl text-gray-700 mb-8">Estimated Cost</p>
+                  <Button
+                    size="lg"
+                    onClick={handleAddQuotaQuestions}
+                    disabled={!!validationError}
+                    className="px-12 py-4 text-lg"
+                  >
+                    Add Quota Questions →
+                  </Button>
+                </div>
+              )}
 
             {/* Questions EXACTLY after Add btn, BEFORE Save btn */}
             {flowStep === "questions" && (
@@ -1928,7 +1977,7 @@ export default function EnhancedQuotaAudienceSelector({
             )}
 
             {/* Save btn ALWAYS at bottom of questions section */}
-            {flowStep === "questions" && (
+            {flowStep === "questions" && !isQuotaFinalized && (
               <div className="flex justify-center pt-8 pb-12 border-t">
                 <Button
                   size="lg"
@@ -1946,8 +1995,20 @@ export default function EnhancedQuotaAudienceSelector({
               </div>
             )}
 
+            {isQuotaFinalized && (
+              <div className="text-center p-8 bg-green-50 border-2 border-green-300 rounded-xl mt-6">
+                <div className="text-2xl font-bold text-green-700 mb-2">
+                  ✅ Quota Saved Successfully
+                </div>
+                <p className="text-gray-700">
+                  Preview & Publish button is now enabled. You can proceed to
+                  the next step.
+                </p>
+              </div>
+            )}
+
             {/* Final Exact Price display */}
-            {flowStep === "priced" && exactPrice !== null && (
+            {isVendorFlow && flowStep === "priced" && exactPrice !== null && (
               <div className="text-center p-12 bg-gradient-to-r from-purple-50 to-violet-50 border-4 border-violet-200 rounded-2xl">
                 <div className="text-4xl font-black text-violet-800 mb-4">
                   $${exactPrice.toLocaleString()}
