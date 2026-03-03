@@ -369,7 +369,7 @@ export default function EnhancedQuotaAudienceSelector({
   const [exactPrice, setExactPrice] = React.useState<number | null>(null);
   // const [isQuotaSaved, setIsQuotaSaved] = React.useState(false); // Tracks Save Quota clicked
   const [incidenceRate, setIncidenceRate] = React.useState<number>(80); // 0-100 default 80
-  const [lengthOfSurvey, setLengthOfSurvey] = React.useState<number>(10); // Default; parent passes question count
+  const [lengthOfSurvey, setLengthOfSurvey] = React.useState<number>(2); // Default; parent passes question count
   const [numberOfDays, setNumberOfDays] = React.useState<number>(7); // Default 7 days Live
   const [isEstimating, setIsEstimating] = React.useState(false);
   const [isAddingQuota, setIsAddingQuota] = React.useState(false);
@@ -384,7 +384,7 @@ export default function EnhancedQuotaAudienceSelector({
   // Use prop questionCount, fallback to 10
   const questionCount = createdSurvey.questionsCount || 10;
   React.useEffect(() => {
-    setLengthOfSurvey(questionCount);
+    setLengthOfSurvey(Math.max(1, Math.round(questionCount * 0.2)));
   }, [questionCount]);
 
   // Real-time validation for 7 fields
