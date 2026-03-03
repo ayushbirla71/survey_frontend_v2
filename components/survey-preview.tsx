@@ -724,48 +724,7 @@ export default function SurveyPreview({
                 </div>
               )}
 
-              {/* linear scale */}
               {/* {kind === "linear scale" && (
-                <div className="space-y-2">
-                  {(() => {
-                    const { min, max, fromLabel, toLabel } =
-                      extractScaleSpec(q);
-                    const count = Math.max(1, max - min + 1);
-
-                    return (
-                      <>
-                        <div className="flex items-center gap-2">
-                          {Array.from({ length: count }).map((_, i) => {
-                            const value = min + i;
-
-                            return (
-                              <button
-                                key={`${q.id}-ls-${value}`}
-                                type="button"
-                                disabled
-                                className={[
-                                  "h-10 w-10 rounded-md border text-sm font-medium",
-                                  "cursor-not-allowed select-none",
-                                ].join(" ")}
-                              >
-                                {value}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {(fromLabel || toLabel) && (
-                          <div className="flex justify-between text-xs text-slate-500">
-                            <span>{fromLabel}</span>
-                            <span>{toLabel}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )} */}
-              {kind === "linear scale" && (
                 <div className="space-y-2">
                   {(() => {
                     const { min, max, fromLabel, toLabel } =
@@ -792,6 +751,57 @@ export default function SurveyPreview({
                                 className={[
                                   "h-10 w-10 rounded-md border text-sm font-medium",
                                   "cursor-not-allowed select-none hover:bg-violet-700",
+                                ].join(" ")}
+                              >
+                                {val}
+                              </Button>
+                            ))}
+                          </div>
+                          {toLabel && (
+                            <span className="text-sm text-slate-600">
+                              {toLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )} */}
+
+              {kind === "linear scale" && (
+                <div className="space-y-2 w-full">
+                  {" "}
+                  {(() => {
+                    const { min, max, fromLabel, toLabel } =
+                      extractScaleSpec(q);
+                    const scaleValues = [];
+                    for (let i = min; i <= max; i++) {
+                      scaleValues.push(i);
+                    }
+
+                    return (
+                      <div className="space-y-3 w-full">
+                        {" "}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+                          {" "}
+                          {fromLabel && (
+                            <span className="text-sm text-slate-600">
+                              {fromLabel}
+                            </span>
+                          )}
+                          <div className="flex flex-wrap justify-center gap-2 w-full sm:w-auto">
+                            {" "}
+                            {scaleValues.map((val) => (
+                              <Button
+                                key={`${q.id}-ls-${val}`}
+                                type="button"
+                                variant="ghost"
+                                disabled
+                                className={[
+                                  "min-w-[40px] h-[40px] font-medium",
+                                  "bg-slate-100 text-slate-700",
+                                  "cursor-not-allowed select-none",
                                 ].join(" ")}
                               >
                                 {val}
@@ -863,7 +873,7 @@ export default function SurveyPreview({
               )}
 
               {/* nps */}
-              {kind === "nps" && (
+              {/* {kind === "nps" && (
                 <div className="space-y-3">
                   <div className="flex gap-2 flex-wrap">
                     {Array.from({ length: 11 }, (_, i) => i).map((val) => (
@@ -878,6 +888,42 @@ export default function SurveyPreview({
                     ))}
                   </div>
                   <div className="flex justify-between text-sm text-slate-600">
+                    <span>Not at all likely</span>
+                    <span>Extremely likely</span>
+                  </div>
+                </div>
+              )} */}
+              {/* nps */}
+              {kind === "nps" && (
+                <div className="space-y-4 w-full">
+                  {" "}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {" "}
+                    {Array.from({ length: 11 }, (_, i) => i).map((val) => {
+                      let bgColor = "";
+                      if (val <= 6) bgColor = "bg-red-100 text-red-700";
+                      else if (val <= 8)
+                        bgColor = "bg-yellow-100 text-yellow-700";
+                      else bgColor = "bg-green-100 text-green-700";
+
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          disabled
+                          className={[
+                            "min-w-[48px] h-[48px] font-medium rounded-md",
+                            bgColor,
+                            "cursor-not-allowed select-none opacity-80",
+                          ].join(" ")}
+                        >
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600 px-1">
+                    {" "}
                     <span>Not at all likely</span>
                     <span>Extremely likely</span>
                   </div>

@@ -1191,7 +1191,7 @@ export default function PublicSurveyPage() {
   const handleNext = () => {
     const currentQuestion = survey?.questions[currentQuestionIndex];
     if (currentQuestion?.required && !isQuestionAnswered(currentQuestion)) {
-      toast.error("This question is required");
+      toast.info("This question is required");
       return;
     }
 
