@@ -42,13 +42,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname();
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/auth/login", "/auth/admin-signup"];
+  const publicRoutes = ["/auth/login"];
   const publicRoutePrefixes = ["/survey/", "/survey-results/"]; // anything starting with /survey/ is public
-  const adminRoutesPrefixes = ["/admin"];
+  const adminRoutesPrefixes = ["/admin", "/auth/admin-signup"];
   // ✅ Check if the route is public
 
   // 🔹 Auth routes = only login/signup
-  const authRoutes = ["/auth/login", "/auth/admin-signup"];
+  const authRoutes = ["/auth/login"];
 
   const isPublicRoute =
     publicRoutes.includes(pathname) ||
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const isAuthRoute = authRoutes.includes(pathname);
 
   const isAdminRoute = adminRoutesPrefixes.some((prefix) =>
-    pathname.startsWith(prefix)
+    pathname.startsWith(prefix),
   );
 
   useEffect(() => {

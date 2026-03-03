@@ -399,6 +399,8 @@ interface GridQuestionProps {
   cols: { id: string; text: string }[];
   answer: any;
   handleAnswerChange: (questionId: string, value: any) => void;
+  currentRowIndex: number;
+  setCurrentRowIndex: React.Dispatch<React.SetStateAction<number>>;
 }
 
 function MultiChoiceGridQuestion({
@@ -407,9 +409,11 @@ function MultiChoiceGridQuestion({
   cols,
   answer,
   handleAnswerChange,
+  currentRowIndex,
+  setCurrentRowIndex,
 }: GridQuestionProps) {
   const gridAnswer = (answer as Record<string, string>) || {};
-  const [currentRowIndex, setCurrentRowIndex] = useState(0);
+  // const [currentRowIndex, setCurrentRowIndex] = useState(0);
   const totalRows = rows.length;
 
   // Safety check: ensure rows exist and currentRowIndex is valid
@@ -531,9 +535,11 @@ function CheckboxGridQuestion({
   cols,
   answer,
   handleAnswerChange,
+  currentRowIndex,
+  setCurrentRowIndex,
 }: GridQuestionProps) {
   const gridAnswer = (answer as Record<string, string[]>) || {};
-  const [currentRowIndex, setCurrentRowIndex] = useState(0);
+  // const [currentRowIndex, setCurrentRowIndex] = useState(0);
   const totalRows = rows.length;
 
   // Safety check: ensure rows exist and currentRowIndex is valid
@@ -743,6 +749,8 @@ export default function PublicSurveyPage() {
   const [loading, setLoading] = useState(false); // Changed to false - loading happens during button animation
   const [error, setError] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  // track grid row index from parent
+  const [currentGridRowIndex, setCurrentGridRowIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -771,6 +779,11 @@ export default function PublicSurveyPage() {
   const [isTestUrl, setIsTestUrl] = useState(false);
 
   const hasScreeningQuestions = screeningQuestions.length > 0;
+
+  // reset grid row when question changes
+  useEffect(() => {
+    setCurrentGridRowIndex(0);
+  }, [currentQuestionIndex]);
 
   // Load all data when start page mounts (during button animation)
   useEffect(() => {
@@ -1472,6 +1485,50 @@ export default function PublicSurveyPage() {
       );
     }
 
+    // // Linear scale
+    // if (kind === "linear scale") {
+    //   const opt = opts[0];
+    //   const min = opt?.rangeFrom ?? 1;
+    //   const max = opt?.rangeTo ?? 5;
+    //   const fromLabel = opt?.fromLabel ?? "";
+    //   const toLabel = opt?.toLabel ?? "";
+
+    //   const scaleValues = [];
+    //   for (let i = min; i <= max; i++) {
+    //     scaleValues.push(i);
+    //   }
+
+    //   return (
+    //     <div className="space-y-3">
+    //       <div className="flex items-center justify-between gap-2">
+    //         {fromLabel && (
+    //           <span className="text-sm text-slate-600">{fromLabel}</span>
+    //         )}
+    //         <div className="flex gap-2">
+    //           {scaleValues.map((val) => (
+    //             <Button
+    //               key={val}
+    //               type="button"
+    //               variant={answer === val ? "default" : "outline"}
+    //               className={
+    //                 answer === val
+    //                   ? "bg-violet-600 hover:bg-violet-700"
+    //                   : "hover:bg-slate-100"
+    //               }
+    //               onClick={() => handleAnswerChange(question.id, val)}
+    //             >
+    //               {val}
+    //             </Button>
+    //           ))}
+    //         </div>
+    //         {toLabel && (
+    //           <span className="text-sm text-slate-600">{toLabel}</span>
+    //         )}
+    //       </div>
+    //     </div>
+    //   );
+    // }
+
     // Linear scale
     if (kind === "linear scale") {
       const opt = opts[0];
@@ -1486,22 +1543,28 @@ export default function PublicSurveyPage() {
       }
 
       return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
+        <div className="space-y-3 w-full overflow-hidden">
+          {" "}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+            {" "}
             {fromLabel && (
-              <span className="text-sm text-slate-600">{fromLabel}</span>
+              <span className="text-sm text-slate-600 text-left sm:text-left">
+                {" "}
+                {fromLabel}
+              </span>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-center gap-2 w-full sm:w-auto">
+              {" "}
               {scaleValues.map((val) => (
                 <Button
                   key={val}
                   type="button"
                   variant={answer === val ? "default" : "outline"}
-                  className={
+                  className={`min-w-[40px] ${
                     answer === val
                       ? "bg-violet-600 hover:bg-violet-700"
                       : "hover:bg-slate-100"
-                  }
+                  }`}
                   onClick={() => handleAnswerChange(question.id, val)}
                 >
                   {val}
@@ -1509,7 +1572,10 @@ export default function PublicSurveyPage() {
               ))}
             </div>
             {toLabel && (
-              <span className="text-sm text-slate-600">{toLabel}</span>
+              <span className="text-sm text-slate-600 text-right sm:text-right">
+                {" "}
+                {toLabel}
+              </span>
             )}
           </div>
         </div>
@@ -1593,6 +1659,8 @@ export default function PublicSurveyPage() {
           cols={cols}
           answer={answer}
           handleAnswerChange={handleAnswerChange}
+          currentRowIndex={currentGridRowIndex}
+          setCurrentRowIndex={setCurrentGridRowIndex}
         />
       );
       // return (
@@ -1698,6 +1766,8 @@ export default function PublicSurveyPage() {
           cols={cols}
           answer={answer}
           handleAnswerChange={handleAnswerChange}
+          currentRowIndex={currentGridRowIndex}
+          setCurrentRowIndex={setCurrentGridRowIndex}
         />
       );
     }
@@ -1739,28 +1809,71 @@ export default function PublicSurveyPage() {
       );
     }
 
+    // // NPS (Net Promoter Score)
+    // if (kind === "nps") {
+    //   return (
+    //     <div className="space-y-3">
+    //       <div className="flex gap-2 flex-wrap">
+    //         {Array.from({ length: 11 }, (_, i) => i).map((val) => (
+    //           <Button
+    //             key={val}
+    //             type="button"
+    //             variant={answer === val ? "default" : "outline"}
+    //             className={
+    //               answer === val
+    //                 ? "bg-violet-600 hover:bg-violet-700 min-w-[48px]"
+    //                 : "hover:bg-slate-100 min-w-[48px]"
+    //             }
+    //             onClick={() => handleAnswerChange(question.id, val)}
+    //           >
+    //             {val}
+    //           </Button>
+    //         ))}
+    //       </div>
+    //       <div className="flex justify-between text-sm text-slate-600">
+    //         <span>Not at all likely</span>
+    //         <span>Extremely likely</span>
+    //       </div>
+    //     </div>
+    //   );
+    // }
+
     // NPS (Net Promoter Score)
     if (kind === "nps") {
       return (
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            {Array.from({ length: 11 }, (_, i) => i).map((val) => (
-              <Button
-                key={val}
-                type="button"
-                variant={answer === val ? "default" : "outline"}
-                className={
+        <div className="space-y-4 w-full">
+          {/* Scale */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {Array.from({ length: 11 }, (_, i) => i).map((val) => {
+              let bgColor = "";
+              if (val <= 6) bgColor = "bg-red-100 text-red-700";
+              else if (val <= 8) bgColor = "bg-yellow-100 text-yellow-700";
+              else bgColor = "bg-green-100 text-green-700";
+
+              return (
+                <Button
+                  key={val}
+                  type="button"
+                  variant="ghost"
+                  className={`
+                min-w-[48px] h-[48px] font-medium
+                ${bgColor}
+                ${
                   answer === val
-                    ? "bg-violet-600 hover:bg-violet-700 min-w-[48px]"
-                    : "hover:bg-slate-100 min-w-[48px]"
+                    ? "ring-2 ring-violet-600 ring-offset-2 scale-105"
+                    : "hover:opacity-80"
                 }
-                onClick={() => handleAnswerChange(question.id, val)}
-              >
-                {val}
-              </Button>
-            ))}
+              `}
+                  onClick={() => handleAnswerChange(question.id, val)}
+                >
+                  {val}
+                </Button>
+              );
+            })}
           </div>
-          <div className="flex justify-between text-sm text-slate-600">
+
+          {/* Labels */}
+          <div className="flex justify-between text-sm text-slate-600 px-1">
             <span>Not at all likely</span>
             <span>Extremely likely</span>
           </div>
@@ -1903,7 +2016,7 @@ export default function PublicSurveyPage() {
             {survey && (
               <p className="text-center text-slate-500 text-sm mt-4">
                 Estimated time:{" "}
-                {Math.max(1, Math.ceil(survey.questions.length * 0.5))} minutes
+                {Math.max(1, Math.round(survey.questions.length * 0.2))} minutes
               </p>
             )}
           </CardContent>
@@ -2119,6 +2232,11 @@ export default function PublicSurveyPage() {
       ? (answeredCount / survey.questions.length) * 100
       : 0;
 
+  const currentKind = normalizeKind(currentQuestion);
+  console.log(">>>> the value of the CURRENT KIND is : ", currentKind);
+  const isGridQuestion =
+    currentKind === "multi-choice grid" || currentKind === "checkbox grid";
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
@@ -2164,7 +2282,7 @@ export default function PublicSurveyPage() {
             {renderQuestionInput(currentQuestion)}
 
             {/* Navigation Buttons */}
-            <div className="flex justify-between pt-6 border-t border-slate-200">
+            {/* <div className="flex justify-between pt-6 border-t border-slate-200">
               <Button
                 variant="outline"
                 onClick={handlePrevious}
@@ -2195,7 +2313,50 @@ export default function PublicSurveyPage() {
                   </>
                 )}
               </Button>
-            </div>
+            </div> */}
+
+            {/* Navigation Buttons */}
+            {(!isGridQuestion ||
+              (isGridQuestion &&
+                currentGridRowIndex ===
+                  (currentQuestion.rowOptions?.length ??
+                    currentQuestion.options?.[0]?.rowOptions?.length ??
+                    0) -
+                    1)) && (
+              <div className="flex justify-between pt-6 border-t border-slate-200">
+                <Button
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentQuestionIndex === 0 || submitting}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Previous
+                </Button>
+
+                <Button
+                  onClick={handleNext}
+                  disabled={submitting}
+                  className="bg-violet-600 hover:bg-violet-700"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : currentQuestionIndex === survey.questions.length - 1 ? (
+                    <>
+                      Submit
+                      <CheckCircle className="ml-2 h-4 w-4" />
+                    </>
+                  ) : (
+                    <>
+                      Next
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

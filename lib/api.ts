@@ -36,9 +36,10 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  mobile_no?: string;
+  mobile_no: string;
   role: "USER" | "SYSTEM_ADMIN";
   theme: "LIGHT" | "DARK";
+  is_blocked?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -502,6 +503,77 @@ export const authApi = {
     // This would typically decode the JWT token or call a /me endpoint
     // For now, return null - implement based on your auth strategy
     return null;
+  },
+};
+
+export const usersApi = {
+  // GET /api/auth/getAllUsers
+  getUsers: async (
+    page: number,
+    limit: number,
+  ): Promise<
+    ApiResponse<{
+      message: string;
+      data: any;
+      meta: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+      };
+    }>
+  > => {
+    return apiRequest(
+      `/api/auth/getAllUsers?${new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      }).toString()}`,
+      {
+        method: "GET",
+      },
+    );
+  },
+
+  // POST /api/auth/createUser
+  createUser: async (createForm: {
+    name: string;
+    email: string;
+    mobile_no: string;
+    password: string;
+    role: string;
+    theme: string;
+  }): Promise<ApiResponse<{ message: string; data: any }>> => {
+    return apiRequest("/api/auth/createUser", {
+      method: "POST",
+      body: JSON.stringify(createForm),
+    });
+  },
+
+  // PATCH /api/auth/updateUser
+  updateUser: async (
+    userId: string,
+    updateData: {
+      name: string;
+      mobile_no: string;
+      role: string;
+      theme: string;
+    },
+  ): Promise<ApiResponse<{ message: string; data: any }>> => {
+    return apiRequest(`/api/auth/updateUser/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(updateData),
+    });
+  },
+
+  // PATCH /api/auth/toggleUserBlocked
+  toggleUserBlocked: async (
+    userId: string,
+    is_blocked: boolean,
+  ): Promise<ApiResponse<{ message: string; data: any }>> => {
+    return apiRequest(`/api/auth/toggleUserBlocked/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_blocked }),
+    });
   },
 };
 

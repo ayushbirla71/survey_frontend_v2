@@ -24,6 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { useMutation } from "@/hooks/useApi";
+import { toast } from "react-toastify";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -98,17 +99,21 @@ export default function SignupPage() {
       };
 
       const result = await signup(signupData);
+      toast.success("Account created successfully.");
 
-      if (result) {
-        // Store the JWT token
-        authApi.setAuthToken(result.token);
+      // Redirect to dashboard
+      router.push("/");
 
-        // Store user info in localStorage for easy access
-        localStorage.setItem("user", JSON.stringify(result.user));
+      // if (result) {
+      //   // Store the JWT token
+      //   authApi.setAuthToken(result.token);
 
-        // Redirect to dashboard
-        router.push("/");
-      }
+      //   // Store user info in localStorage for easy access
+      //   localStorage.setItem("user", JSON.stringify(result.user));
+
+      //   // Redirect to dashboard
+      //   router.push("/");
+      // }
     } catch (err) {
       console.error("Signup failed:", err);
     }
@@ -276,10 +281,10 @@ export default function SignupPage() {
                         passwordStrength.strength === 1
                           ? "w-1/3 bg-red-500"
                           : passwordStrength.strength === 2
-                          ? "w-2/3 bg-yellow-500"
-                          : passwordStrength.strength === 3
-                          ? "w-full bg-green-500"
-                          : "w-0"
+                            ? "w-2/3 bg-yellow-500"
+                            : passwordStrength.strength === 3
+                              ? "w-full bg-green-500"
+                              : "w-0"
                       }`}
                     />
                   </div>

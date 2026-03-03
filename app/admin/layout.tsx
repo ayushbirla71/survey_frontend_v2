@@ -33,6 +33,18 @@ export default function AdminLayout({
             </li>
             <li>
               <Link
+                href="/admin/manage-users"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/admin/manage-users"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Manage Users
+              </Link>
+            </li>
+            <li>
+              <Link
                 href="/admin/vendors"
                 className={`block py-2 px-4 rounded-lg transition-colors ${
                   pathname === "/admin/vendors"
