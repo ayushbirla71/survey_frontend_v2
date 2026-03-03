@@ -941,7 +941,7 @@ export default function PublicSurveyPage() {
         setIsSurveyInProgress(true);
         setIsQualified(true);
         setScreeningPhase(false);
-        toast.success("You qualify for this survey!");
+        // toast.success("You qualify for this survey!");
 
         return true;
       }
@@ -1002,7 +1002,7 @@ export default function PublicSurveyPage() {
         setIsSurveyInProgress(true);
         setIsQualified(true);
         setScreeningPhase(false);
-        toast.success("You qualify for this survey!");
+        // toast.success("You qualify for this survey!");
 
         return true;
       } else {
@@ -1191,7 +1191,7 @@ export default function PublicSurveyPage() {
   const handleNext = () => {
     const currentQuestion = survey?.questions[currentQuestionIndex];
     if (currentQuestion?.required && !isQuestionAnswered(currentQuestion)) {
-      toast.error("This question is required");
+      toast.info("This question is required");
       return;
     }
 
@@ -1230,7 +1230,7 @@ export default function PublicSurveyPage() {
       console.log("Skipping Saving the RESPONSE for the test Surveys.");
       setIsSurveyInProgress(false);
       setSubmitted(true);
-      toast.success("Survey submitted successfully!");
+      // toast.success("Survey submitted successfully!");
       return;
     }
 
@@ -1337,7 +1337,7 @@ export default function PublicSurveyPage() {
 
         setIsSurveyInProgress(false);
         setSubmitted(true);
-        toast.success("Survey submitted successfully!");
+        // toast.success("Survey submitted successfully!");
 
         if (shouldAutoRestart) {
           setTimeout(() => {
@@ -1355,7 +1355,7 @@ export default function PublicSurveyPage() {
       // }
     } catch (err: any) {
       console.error("Error submitting survey:", err);
-      toast.error(err.message || "Failed to submit survey");
+      // toast.error(err.message || "Failed to submit survey");
     } finally {
       setSubmitting(false);
     }

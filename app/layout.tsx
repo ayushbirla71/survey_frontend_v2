@@ -10,7 +10,13 @@ import Providers from "./providers";
 export const metadata = {
   title: "Survey.AI - Survey Generation Platform",
   description: "Generate and manage surveys with AI",
+  keywords: ["nextjs", "seo", "metadata"],
   generator: "v0.dev",
+  icons: {
+    icon: "./demokrito-logo.png",
+    shortcut: "./demokrito-logo.png",
+    apple: "./demokrito-logo.png",
+  },
 };
 
 export default function RootLayout({
