@@ -937,7 +937,7 @@ export default function EnhancedQuotaAudienceSelector({
         setFlowStep("priced");
         setIsQuotaFinalized(true);
         // Notify parent Preview btn is ready
-        // onQuotaReady?.(true);
+        onQuotaReady?.(true);
 
         return;
       }
