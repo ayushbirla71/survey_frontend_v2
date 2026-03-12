@@ -734,6 +734,8 @@ function redirectVendor(shareTokenId: string, respondent_id: string | null) {
   return `${process.env.NEXT_PUBLIC_API_URL}/api/quota/terminate_v2?shareToken=${shareTokenId}&respondent_id=${respondent_id}`;
 }
 
+let globalIsSurveyInProgress = false;
+
 export default function PublicSurveyPage() {
   const params = useParams();
   const router = useRouter();
@@ -875,23 +877,36 @@ export default function PublicSurveyPage() {
     loadAllData();
   }, [token]);
 
-  // PREVENT CLOSING of Tab without CONSENT
-  useEffect(() => {
-    if (!isSurveyInProgress) return;
+  const SetIsSurveyInProgress = (e: boolean) => {
+    globalIsSurveyInProgress = e;
+    setIsSurveyInProgress(e);
+  };
 
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
+  // if (!isSurveyInProgress) return;
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    event.preventDefault();
+    event.returnValue = "";
+  };
 
-    const handleUnload = () => {
-      // user abandoned mid-survey
-      navigator.sendBeacon(redirectVendor(token, respondentId));
-    };
+  const handleUnload = () => {
+    // user abandoned mid-survey
+    navigator.sendBeacon(redirectVendor(token, respondentId));
+  };
+
+  const preventReload = () => {
+    if (!globalIsSurveyInProgress) {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("unload", handleUnload);
+      return;
+    }
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("unload", handleUnload);
+  };
 
+  // PREVENT CLOSING of Tab without CONSENT
+  useEffect(() => {
+    preventReload();
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("unload", handleUnload);
@@ -938,7 +953,7 @@ export default function PublicSurveyPage() {
           ">>>> Skipping Checking the quota Qualification for the TEST Survey.",
         );
         setRespondentId(null);
-        setIsSurveyInProgress(true);
+        SetIsSurveyInProgress(true);
         setIsQualified(true);
         setScreeningPhase(false);
         // toast.success("You qualify for this survey!");
@@ -999,14 +1014,14 @@ export default function PublicSurveyPage() {
 
       if (result.data?.qualified) {
         setRespondentId(result.data?.respondent_id ?? null);
-        setIsSurveyInProgress(true);
+        SetIsSurveyInProgress(true);
         setIsQualified(true);
         setScreeningPhase(false);
         // toast.success("You qualify for this survey!");
 
         return true;
       } else {
-        setIsSurveyInProgress(false);
+        SetIsSurveyInProgress(false);
         if (result.data?.status == "QUOTA_FULL") {
           if (result.data.redirect_url) {
             window.location.href = result.data.redirect_url;
@@ -1218,17 +1233,17 @@ export default function PublicSurveyPage() {
     setScreeningAnswers({});
     setCurrentScreeningIndex(0);
 
-    setIsSurveyInProgress(false);
+    SetIsSurveyInProgress(false);
     // DO NOT TOUCH: surveySettings, survey, etc.
   };
 
   const handleSubmit = async () => {
     if (!survey) return;
+    SetIsSurveyInProgress(false);
 
     // Will not save the Response for the TEST URL
     if (isTestUrl) {
       console.log("Skipping Saving the RESPONSE for the test Surveys.");
-      setIsSurveyInProgress(false);
       setSubmitted(true);
       // toast.success("Survey submitted successfully!");
       return;
@@ -1335,7 +1350,6 @@ export default function PublicSurveyPage() {
           }
         }
 
-        setIsSurveyInProgress(false);
         setSubmitted(true);
         // toast.success("Survey submitted successfully!");
 
