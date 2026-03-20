@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 // app/admin/vendors/types.ts (optional)
 
-const VENDOR_KEYS: VendorKey[] = ["INNOVATEMR", "INNOVATEMR_TEST"];
+const VENDOR_KEYS: VendorKey[] = ["INNOVATEMR", "INNOVATEMR_TEST", "SURVEY96"];
 
 const AUTH_TYPES: VendorAuthType[] = ["API_KEY", "BASIC", "OAUTH2", "CUSTOM"];
 
