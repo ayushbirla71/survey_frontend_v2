@@ -48,6 +48,9 @@ export default function VendorsPage() {
   const [fetchingQuestions, setFetchingQuestions] = useState<
     Record<string, boolean>
   >({});
+  const [updatingQuestions, setUpdatingQuestions] = useState<
+    Record<string, boolean>
+  >({});
 
   // Load vendors on mount
   useEffect(() => {
@@ -200,6 +203,29 @@ export default function VendorsPage() {
     }
   };
 
+  const handleUpdateQuestionsLibrary = async (vendor: any) => {
+    try {
+      setError(null);
+      setUpdatingQuestions((prev) => ({ ...prev, [vendor.id]: true }));
+
+      console.log(">>>>> the value of VENDOR is : ", vendor);
+
+      const res = await screeningQuestionsApi.updateScreeningQuestionsList({
+        source: "VENDOR",
+        vendorId: vendor.id,
+        countryCode: "IN",
+        language: "ENGLISH",
+      });
+      console.log(">>>>> the value of the VENDOR QUESTIONS is : ", res);
+      toast.success("Updated successfully.");
+      fetchVendors();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to update questions");
+    } finally {
+      setUpdatingQuestions((prev) => ({ ...prev, [vendor.id]: false }));
+    }
+  };
+
   const currentVendorConfigs: VendorApiConfig[] =
     selectedVendor?.api_configs ?? [];
 
@@ -224,7 +250,7 @@ export default function VendorsPage() {
       {loading ? (
         <p>Loading vendors...</p>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-6">
           {/* Vendors list */}
           <div className="bg-white rounded-xl shadow-md overflow-hidden">
             <table className="w-full text-sm">
@@ -244,6 +270,9 @@ export default function VendorsPage() {
                   </th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">
                     Questions Library
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                    Re-fetch Questions
                   </th>
                 </tr>
               </thead>
@@ -312,6 +341,20 @@ export default function VendorsPage() {
                             : "Fetch"}
                         </Button>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        type="button"
+                        disabled={!!updatingQuestions[vendor.id]}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateQuestionsLibrary(vendor);
+                        }}
+                      >
+                        {updatingQuestions[vendor.id]
+                          ? "Fetching..."
+                          : "Re-fetch"}
+                      </Button>
                     </td>
                   </tr>
                 ))}
