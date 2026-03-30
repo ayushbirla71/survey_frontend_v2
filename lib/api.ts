@@ -2190,6 +2190,21 @@ export const screeningQuestionsApi = {
     );
   },
 
+  // GET /api/screening-questions/updated
+  updateScreeningQuestionsList: async (params: {
+    source: QuestionSource;
+    vendorId?: string;
+    countryCode?: string;
+    language?: string;
+  }): Promise<ApiResponse<ApiResponse<ScreeningQuestionDefinition[]>>> => {
+    return apiRequest(
+      `/api/screening-questions/updated?source=${params.source}&vendorId=${params.vendorId}&countryCode=${params.countryCode}&language=${params.language}`,
+      {
+        method: "GET",
+      },
+    );
+  },
+
   // POST /api/screening-questions
   createScreeningQuestion: async (
     questionData: any,
