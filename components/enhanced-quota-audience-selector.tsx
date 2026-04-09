@@ -23,16 +23,14 @@ export type ApiScreeningOption = {
 
 export type QuotaBucketOperator =
   | "BETWEEN"
-  | "IN"
-  | "EQ"
-  | "GTE"
-  | "LTE"
-  | "INTERSECTS";
+  | "GREATER_THAN"
+  | "LESS_THAN"
+  | "EQUALS";
 
 export type QuotaBucket = {
   label?: string | null;
   operator: QuotaBucketOperator;
-  value: any; // BETWEEN: {min,max} | IN: string[] | EQ: string/number
+  value: any; // BETWEEN: {min,max} | IN: string | EQ: string/number
   target: number;
 };
 
@@ -256,9 +254,17 @@ function validateQuota(
               q.question_text
             }" has min > max.`;
         }
-        if (b.operator === "IN" || b.operator === "INTERSECTS") {
-          if (!Array.isArray(b.value) || b.value.length === 0)
-            return `Bucket ${b.label ?? ""} must have at least one zipcode.`;
+
+        if (b.operator === "EQUALS") {
+          if (!b.value || String(b.value).trim() === "") {
+            return `Bucket ${b.label ?? ""} must have a zipcode.`;
+          }
+        }
+
+        if (b.operator === "GREATER_THAN" || b.operator === "LESS_THAN") {
+          if (!Number.isFinite(Number(b.value))) {
+            return `Bucket ${b.label ?? ""} must have a valid number.`;
+          }
         }
       }
     }
@@ -1048,9 +1054,9 @@ export default function EnhancedQuotaAudienceSelector({
                     target: total,
                   }
                 : {
-                    label: "Allowed",
-                    operator: "IN",
-                    value: [],
+                    label: "Zipcode",
+                    operator: "EQUALS",
+                    value: "",
                     target: total,
                   },
             ],
@@ -1081,17 +1087,25 @@ export default function EnhancedQuotaAudienceSelector({
         screening: quotaAudience.screening.map((s) => {
           if (s.questionId !== questionId) return s;
 
-          const nextBuckets = [
-            ...(s.buckets ?? []),
-            {
-              label: "",
-              operator: "BETWEEN" as const,
-              value: { min: 18, max: 24 },
-              target: 0,
-            },
-          ];
+          // 🔥 find question to detect type
+          const q = questions.find((qq) => qq.id === questionId);
 
-          return { ...s, buckets: nextBuckets };
+          const newBucket =
+            q?.data_type === "NUMBER"
+              ? {
+                  label: "",
+                  operator: "BETWEEN" as const,
+                  value: { min: 18, max: 24 },
+                  target: 0,
+                }
+              : {
+                  label: "",
+                  operator: "EQUALS" as const, // ✅ FIX
+                  value: "", // ✅ FIX
+                  target: 0,
+                };
+
+          return { ...s, buckets: [...(s.buckets ?? []), newBucket] };
         }),
       }),
     );
@@ -1726,31 +1740,38 @@ export default function EnhancedQuotaAudienceSelector({
                                                 onChange={(e) => {
                                                   const op = e.target
                                                     .value as any;
-                                                  // reset value shape when operator changes
+
                                                   const nextValue =
                                                     op === "BETWEEN"
                                                       ? { min: 18, max: 24 }
-                                                      : op === "IN" ||
-                                                          op === "INTERSECTS"
-                                                        ? []
-                                                        : "";
+                                                      : op === "GREATER_THAN" ||
+                                                          op === "LESS_THAN"
+                                                        ? 0
+                                                        : ""; // EQUALS → zipcode
+
                                                   updateBucket(q.id, idx, {
                                                     operator: op,
                                                     value: nextValue,
                                                   });
                                                 }}
                                               >
-                                                {/* simple defaults; you can restrict based on q.data_type */}
-                                                <option value="BETWEEN">
-                                                  BETWEEN
-                                                </option>
-                                                <option value="IN">IN</option>
-                                                <option value="EQ">EQ</option>
-                                                <option value="GTE">GTE</option>
-                                                <option value="LTE">LTE</option>
-                                                <option value="INTERSECTS">
-                                                  INTERSECTS
-                                                </option>
+                                                {q.data_type === "NUMBER" ? (
+                                                  <>
+                                                    <option value="BETWEEN">
+                                                      BETWEEN
+                                                    </option>
+                                                    <option value="GREATER_THAN">
+                                                      GREATER_THAN
+                                                    </option>
+                                                    <option value="LESS_THAN">
+                                                      LESS_THAN
+                                                    </option>
+                                                  </>
+                                                ) : (
+                                                  <option value="EQUALS">
+                                                    EQUALS
+                                                  </option>
+                                                )}
                                               </select>
 
                                               <input
@@ -1781,175 +1802,79 @@ export default function EnhancedQuotaAudienceSelector({
                                                 Remove
                                               </button>
                                             </div>
-
-                                            {b.operator === "BETWEEN" ? (
-                                              <div className="grid grid-cols-12 gap-2">
-                                                <input
-                                                  type="number"
-                                                  className="col-span-6 rounded border px-2 py-1 text-sm"
-                                                  placeholder="Min"
-                                                  value={b.value?.min ?? ""}
-                                                  onChange={(e) =>
-                                                    updateBucket(q.id, idx, {
-                                                      value: {
-                                                        ...b.value,
-                                                        min: Number(
-                                                          e.target.value,
-                                                        ),
-                                                      },
-                                                    })
-                                                  }
-                                                />
-                                                <input
-                                                  type="number"
-                                                  className="col-span-6 rounded border px-2 py-1 text-sm"
-                                                  placeholder="Max"
-                                                  value={b.value?.max ?? ""}
-                                                  onChange={(e) =>
-                                                    updateBucket(q.id, idx, {
-                                                      value: {
-                                                        ...b.value,
-                                                        max: Number(
-                                                          e.target.value,
-                                                        ),
-                                                      },
-                                                    })
-                                                  }
-                                                />
-                                              </div>
-                                            ) : null}
-
-                                            {b.operator === "IN" ||
-                                            b.operator === "INTERSECTS" ? (
-                                              <div className="space-y-2">
-                                                <div className="text-xs text-gray-600">
-                                                  Zipcodes (add multiple):
-                                                </div>
-                                                <div className="space-y-1">
-                                                  {Array.isArray(b.value) ? (
-                                                    b.value.map(
-                                                      (zip, zipIdx) => (
-                                                        <div
-                                                          key={zipIdx}
-                                                          className="flex items-center gap-2"
-                                                        >
-                                                          <input
-                                                            type="number"
-                                                            className="flex-1 rounded border px-2 py-1 text-sm"
-                                                            placeholder={`Zipcode ${
-                                                              zipIdx + 1
-                                                            }`}
-                                                            value={zip}
-                                                            onChange={(e) => {
-                                                              const newZips = [
-                                                                ...(b.value ||
-                                                                  []),
-                                                              ];
-                                                              newZips[zipIdx] =
-                                                                e.target.value;
-                                                              updateBucket(
-                                                                q.id,
-                                                                idx,
-                                                                {
-                                                                  value:
-                                                                    newZips,
-                                                                },
-                                                              );
-                                                            }}
-                                                          />
-                                                          {b.value.length >
-                                                            1 && (
-                                                            <button
-                                                              type="button"
-                                                              className="h-8 w-8 rounded border text-xs text-red-600 hover:bg-red-50"
-                                                              onClick={() => {
-                                                                const newZips =
-                                                                  (
-                                                                    b.value ||
-                                                                    []
-                                                                  ).filter(
-                                                                    (
-                                                                      _: any,
-                                                                      i: number,
-                                                                    ) =>
-                                                                      i !==
-                                                                      zipIdx,
-                                                                  );
-                                                                updateBucket(
-                                                                  q.id,
-                                                                  idx,
-                                                                  {
-                                                                    value:
-                                                                      newZips,
-                                                                  },
-                                                                );
-                                                              }}
-                                                            >
-                                                              ×
-                                                            </button>
-                                                          )}
-                                                        </div>
-                                                      ),
-                                                    )
-                                                  ) : (
-                                                    <input
-                                                      type="number"
-                                                      className="w-full rounded border px-2 py-1 text-sm"
-                                                      placeholder="Enter first zipcode"
-                                                      defaultValue={String(
-                                                        b.value || "",
-                                                      )}
-                                                      onChange={(e) =>
-                                                        updateBucket(
-                                                          q.id,
-                                                          idx,
-                                                          {
-                                                            value: [
-                                                              e.target.value,
-                                                            ],
-                                                          },
-                                                        )
-                                                      }
-                                                    />
-                                                  )}
-                                                  <button
-                                                    type="button"
-                                                    className="w-full rounded border border-dashed px-2 py-1 text-xs text-gray-600 hover:border-gray-400 hover:text-gray-800"
-                                                    onClick={() => {
-                                                      const newZips = [
-                                                        ...(b.value || []),
-                                                        "",
-                                                      ];
+                                            {q.data_type === "NUMBER" &&
+                                              b.operator === "BETWEEN" && (
+                                                <div className="grid grid-cols-12 gap-2">
+                                                  <input
+                                                    type="number"
+                                                    className="col-span-6 rounded border px-2 py-1 text-sm"
+                                                    placeholder="Min"
+                                                    value={b.value?.min ?? ""}
+                                                    onChange={(e) =>
                                                       updateBucket(q.id, idx, {
-                                                        value: newZips,
-                                                      });
-                                                    }}
-                                                  >
-                                                    + Add another zipcode
-                                                  </button>
+                                                        value: {
+                                                          ...b.value,
+                                                          min: Number(
+                                                            e.target.value,
+                                                          ),
+                                                        },
+                                                      })
+                                                    }
+                                                  />
+                                                  <input
+                                                    type="number"
+                                                    className="col-span-6 rounded border px-2 py-1 text-sm"
+                                                    placeholder="Max"
+                                                    value={b.value?.max ?? ""}
+                                                    onChange={(e) =>
+                                                      updateBucket(q.id, idx, {
+                                                        value: {
+                                                          ...b.value,
+                                                          max: Number(
+                                                            e.target.value,
+                                                          ),
+                                                        },
+                                                      })
+                                                    }
+                                                  />
                                                 </div>
-                                              </div>
-                                            ) : null}
-
-                                            {b.operator === "EQ" ||
-                                            b.operator === "GTE" ||
-                                            b.operator === "LTE" ? (
-                                              <input
-                                                className="w-full rounded border px-2 py-1 text-sm"
-                                                placeholder="Value"
-                                                value={
-                                                  typeof b.value === "string" ||
-                                                  typeof b.value === "number"
-                                                    ? String(b.value)
-                                                    : ""
-                                                }
-                                                onChange={(e) =>
-                                                  updateBucket(q.id, idx, {
-                                                    value: e.target.value,
-                                                  })
-                                                }
-                                              />
-                                            ) : null}
+                                              )}
+                                            {q.data_type === "NUMBER" &&
+                                              (b.operator === "GREATER_THAN" ||
+                                                b.operator === "LESS_THAN") && (
+                                                <input
+                                                  type="number"
+                                                  className="w-full rounded border px-2 py-1 text-sm"
+                                                  placeholder="Enter value"
+                                                  value={b.value ?? ""}
+                                                  onChange={(e) =>
+                                                    updateBucket(q.id, idx, {
+                                                      value: Number(
+                                                        e.target.value,
+                                                      ),
+                                                    })
+                                                  }
+                                                />
+                                              )}
+                                            {q.data_type !== "NUMBER" &&
+                                              b.operator === "EQUALS" && (
+                                                <div>
+                                                  <div className="text-xs text-gray-600 mb-1">
+                                                    Zipcode:
+                                                  </div>
+                                                  <input
+                                                    type="text"
+                                                    className="w-full rounded border px-2 py-1 text-sm"
+                                                    placeholder="Enter zipcode"
+                                                    value={b.value ?? ""}
+                                                    onChange={(e) =>
+                                                      updateBucket(q.id, idx, {
+                                                        value: e.target.value,
+                                                      })
+                                                    }
+                                                  />
+                                                </div>
+                                              )}
                                           </div>
                                         ),
                                       )}
