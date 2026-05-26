@@ -181,7 +181,18 @@ export default function GenerateSurvey() {
   const editSurveyId = searchParams.get("edit");
   const isEditMode = !!editSurveyId;
 
-  const [step, setStep] = useState(1);
+  const stepParam = searchParams.get("step");
+
+  // const [step, setStep] = useState(1);
+  const [step, setStep] = useState(stepParam ? Number(stepParam) : 1);
+
+  const updateStep = (newStep: number) => {
+    setStep(newStep);
+
+    if (isEditMode && editSurveyId) {
+      router.replace(`/generate-survey?edit=${editSurveyId}&step=${newStep}`);
+    }
+  };
   const [title, setTitle] = useState("");
   const [surveyCategoryId, setSurveyCategoryId] = useState("");
   const [description, setDescription] = useState("");
@@ -633,7 +644,8 @@ export default function GenerateSurvey() {
   // 🔥 LOCK FLOW IF PUBLISHED
   useEffect(() => {
     if (createdSurvey?.status === "PUBLISHED") {
-      setStep(6);
+      // setStep(6);
+      updateStep(6);
     }
   }, [createdSurvey?.status]);
 
@@ -727,7 +739,8 @@ export default function GenerateSurvey() {
       });
       setSurveyHtml(html);
     }
-    setStep(step + 1);
+    // setStep(step + 1);
+    updateStep(step + 1);
   };
 
   const prevStep = () => {
@@ -740,7 +753,8 @@ export default function GenerateSurvey() {
 
     // 🔥 Prevent navigation if published
     if (createdSurvey?.status === "PUBLISHED") return;
-    setStep(step - 1);
+    // setStep(step - 1);
+    updateStep(step - 1);
   };
 
   const handleQuestionUpdate = (updatedQuestions: any) => {
@@ -974,7 +988,8 @@ export default function GenerateSurvey() {
         toast.success("Survey published successfully!");
 
         // Navigate to share step
-        setStep(6);
+        // setStep(6);
+        updateStep(6);
       } else {
         // console.log("Failed to publish survey. Please try again.");
         toast.error("Failed to publish survey. Please try again.");
@@ -1028,7 +1043,8 @@ export default function GenerateSurvey() {
     localStorage.setItem("sentSurveys", JSON.stringify(existingSurveys));
 
     // Navigate to share step
-    setStep(6);
+    // setStep(6);
+    updateStep(6);
   };
 
   // Function to check if survey data has changed
@@ -1143,6 +1159,7 @@ export default function GenerateSurvey() {
           title: title,
           description: description,
           flow_type: surveySettings.flow_type,
+          
           survey_send_by: surveySettings.survey_send_by,
           surveyCategoryId: surveyCategoryId,
           autoGenerateQuestions: autoGenerateQuestions,
@@ -1196,7 +1213,10 @@ export default function GenerateSurvey() {
               );
             });
           }
-          router.replace(`/generate-survey?edit=${(result as any).survey.id}`);
+          router.replace(
+            `/generate-survey?edit=${(result as any).survey.id}&step=2`,
+          );
+          updateStep(2);
           // nextStep();
         }
       }
