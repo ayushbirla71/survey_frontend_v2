@@ -11,6 +11,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "react-toastify";
 
 export default function ThankYou() {
   const [surveyTitle, setSurveyTitle] = useState("");
@@ -60,7 +61,7 @@ export default function ThankYou() {
       });
     } else {
       navigator.clipboard.writeText(surveyUrl);
-      alert("Survey link copied to clipboard!");
+      toast.success("Survey link copied to clipboard!");
     }
   };
 

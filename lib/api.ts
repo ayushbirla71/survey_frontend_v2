@@ -534,6 +534,19 @@ export const usersApi = {
     );
   },
 
+  getUserSurvey: async (
+    userId: string,
+  ): Promise<
+    ApiResponse<{
+      message: string;
+      data: any;
+    }>
+  > => {
+    return apiRequest(`/api/surveys/allSurvey/${userId}`, {
+      method: "GET",
+    });
+  },
+
   // POST /api/auth/createUser
   createUser: async (createForm: {
     name: string;

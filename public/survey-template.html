@@ -1,442 +1,518 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Survey - Your Opinion Matters</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #334155;
-            background-color: #f8fafc;
-            padding: 20px;
-        }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #334155;
+        background-color: #f8fafc;
+        padding: 20px;
+      }
 
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+        color: white;
+        padding: 40px 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+
+      .question-block {
+        margin-bottom: 40px;
+        padding: 30px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+      }
+
+      .question-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+        color: #1e293b;
+      }
+
+      .required {
+        color: #ef4444;
+      }
+
+      .option-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .option {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .option:hover {
+        border-color: #7c3aed;
+        background: #faf5ff;
+      }
+
+      .option input[type="radio"],
+      .option input[type="checkbox"] {
+        margin-right: 12px;
+        transform: scale(1.2);
+        accent-color: #7c3aed;
+      }
+
+      .option label {
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .text-input {
+        width: 100%;
+        padding: 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 1rem;
+        resize: vertical;
+        min-height: 120px;
+        font-family: inherit;
+      }
+
+      .text-input:focus {
+        outline: none;
+        border-color: #7c3aed;
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+      }
+
+      .rating-group {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin: 20px 0;
+      }
+
+      .rating-button {
+        width: 50px;
+        height: 50px;
+        border: 2px solid #e2e8f0;
+        background: white;
+        border-radius: 50%;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.2s;
+      }
+
+      .rating-button:hover {
+        border-color: #7c3aed;
+        background: #faf5ff;
+      }
+
+      .rating-button.selected {
+        background: #7c3aed;
+        color: white;
+        border-color: #7c3aed;
+      }
+
+      .rating-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        color: #64748b;
+      }
+
+      .submit-section {
+        text-align: center;
+        padding: 40px 30px;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+      }
+
+      .submit-button {
+        background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+        color: white;
+        border: none;
+        padding: 16px 40px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s;
+      }
+
+      .submit-button:hover {
+        transform: translateY(-2px);
+      }
+
+      .submit-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        margin-bottom: 30px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #7c3aed 0%, #a855f7 100%);
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      .footer {
+        text-align: center;
+        padding: 20px;
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 768px) {
         .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+          margin: 10px;
+          border-radius: 8px;
         }
 
         .header {
-            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
+          padding: 30px 20px;
         }
 
         .header h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
+          font-size: 2rem;
         }
 
         .content {
-            padding: 40px 30px;
+          padding: 30px 20px;
         }
 
         .question-block {
-            margin-bottom: 40px;
-            padding: 30px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #f8fafc;
-        }
-
-        .question-title {
-            font-size: 1.3rem;
-            font-weight: 600;
-            margin-bottom: 20px;
-            color: #1e293b;
-        }
-
-        .required {
-            color: #ef4444;
-        }
-
-        .option-group {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .option {
-            display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            background: white;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .option:hover {
-            border-color: #7c3aed;
-            background: #faf5ff;
-        }
-
-        .option input[type="radio"],
-        .option input[type="checkbox"] {
-            margin-right: 12px;
-            transform: scale(1.2);
-            accent-color: #7c3aed;
-        }
-
-        .option label {
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .text-input {
-            width: 100%;
-            padding: 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 1rem;
-            resize: vertical;
-            min-height: 120px;
-            font-family: inherit;
-        }
-
-        .text-input:focus {
-            outline: none;
-            border-color: #7c3aed;
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+          padding: 20px;
         }
 
         .rating-group {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            margin: 20px 0;
+          flex-wrap: wrap;
         }
 
         .rating-button {
-            width: 50px;
-            height: 50px;
-            border: 2px solid #e2e8f0;
-            background: white;
-            border-radius: 50%;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.2s;
+          width: 45px;
+          height: 45px;
         }
-
-        .rating-button:hover {
-            border-color: #7c3aed;
-            background: #faf5ff;
-        }
-
-        .rating-button.selected {
-            background: #7c3aed;
-            color: white;
-            border-color: #7c3aed;
-        }
-
-        .rating-labels {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            font-size: 0.9rem;
-            color: #64748b;
-        }
-
-        .submit-section {
-            text-align: center;
-            padding: 40px 30px;
-            background: #f8fafc;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .submit-button {
-            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-            color: white;
-            border: none;
-            padding: 16px 40px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .submit-button:hover {
-            transform: translateY(-2px);
-        }
-
-        .submit-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            margin-bottom: 30px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #7c3aed 0%, #a855f7 100%);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-
-        .footer {
-            text-align: center;
-            padding: 20px;
-            color: #64748b;
-            font-size: 0.9rem;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-                border-radius: 8px;
-            }
-
-            .header {
-                padding: 30px 20px;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .content {
-                padding: 30px 20px;
-            }
-
-            .question-block {
-                padding: 20px;
-            }
-
-            .rating-group {
-                flex-wrap: wrap;
-            }
-
-            .rating-button {
-                width: 45px;
-                height: 45px;
-            }
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <div class="header">
-            <h1>Survey Title</h1>
-            <p>Your feedback helps us improve our services</p>
+      <div class="header">
+        <h1>Survey Title</h1>
+        <p>Your feedback helps us improve our services</p>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <form id="surveyForm" class="content">
+        <!-- Question 1: Multiple Choice -->
+        <div class="question-block">
+          <h3 class="question-title">
+            1. How satisfied are you with our product?
+            <span class="required">*</span>
+          </h3>
+          <div class="option-group">
+            <div class="option">
+              <input
+                type="radio"
+                id="q1_1"
+                name="satisfaction"
+                value="very_satisfied"
+                required
+              />
+              <label for="q1_1">Very Satisfied</label>
+            </div>
+            <div class="option">
+              <input
+                type="radio"
+                id="q1_2"
+                name="satisfaction"
+                value="satisfied"
+                required
+              />
+              <label for="q1_2">Satisfied</label>
+            </div>
+            <div class="option">
+              <input
+                type="radio"
+                id="q1_3"
+                name="satisfaction"
+                value="neutral"
+                required
+              />
+              <label for="q1_3">Neutral</label>
+            </div>
+            <div class="option">
+              <input
+                type="radio"
+                id="q1_4"
+                name="satisfaction"
+                value="dissatisfied"
+                required
+              />
+              <label for="q1_4">Dissatisfied</label>
+            </div>
+            <div class="option">
+              <input
+                type="radio"
+                id="q1_5"
+                name="satisfaction"
+                value="very_dissatisfied"
+                required
+              />
+              <label for="q1_5">Very Dissatisfied</label>
+            </div>
+          </div>
         </div>
 
-        <div class="progress-bar">
-            <div class="progress-fill" id="progressFill"></div>
+        <!-- Question 2: Checkbox -->
+        <div class="question-block">
+          <h3 class="question-title">
+            2. Which features do you use most often? (Select all that apply)
+          </h3>
+          <div class="option-group">
+            <div class="option">
+              <input
+                type="checkbox"
+                id="q2_1"
+                name="features"
+                value="feature_a"
+              />
+              <label for="q2_1">Feature A</label>
+            </div>
+            <div class="option">
+              <input
+                type="checkbox"
+                id="q2_2"
+                name="features"
+                value="feature_b"
+              />
+              <label for="q2_2">Feature B</label>
+            </div>
+            <div class="option">
+              <input
+                type="checkbox"
+                id="q2_3"
+                name="features"
+                value="feature_c"
+              />
+              <label for="q2_3">Feature C</label>
+            </div>
+            <div class="option">
+              <input
+                type="checkbox"
+                id="q2_4"
+                name="features"
+                value="feature_d"
+              />
+              <label for="q2_4">Feature D</label>
+            </div>
+          </div>
         </div>
 
-        <form id="surveyForm" class="content">
-            <!-- Question 1: Multiple Choice -->
-            <div class="question-block">
-                <h3 class="question-title">
-                    1. How satisfied are you with our product? <span class="required">*</span>
-                </h3>
-                <div class="option-group">
-                    <div class="option">
-                        <input type="radio" id="q1_1" name="satisfaction" value="very_satisfied" required>
-                        <label for="q1_1">Very Satisfied</label>
-                    </div>
-                    <div class="option">
-                        <input type="radio" id="q1_2" name="satisfaction" value="satisfied" required>
-                        <label for="q1_2">Satisfied</label>
-                    </div>
-                    <div class="option">
-                        <input type="radio" id="q1_3" name="satisfaction" value="neutral" required>
-                        <label for="q1_3">Neutral</label>
-                    </div>
-                    <div class="option">
-                        <input type="radio" id="q1_4" name="satisfaction" value="dissatisfied" required>
-                        <label for="q1_4">Dissatisfied</label>
-                    </div>
-                    <div class="option">
-                        <input type="radio" id="q1_5" name="satisfaction" value="very_dissatisfied" required>
-                        <label for="q1_5">Very Dissatisfied</label>
-                    </div>
-                </div>
-            </div>
+        <!-- Question 3: Text Area -->
+        <div class="question-block">
+          <h3 class="question-title">
+            3. What improvements would you suggest for our product?
+          </h3>
+          <textarea
+            class="text-input"
+            name="improvements"
+            placeholder="Please share your suggestions..."
+          ></textarea>
+        </div>
 
-            <!-- Question 2: Checkbox -->
-            <div class="question-block">
-                <h3 class="question-title">
-                    2. Which features do you use most often? (Select all that apply)
-                </h3>
-                <div class="option-group">
-                    <div class="option">
-                        <input type="checkbox" id="q2_1" name="features" value="feature_a">
-                        <label for="q2_1">Feature A</label>
-                    </div>
-                    <div class="option">
-                        <input type="checkbox" id="q2_2" name="features" value="feature_b">
-                        <label for="q2_2">Feature B</label>
-                    </div>
-                    <div class="option">
-                        <input type="checkbox" id="q2_3" name="features" value="feature_c">
-                        <label for="q2_3">Feature C</label>
-                    </div>
-                    <div class="option">
-                        <input type="checkbox" id="q2_4" name="features" value="feature_d">
-                        <label for="q2_4">Feature D</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Question 3: Text Area -->
-            <div class="question-block">
-                <h3 class="question-title">
-                    3. What improvements would you suggest for our product?
-                </h3>
-                <textarea 
-                    class="text-input" 
-                    name="improvements" 
-                    placeholder="Please share your suggestions..."
-                ></textarea>
-            </div>
-
-            <!-- Question 4: Rating -->
-            <div class="question-block">
-                <h3 class="question-title">
-                    4. How likely are you to recommend our product to others? <span class="required">*</span>
-                </h3>
-                <div class="rating-group">
-                    <button type="button" class="rating-button" data-rating="1">1</button>
-                    <button type="button" class="rating-button" data-rating="2">2</button>
-                    <button type="button" class="rating-button" data-rating="3">3</button>
-                    <button type="button" class="rating-button" data-rating="4">4</button>
-                    <button type="button" class="rating-button" data-rating="5">5</button>
-                </div>
-                <div class="rating-labels">
-                    <span>Not likely</span>
-                    <span>Very likely</span>
-                </div>
-                <input type="hidden" name="recommendation" id="recommendation" required>
-            </div>
-        </form>
-
-        <div class="submit-section">
-            <button type="submit" class="submit-button" id="submitButton">
-                Submit Survey
+        <!-- Question 4: Rating -->
+        <div class="question-block">
+          <h3 class="question-title">
+            4. How likely are you to recommend our product to others?
+            <span class="required">*</span>
+          </h3>
+          <div class="rating-group">
+            <button type="button" class="rating-button" data-rating="1">
+              1
             </button>
+            <button type="button" class="rating-button" data-rating="2">
+              2
+            </button>
+            <button type="button" class="rating-button" data-rating="3">
+              3
+            </button>
+            <button type="button" class="rating-button" data-rating="4">
+              4
+            </button>
+            <button type="button" class="rating-button" data-rating="5">
+              5
+            </button>
+          </div>
+          <div class="rating-labels">
+            <span>Not likely</span>
+            <span>Very likely</span>
+          </div>
+          <input
+            type="hidden"
+            name="recommendation"
+            id="recommendation"
+            required
+          />
         </div>
+      </form>
 
-        <div class="footer">
-            <p>Thank you for taking the time to complete this survey.</p>
-            <p>Your responses are confidential and will be used to improve our services.</p>
-        </div>
+      <div class="submit-section">
+        <button type="submit" class="submit-button" id="submitButton">
+          Submit Survey
+        </button>
+      </div>
+
+      <div class="footer">
+        <p>Thank you for taking the time to complete this survey.</p>
+        <p>
+          Your responses are confidential and will be used to improve our
+          services.
+        </p>
+      </div>
     </div>
 
     <script>
-        // Progress tracking
-        function updateProgress() {
-            const form = document.getElementById('surveyForm');
-            const requiredFields = form.querySelectorAll('[required]');
-            let completed = 0;
+      // Progress tracking
+      function updateProgress() {
+        const form = document.getElementById("surveyForm");
+        const requiredFields = form.querySelectorAll("[required]");
+        let completed = 0;
 
-            requiredFields.forEach(field => {
-                if (field.type === 'radio') {
-                    if (form.querySelector(`input[name="${field.name}"]:checked`)) {
-                        completed++;
-                    }
-                } else if (field.value.trim() !== '') {
-                    completed++;
-                }
-            });
-
-            const progress = (completed / requiredFields.length) * 100;
-            document.getElementById('progressFill').style.width = progress + '%';
-        }
-
-        // Rating functionality
-        document.querySelectorAll('.rating-button').forEach(button => {
-            button.addEventListener('click', function() {
-                const rating = this.getAttribute('data-rating');
-                
-                // Remove selected class from all buttons
-                document.querySelectorAll('.rating-button').forEach(btn => {
-                    btn.classList.remove('selected');
-                });
-                
-                // Add selected class to clicked button and all previous buttons
-                for (let i = 1; i <= rating; i++) {
-                    document.querySelector(`[data-rating="${i}"]`).classList.add('selected');
-                }
-                
-                // Set hidden input value
-                document.getElementById('recommendation').value = rating;
-                updateProgress();
-            });
-        });
-
-        // Form submission
-        document.getElementById('submitButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            const form = document.getElementById('surveyForm');
-            if (form.checkValidity()) {
-                // Collect form data
-                const formData = new FormData(form);
-                const responses = {};
-                
-                for (let [key, value] of formData.entries()) {
-                    if (responses[key]) {
-                        if (Array.isArray(responses[key])) {
-                            responses[key].push(value);
-                        } else {
-                            responses[key] = [responses[key], value];
-                        }
-                    } else {
-                        responses[key] = value;
-                    }
-                }
-                
-                // Simulate form submission
-                this.textContent = 'Submitting...';
-                this.disabled = true;
-                
-                setTimeout(() => {
-                    alert('Thank you! Your survey has been submitted successfully.');
-                    // In a real implementation, you would send the data to your server
-                    console.log('Survey responses:', responses);
-                }, 1000);
-            } else {
-                form.reportValidity();
+        requiredFields.forEach((field) => {
+          if (field.type === "radio") {
+            if (form.querySelector(`input[name="${field.name}"]:checked`)) {
+              completed++;
             }
+          } else if (field.value.trim() !== "") {
+            completed++;
+          }
         });
 
-        // Add event listeners for progress tracking
-        document.addEventListener('change', updateProgress);
-        document.addEventListener('input', updateProgress);
+        const progress = (completed / requiredFields.length) * 100;
+        document.getElementById("progressFill").style.width = progress + "%";
+      }
 
-        // Initial progress update
-        updateProgress();
+      // Rating functionality
+      document.querySelectorAll(".rating-button").forEach((button) => {
+        button.addEventListener("click", function () {
+          const rating = this.getAttribute("data-rating");
+
+          // Remove selected class from all buttons
+          document.querySelectorAll(".rating-button").forEach((btn) => {
+            btn.classList.remove("selected");
+          });
+
+          // Add selected class to clicked button and all previous buttons
+          for (let i = 1; i <= rating; i++) {
+            document
+              .querySelector(`[data-rating="${i}"]`)
+              .classList.add("selected");
+          }
+
+          // Set hidden input value
+          document.getElementById("recommendation").value = rating;
+          updateProgress();
+        });
+      });
+
+      // Form submission
+      document
+        .getElementById("submitButton")
+        .addEventListener("click", function (e) {
+          e.preventDefault();
+
+          const form = document.getElementById("surveyForm");
+          if (form.checkValidity()) {
+            // Collect form data
+            const formData = new FormData(form);
+            const responses = {};
+
+            for (let [key, value] of formData.entries()) {
+              if (responses[key]) {
+                if (Array.isArray(responses[key])) {
+                  responses[key].push(value);
+                } else {
+                  responses[key] = [responses[key], value];
+                }
+              } else {
+                responses[key] = value;
+              }
+            }
+
+            // Simulate form submission
+            this.textContent = "Submitting...";
+            this.disabled = true;
+
+            setTimeout(() => {
+              alert("Thank you! Your survey has been submitted successfully.");
+              // In a real implementation, you would send the data to your server
+              console.log("Survey responses:", responses);
+            }, 1000);
+          } else {
+            form.reportValidity();
+          }
+        });
+
+      // Add event listeners for progress tracking
+      document.addEventListener("change", updateProgress);
+      document.addEventListener("input", updateProgress);
+
+      // Initial progress update
+      updateProgress();
     </script>
-</body>
+  </body>
 </html>

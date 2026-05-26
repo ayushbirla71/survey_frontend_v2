@@ -1248,7 +1248,7 @@ export default function GenerateSurvey() {
     try {
       // console.log(">>>>> the value of the QUESTIONS is : ", questions);
       if (questions.length === 0) {
-        alert("Please add at least one question");
+        toast.error("Please add at least one question");
         // toast.error("Please add at least one question");
         return;
       }

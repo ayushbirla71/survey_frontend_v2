@@ -1,6 +1,7 @@
 // // ✨ NEW FILE — /lib/exportPDF.ts
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { toast } from "react-toastify";
 
 export async function exportSurveyToPDF() {
   // 🔹 Hide PDF unwanted elements
@@ -9,7 +10,7 @@ export async function exportSurveyToPDF() {
   });
 
   const exportElement = document.getElementById("export-section");
-  if (!exportElement) return alert("Export section not found!");
+  if (!exportElement) return toast.error("Export section not found!");
 
   const canvas = await html2canvas(exportElement, {
     scale: 2,

@@ -18,6 +18,7 @@ import {
   LogOut,
   Settings,
   User,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -28,6 +29,15 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
 
   const navigation = [
+    ...(user?.role === "SYSTEM_ADMIN"
+      ? [
+          {
+            name: "Admin Panel",
+            href: "/admin",
+            icon: Shield,
+          },
+        ]
+      : []),
     { name: "Dashboard", href: "/", icon: Home },
     {
       name: "Generate Survey",

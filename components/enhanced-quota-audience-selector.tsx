@@ -829,6 +829,12 @@ export default function EnhancedQuotaAudienceSelector({
       vendorId: q.vendorId ?? null,
       countryCode: q.countryCode ?? null,
       language: q.language ?? null,
+
+      // new fields
+      incidenceRate: q.incidenceRate ?? null,
+      lengthOfInterview: q.lengthOfSurvey ?? null,
+      numberOfDays: q.numberOfDays ?? null,
+
       screening: q.screening.map((s) => ({
         questionId: s.questionId,
         vendorQuestionId: s.vendorQuestionId ?? null,

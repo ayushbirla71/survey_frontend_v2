@@ -86,7 +86,7 @@ export default function SentSurveys() {
     error: error,
     refetch,
   } = useApi<{ surveys: Survey[] }>(() =>
-    surveyApi.getAllSurveys().then((response) => ({ data: response }))
+    surveyApi.getAllSurveys().then((response) => ({ data: response })),
   );
   const surveys = surveysResponse?.surveys || [];
   console.log("Surveys are", surveys);
@@ -107,7 +107,7 @@ export default function SentSurveys() {
 
   // Mutations
   const { mutate: deleteSurvey, loading: deleteLoading } = useMutation(
-    surveyApi.deleteSurvey
+    surveyApi.deleteSurvey,
   );
   // const { mutate: duplicateSurvey, loading: duplicateLoading } = useMutation(
   //   surveyApi.duplicateSurvey
@@ -119,7 +119,7 @@ export default function SentSurveys() {
   useEffect(() => {
     // Load surveys from localStorage as fallback
     const savedSurveys = JSON.parse(
-      localStorage.getItem("sentSurveys") || "[]"
+      localStorage.getItem("sentSurveys") || "[]",
     );
     setLocalSurveys(savedSurveys);
   }, []);
@@ -202,7 +202,7 @@ export default function SentSurveys() {
       } else {
         // For public surveys (share_tokens.length == 1), just show info
         toast.info(
-          "This is a public survey. Use the share button to share the link."
+          "This is a public survey. Use the share button to share the link.",
         );
       }
     } catch (error) {
@@ -221,7 +221,7 @@ export default function SentSurveys() {
       });
     } else {
       navigator.clipboard.writeText(surveyUrl);
-      alert("Survey link copied to clipboard!");
+      toast.success("Survey link copied to clipboard!");
     }
   };
 
@@ -240,7 +240,7 @@ export default function SentSurveys() {
         refetch();
         // Also remove from localStorage
         const updatedSurveys = localSurveys.filter(
-          (survey: any) => survey.id !== surveyId
+          (survey: any) => survey.id !== surveyId,
         );
         setLocalSurveys(updatedSurveys);
         localStorage.setItem("sentSurveys", JSON.stringify(updatedSurveys));

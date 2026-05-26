@@ -67,7 +67,7 @@ export default function AdminLayout({
                 Manage Screening Questions
               </Link>
             </li>
-            <li>
+            {/* <li>
               <Link
                 href="/admin/facebook-live"
                 className={`block py-2 px-4 rounded-lg transition-colors ${
@@ -90,7 +90,7 @@ export default function AdminLayout({
               >
                 Youtube Live
               </Link>
-            </li>
+            </li> */}
           </ul>
         </nav>
       </div>

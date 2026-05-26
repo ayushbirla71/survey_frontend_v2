@@ -36,6 +36,7 @@ import ImportDialog from "@/components/import-dialog";
 import { audienceApi, apiWithFallback } from "@/lib/api";
 import { usePaginatedApi, useApi, useMutation } from "@/hooks/useApi";
 import { audienceData, audienceStats } from "@/lib/assist-data";
+import { toast } from "react-toastify";
 
 export default function AudiencePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,7 +71,7 @@ export default function AudiencePage() {
     error: statsError,
     refetch: refetchStats,
   } = useApi(() =>
-    apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats)
+    apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats),
   );
 
   const {
@@ -81,10 +82,10 @@ export default function AudiencePage() {
 
   // Mutations
   const { mutate: importAudience, loading: importLoading } = useMutation(
-    audienceApi.importAudience
+    audienceApi.importAudience,
   );
   const { mutate: createSegment, loading: createSegmentLoading } = useMutation(
-    audienceApi.createSegment
+    audienceApi.createSegment,
   );
 
   // Fallback to local data if API fails
@@ -172,21 +173,21 @@ export default function AudiencePage() {
     ([age, count]) => ({
       ageGroup: age,
       count: count as number,
-    })
+    }),
   );
 
   const genderChartData = Object.entries(displayStats.byGender || {}).map(
     ([gender, count]) => ({
       gender,
       count: count as number,
-    })
+    }),
   );
 
   const countryChartData = Object.entries(displayStats.byCountry || {}).map(
     ([country, count]) => ({
       country,
       count: count as number,
-    })
+    }),
   );
 
   const industryChartData = Object.entries(displayStats.byIndustry || {})
@@ -202,7 +203,9 @@ export default function AudiencePage() {
       setShowImportDialog(false);
       refetchAudience();
       refetchStats();
-      alert(`Successfully imported ${result.imported} audience members!`);
+      toast.success(
+        `Successfully imported ${result.imported} audience members!`,
+      );
     }
   };
 
@@ -251,7 +254,7 @@ export default function AudiencePage() {
               `"${person.city}, ${person.country}"`,
               person.industry,
               person.jobTitle,
-            ].join(",")
+            ].join(","),
           ),
       ].join("\n");
 
