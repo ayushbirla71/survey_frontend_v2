@@ -1196,7 +1196,8 @@ export default function GenerateSurvey() {
               );
             });
           }
-          nextStep();
+          router.replace(`/generate-survey?edit=${(result as any).survey.id}`);
+          // nextStep();
         }
       }
     } catch (error: any) {

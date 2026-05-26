@@ -222,9 +222,9 @@ export default function AdminDashboard() {
 
                   <th className="border p-3 text-left">Terms Required</th> */}
 
-                  <th className="border p-3 text-left">Created At</th>
+                  {/* <th className="border p-3 text-left">Created At</th>
 
-                  <th className="border p-3 text-left">Last Updated</th>
+                  <th className="border p-3 text-left">Last Updated</th> */}
                   <th className="border p-3 text-left">Action</th>
                 </tr>
               </thead>
@@ -235,7 +235,10 @@ export default function AdminDashboard() {
                     <tr key={survey.id} className="hover:bg-gray-50">
                       <td className="border p-3">{survey.title}</td>
 
-                      <td className="border p-3">{survey.description}</td>
+                      {/* <td className="border p-3">{survey.description}</td> */}
+                      <td className="border p-3">
+                        <div className="line-clamp-4">{survey.description}</div>
+                      </td>
 
                       <td className="border p-3">
                         {survey.surveyCategory?.name}
@@ -295,13 +298,13 @@ export default function AdminDashboard() {
                           : "No"}
                       </td> */}
 
-                      <td className="border p-3">
+                      {/* <td className="border p-3">
                         {new Date(survey.created_at).toLocaleString()}
                       </td>
 
                       <td className="border p-3">
                         {new Date(survey.updated_at).toLocaleString()}
-                      </td>
+                      </td> */}
                       <td className="border p-3">
                         <button
                           onClick={() => setSelectedSurvey(survey)}
@@ -325,57 +328,96 @@ export default function AdminDashboard() {
         </div>
       )}
       {/* Survey Details */}
-      {/* Survey Details Modal */}
+
       {selectedSurvey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200">
             {/* Header */}
-            <div className="flex items-center justify-between border-b p-6">
-              <h3 className="text-2xl font-bold text-gray-800">
-                Survey Details
-              </h3>
+            <div className="sticky top-0 z-10 bg-white border-b px-8 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900">
+                  Survey Details
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Complete survey information overview
+                </p>
+              </div>
 
               <button
                 onClick={() => setSelectedSurvey(null)}
-                className="text-gray-500 hover:text-red-500 text-xl"
+                className="h-10 w-10 rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-500 transition flex items-center justify-center text-lg"
               >
                 ✕
               </button>
             </div>
 
             {/* Body */}
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-500">Survey Title</p>
-                  <p className="font-semibold">{selectedSurvey.title}</p>
+            <div className="overflow-y-auto max-h-[calc(92vh-90px)] p-8">
+              {/* Top Card */}
+              {/* Top Card */}
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 mb-8 shadow-sm">
+                {/* Header */}
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                  {/* Left */}
+                  <div className="flex-1">
+                    <h3 className="text-3xl font-bold text-gray-900">
+                      {selectedSurvey.title}
+                    </h3>
+
+                    {/* Description */}
+                    <div className="mt-5">
+                      <p className="text-sm font-semibold text-gray-500 mb-2">
+                        Description
+                      </p>
+
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                        <p className="text-gray-700 leading-7 whitespace-pre-line">
+                          {selectedSurvey.description ||
+                            "No description available"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Status Section */}
+                </div>
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {/* Status Card */}
+                <div className="rounded-2xl border border-green-200 bg-green-50 p-5 shadow-sm">
+                  <p className="text-sm text-green-600 font-medium">
+                    Survey Status
+                  </p>
+
+                  <h4 className="mt-2 text-xl font-bold text-green-700">
+                    {selectedSurvey.status}
+                  </h4>
                 </div>
 
-                <div>
+                {/* Flow Type Card */}
+                <div className="rounded-2xl border border-purple-200 bg-purple-50 p-5 shadow-sm">
+                  <p className="text-sm text-purple-600 font-medium">
+                    Flow Type
+                  </p>
+
+                  <h4 className="mt-2 text-xl font-bold text-purple-700">
+                    {selectedSurvey.flow_type}
+                  </h4>
+                </div>
+
+                {/* Card */}
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
                   <p className="text-sm text-gray-500">Category</p>
-                  <p className="font-semibold">
-                    {selectedSurvey.surveyCategory?.name}
+                  <p className="mt-2 text-lg font-semibold text-gray-800">
+                    {selectedSurvey.surveyCategory?.name || "-"}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-500">Description</p>
-                  <p className="font-semibold">{selectedSurvey.description}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <p className="font-semibold">{selectedSurvey.status}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Flow Type</p>
-                  <p className="font-semibold">{selectedSurvey.flow_type}</p>
-                </div>
-
-                <div>
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
                   <p className="text-sm text-gray-500">Send By</p>
-                  <p className="font-semibold">
+                  <p className="mt-2 text-lg font-semibold text-gray-800">
                     {selectedSurvey.survey_send_by === "NONE"
                       ? "Public"
                       : selectedSurvey.survey_send_by === "BOTH"
@@ -392,77 +434,96 @@ export default function AdminDashboard() {
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-500">Total Questions</p>
-                  <p className="font-semibold">
-                    {selectedSurvey._count.questions}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Total Responses</p>
-                  <p className="font-semibold">
-                    {selectedSurvey._count.responses}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">
-                    Auto Generate Questions
-                  </p>
-                  <p className="font-semibold">
-                    {selectedSurvey.autoGenerateQuestions ? "Yes" : "No"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Public Result</p>
-                  <p className="font-semibold">
-                    {selectedSurvey.settings.isResultPublic ? "Yes" : "No"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Auto Reload On Submit</p>
-                  <p className="font-semibold">
-                    {selectedSurvey.settings.autoReloadOnSubmit ? "Yes" : "No"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Terms Required</p>
-                  <p className="font-semibold">
-                    {selectedSurvey.settings.requireTermsAndConditions
-                      ? "Yes"
-                      : "No"}
-                  </p>
-                </div>
-
-                <div>
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
                   <p className="text-sm text-gray-500">Scheduled Type</p>
-                  <p className="font-semibold">
+                  <p className="mt-2 text-lg font-semibold text-gray-800">
                     {selectedSurvey.scheduled_type}
                   </p>
                 </div>
 
-                <div>
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
+                  <p className="text-sm text-gray-500">Total Questions</p>
+                  <p className="mt-2 text-3xl font-bold text-indigo-600">
+                    {selectedSurvey._count.questions}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
+                  <p className="text-sm text-gray-500">Total Responses</p>
+                  <p className="mt-2 text-3xl font-bold text-green-600">
+                    {selectedSurvey._count.responses}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition">
+                  <p className="text-sm text-gray-500">Created By</p>
+                  <p className="mt-2 text-lg font-semibold text-gray-800">
+                    {selectedSurvey.user.name}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {selectedSurvey.user.email}
+                  </p>
+                </div>
+              </div>
+
+              {/* Settings */}
+              <div className="mt-10">
+                <h3 className="text-xl font-bold text-gray-800 mb-5">
+                  Survey Settings
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                  {[
+                    {
+                      label: "Auto Generate Questions",
+                      value: selectedSurvey.autoGenerateQuestions,
+                    },
+                    {
+                      label: "Public Result",
+                      value: selectedSurvey.settings.isResultPublic,
+                    },
+                    {
+                      label: "Auto Reload On Submit",
+                      value: selectedSurvey.settings.autoReloadOnSubmit,
+                    },
+                    {
+                      label: "Terms Required",
+                      value: selectedSurvey.settings.requireTermsAndConditions,
+                    },
+                  ].map((item, index) => (
+                    <div
+                      key={index}
+                      className="rounded-2xl border border-gray-200 p-5 bg-gray-50"
+                    >
+                      <p className="text-sm text-gray-500">{item.label}</p>
+
+                      <div
+                        className={`mt-3 inline-flex px-4 py-1 rounded-full text-sm font-semibold ${
+                          item.value
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {item.value ? "Enabled" : "Disabled"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-2xl border border-gray-200 p-5">
                   <p className="text-sm text-gray-500">Created At</p>
-                  <p className="font-semibold">
+                  <p className="mt-2 font-semibold text-gray-800">
                     {new Date(selectedSurvey.created_at).toLocaleString()}
                   </p>
                 </div>
 
-                <div>
+                <div className="rounded-2xl border border-gray-200 p-5">
                   <p className="text-sm text-gray-500">Updated At</p>
-                  <p className="font-semibold">
+                  <p className="mt-2 font-semibold text-gray-800">
                     {new Date(selectedSurvey.updated_at).toLocaleString()}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Created By</p>
-                  <p className="font-semibold">
-                    {selectedSurvey.user.name} ({selectedSurvey.user.email})
                   </p>
                 </div>
               </div>

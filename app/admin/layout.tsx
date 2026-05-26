@@ -21,6 +21,18 @@ export default function AdminLayout({
           <ul>
             <li>
               <Link
+                href="/"
+                className={`block py-2 px-4 rounded-lg transition-colors ${
+                  pathname === "/"
+                    ? "bg-blue-500 text-white"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Surveys Panel
+              </Link>
+            </li>
+            <li>
+              <Link
                 href="/admin"
                 className={`block py-2 px-4 rounded-lg transition-colors ${
                   pathname === "/admin"
