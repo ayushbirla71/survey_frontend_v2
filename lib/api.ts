@@ -128,6 +128,49 @@ export interface SurveyResponseResult {
     qualified_count: number;
     terminated_count: number;
     quota_full_count: number;
+
+    quota_options: {
+      id: string;
+
+      question: {
+        id: string;
+        question_key: string;
+        question_text: string;
+        question_type: string;
+      };
+
+      option: {
+        id: string;
+        text: string;
+        vendor_option_id: string | null;
+      };
+
+      target_count: number;
+      current_count: number;
+      completion_percentage: number;
+    }[];
+
+    quota_buckets: {
+      id: string;
+
+      label: string;
+
+      question: {
+        id: string;
+        question_text: string;
+      };
+
+      operator: string;
+
+      value: {
+        min?: number;
+        max?: number;
+      };
+
+      target_count: number;
+      current_count: number;
+      completion_percentage: number;
+    }[];
   };
   demographics?: {
     age: any[];

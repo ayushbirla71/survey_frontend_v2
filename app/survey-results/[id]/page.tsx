@@ -9,6 +9,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -205,7 +212,7 @@ export default function SurveyResults() {
   } else if (resultsData) {
     console.log(
       ">>>>>>>>>>>>>>>>>>>>>>>>>>>> the value of the SURVEY DATA is >: ",
-      resultsData
+      resultsData,
     );
     // Transform new API response to match old format
     survey = {
@@ -223,6 +230,8 @@ export default function SurveyResults() {
         qualified_count: resultsData.quota.qualified_count || 0,
         terminated_count: resultsData.quota.terminated_count || 0,
         quota_full_count: resultsData.quota.quota_full_count || 0,
+        quota_options: resultsData.quota.quota_options || [],
+        quota_buckets: resultsData.quota.quota_buckets || [],
       },
       questionResults: resultsData.questionResults || [],
       demographics: {
@@ -235,7 +244,7 @@ export default function SurveyResults() {
             ([date, responses]) => ({
               date,
               responses: responses as number,
-            })
+            }),
           )
         : [],
       individualResponses: resultsData.individualResponses || [],
@@ -298,7 +307,7 @@ export default function SurveyResults() {
             result.data.title,
             result.data.questionResults,
             result.data.individualResponses,
-            result.data.stats
+            result.data.stats,
           );
         }
       } catch (error) {
@@ -333,7 +342,7 @@ export default function SurveyResults() {
     rows: Array<{
       row: string;
       cells: Array<{ column: string; count: number; percentage: number }>;
-    }>
+    }>,
   ) => {
     const set = new Set<string>();
     rows?.forEach((r) => r?.cells?.forEach((c) => set.add(c.column)));
@@ -479,7 +488,185 @@ export default function SurveyResults() {
       {/* Quota Details */}
       {survey?.quota && survey?.quota?.target_count > 0 && (
         <div className="mt-6 mb-6">
-          <h2>Quota Details</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2>Quota Details</h2>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline">View Quota Details</Button>
+              </DialogTrigger>
+
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Quota Question & Answers</DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-6 mt-4">
+                  {/* GROUPED QUOTA QUESTIONS */}
+                  {Object.values(
+                    (survey?.quota?.quota_options || []).reduce(
+                      (acc: any, item: any) => {
+                        const qId = item.question?.id;
+
+                        if (!acc[qId]) {
+                          acc[qId] = {
+                            question: item.question,
+                            answers: [],
+                          };
+                        }
+
+                        acc[qId].answers.push(item);
+
+                        return acc;
+                      },
+                      {},
+                    ),
+                  ).map((group: any, index: number) => (
+                    <Card key={index}>
+                      <CardHeader>
+                        <CardTitle className="text-lg">
+                          {group.question?.question_text}
+                        </CardTitle>
+
+                        <p className="text-sm text-slate-500">
+                          {group.question?.question_type}
+                        </p>
+                      </CardHeader>
+
+                      <CardContent className="space-y-4">
+                        {group.answers.map((item: any) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between gap-6 border rounded-lg p-4"
+                          >
+                            {/* ANSWER */}
+                            <div className="min-w-[180px]">
+                              <p className="text-sm text-slate-500 mb-1">
+                                Answer
+                              </p>
+
+                              <Badge className="text-sm">
+                                {item.option?.text}
+                              </Badge>
+                            </div>
+
+                            {/* PROGRESS */}
+                            <div className="flex-1">
+                              <div className="flex justify-between text-sm mb-2">
+                                <span>
+                                  {item.current_count} / {item.target_count}
+                                </span>
+
+                                <span className="font-medium">
+                                  {item.completion_percentage}%
+                                </span>
+                              </div>
+
+                              <Progress value={item.completion_percentage} />
+
+                              <div className="mt-2 text-xs text-slate-500">
+                                Current: {item.current_count}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {/* QUOTA BUCKETS */}
+                  {/* GROUPED QUOTA BUCKETS */}
+                  {survey?.quota?.quota_buckets?.length > 0 && (
+                    <div className="pt-2">
+                      <div className="space-y-6">
+                        {Object.values(
+                          (survey?.quota?.quota_buckets || []).reduce(
+                            (acc: any, bucket: any) => {
+                              const qId = bucket.question?.id;
+
+                              if (!acc[qId]) {
+                                acc[qId] = {
+                                  question: bucket.question,
+                                  buckets: [],
+                                };
+                              }
+
+                              acc[qId].buckets.push(bucket);
+
+                              return acc;
+                            },
+                            {},
+                          ),
+                        ).map((group: any, index: number) => (
+                          <Card key={index}>
+                            <CardHeader>
+                              <CardTitle className="text-lg">
+                                {group.question?.question_text}
+                              </CardTitle>
+                            </CardHeader>
+
+                            <CardContent className="space-y-4">
+                              {group.buckets.map((bucket: any) => (
+                                <div
+                                  key={bucket.id}
+                                  className="flex items-center justify-between gap-6 border rounded-lg p-4"
+                                >
+                                  {/* LEFT */}
+                                  <div className="min-w-[220px]">
+                                    <Badge className="mb-2">
+                                      {bucket.label}
+                                    </Badge>
+
+                                    <p className="text-xs text-slate-500">
+                                      {bucket.operator}
+                                    </p>
+
+                                    {/* OPTIONAL RANGE */}
+                                    {bucket?.value && (
+                                      <div className="mt-2 text-xs text-slate-500">
+                                        {bucket.value.min != null &&
+                                          bucket.value.max != null && (
+                                            <span>
+                                              Range: {bucket.value.min} -{" "}
+                                              {bucket.value.max}
+                                            </span>
+                                          )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* RIGHT */}
+                                  <div className="flex-1">
+                                    <div className="flex justify-between text-sm mb-2">
+                                      <span>
+                                        {bucket.current_count} /{" "}
+                                        {bucket.target_count}
+                                      </span>
+
+                                      <span className="font-medium">
+                                        {bucket.completion_percentage}%
+                                      </span>
+                                    </div>
+
+                                    <Progress
+                                      value={bucket.completion_percentage}
+                                    />
+
+                                    <div className="mt-2 text-xs text-slate-500">
+                                      Current: {bucket.current_count}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
           <div className="mt-3 grid gap-4 md:grid-cols-4">
             <Card>
               <CardContent className="flex items-center p-4">
@@ -549,6 +736,8 @@ export default function SurveyResults() {
           </div>{" "}
         </div>
       )}
+
+      {/* Quota Popup */}
 
       {/* Survey Details */}
       <Tabs defaultValue="overview" className="space-y-4">
@@ -651,7 +840,7 @@ export default function SurveyResults() {
                           >
                             "{response}"
                           </div>
-                        )
+                        ),
                       )}
                     </div>
                   )}
@@ -750,7 +939,7 @@ export default function SurveyResults() {
                         .sort(
                           (a: any, b: any) =>
                             (a.averageRank ?? Infinity) -
-                            (b.averageRank ?? Infinity)
+                            (b.averageRank ?? Infinity),
                         )
                         .map((item: any, i: number) => (
                           <div
@@ -785,7 +974,7 @@ export default function SurveyResults() {
                                       <Badge key={rank} variant="secondary">
                                         Rank {rank}: {count}
                                       </Badge>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               )}
@@ -844,7 +1033,7 @@ export default function SurveyResults() {
                                     </td>
                                     {columns.map((col, ci) => {
                                       const cell = r.cells.find(
-                                        (c) => c.column === col
+                                        (c) => c.column === col,
                                       ) || { count: 0, percentage: 0 };
                                       return (
                                         <td key={ci} className="px-3 py-2">
@@ -923,7 +1112,7 @@ export default function SurveyResults() {
                           ))}
                         </div>
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               )}
