@@ -16,7 +16,8 @@ export default function ThankYou() {
   const [surveyTitle, setSurveyTitle] = useState("");
   const [audienceCount, setAudienceCount] = useState(0);
   const [surveyHtml, setSurveyHtml] = useState("");
-  const [surveyData, setSurveyData] = useState(null);
+  // const [surveyData, setSurveyData] = useState(null);
+  const [surveyData, setSurveyData] = useState<any>(null);
 
   useEffect(() => {
     // Get the survey details from localStorage
@@ -50,7 +51,7 @@ export default function ThankYou() {
 
   const shareSurvey = () => {
     // const surveyUrl = `${window.location.origin}/survey/preview`
-    const surveyUrl = localStorage.getItem("surveyUrl");
+    const surveyUrl = localStorage.getItem("surveyUrl") || "";
 
     if (navigator.share) {
       navigator.share({

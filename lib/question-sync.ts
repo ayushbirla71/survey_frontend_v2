@@ -90,7 +90,7 @@ export function diffQuestions(original: AnyQuestion[], current: AnyQuestion[]) {
 export async function syncSurveyQuestions(
   surveyId: string,
   original: AnyQuestion[],
-  current: AnyQuestion[]
+  current: AnyQuestion[],
 ) {
   console.log(">>>>>> the VALUE OF THE ORIGINAL QUESTIONS is : ", original);
   console.log(">>>>>> the VALUE OF THE CURRENT QUESTIONS is : ", current);
@@ -118,7 +118,7 @@ export async function syncSurveyQuestions(
       });
       if (error) throw new Error(error);
       return { localId: q.id, server: data };
-    })
+    }),
   );
 
   // Update
@@ -142,7 +142,7 @@ export async function syncSurveyQuestions(
         max_rank_allowed: n.max_rank_allowed ?? 1,
       });
       if (error) throw new Error(error);
-    })
+    }),
   );
 
   // Delete
@@ -151,19 +151,25 @@ export async function syncSurveyQuestions(
       if (!q.id) return;
       const { error } = await questionApi.deleteQuestion(String(q.id));
       if (error) throw new Error(error);
-    })
+    }),
   );
 
   // Replace local temp IDs with server IDs for created questions
+  // const idMap = new Map(
+  //   createdPairs
+  //     .filter((p) => p.server?.id)
+  //     .map((p) => [p.localId, p.server.id] as const)
+  // );
   const idMap = new Map(
     createdPairs
-      .filter((p) => p.server?.id)
-      .map((p) => [p.localId, p.server.id] as const)
+      .filter((p): p is typeof p & { server: { id: string } } => !!p.server?.id)
+      .map((p) => [p.localId, p.server.id] as const),
   );
 
   const merged = (current || []).map((q) => {
-    if (idMap.has(q.id)) {
-      return { ...q, id: idMap.get(q.id) };
+    // if (idMap.has(q.id))
+    if (q.id && idMap.has(q.id)) {
+      return { ...q, id: idMap.get(q.id)! };
     }
     return q;
   });

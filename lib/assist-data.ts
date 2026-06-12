@@ -62,7 +62,7 @@ export const dashboardData = {
       date: "2023-05-28",
     },
   ],
-}
+};
 
 // Survey categories
 export const categories = [
@@ -81,7 +81,7 @@ export const categories = [
   "Sports",
   "Technology",
   "Energy",
-]
+];
 
 // Sample questions for the survey editor
 export const sampleQuestions = [
@@ -89,7 +89,13 @@ export const sampleQuestions = [
     id: "q1",
     type: "single_choice",
     question: "How satisfied are you with our product?",
-    options: ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"],
+    options: [
+      "Very Satisfied",
+      "Satisfied",
+      "Neutral",
+      "Dissatisfied",
+      "Very Dissatisfied",
+    ],
     required: true,
   },
   {
@@ -111,7 +117,7 @@ export const sampleQuestions = [
     question: "How likely are you to recommend our product to others?",
     required: true,
   },
-]
+];
 
 // Sent surveys data
 export const sentSurveys = [
@@ -155,14 +161,14 @@ export const sentSurveys = [
     completionRate: 0,
     createdAt: "2023-05-28",
   },
-]
+];
 
 // Add function to add new survey to sent surveys
 export function addSentSurvey(surveyData: {
-  title: string
-  category: string
-  targetCount: number
-  questions: any[]
+  title: string;
+  category: string;
+  targetCount: number;
+  questions: any[];
 }) {
   const newSurvey = {
     id: `survey-${Date.now()}`,
@@ -173,24 +179,28 @@ export function addSentSurvey(surveyData: {
     target: surveyData.targetCount,
     completionRate: 0,
     createdAt: new Date().toISOString().split("T")[0],
-  }
+  };
 
-  sentSurveys.unshift(newSurvey)
+  sentSurveys.unshift(newSurvey);
 
   // Update dashboard stats
-  dashboardData.stats.totalSurveys += 1
-  dashboardData.stats.surveyGrowth = Math.round(Math.random() * 20) + 5 // Simulate growth
+  dashboardData.stats.totalSurveys += 1;
+  dashboardData.stats.surveyGrowth = Math.round(Math.random() * 20) + 5; // Simulate growth
 
-  return newSurvey
+  return newSurvey;
 }
 
 // Add function to update dashboard data
 export function updateDashboardStats() {
-  dashboardData.stats.totalSurveys = sentSurveys.length
-  dashboardData.stats.totalResponses = sentSurveys.reduce((sum, survey) => sum + survey.responses, 0)
+  dashboardData.stats.totalSurveys = sentSurveys.length;
+  dashboardData.stats.totalResponses = sentSurveys.reduce(
+    (sum, survey) => sum + survey.responses,
+    0,
+  );
   dashboardData.stats.completionRate = Math.round(
-    sentSurveys.reduce((sum, survey) => sum + survey.completionRate, 0) / sentSurveys.length,
-  )
+    sentSurveys.reduce((sum, survey) => sum + survey.completionRate, 0) /
+      sentSurveys.length,
+  );
 }
 
 // Survey results data
@@ -248,9 +258,15 @@ export const surveyResults = {
         submittedAt: "2023-06-20 14:30",
         completionTime: 3.5,
         answers: [
-          { question: "How satisfied are you with your current role?", answer: "Satisfied" },
+          {
+            question: "How satisfied are you with your current role?",
+            answer: "Satisfied",
+          },
           { question: "Rate your work-life balance", answer: "4/5" },
-          { question: "What improvements would you suggest?", answer: "More flexible working hours" },
+          {
+            question: "What improvements would you suggest?",
+            answer: "More flexible working hours",
+          },
         ],
       },
       {
@@ -258,9 +274,15 @@ export const surveyResults = {
         submittedAt: "2023-06-20 15:45",
         completionTime: 4.1,
         answers: [
-          { question: "How satisfied are you with your current role?", answer: "Very Satisfied" },
+          {
+            question: "How satisfied are you with your current role?",
+            answer: "Very Satisfied",
+          },
           { question: "Rate your work-life balance", answer: "5/5" },
-          { question: "What improvements would you suggest?", answer: "Better team collaboration tools" },
+          {
+            question: "What improvements would you suggest?",
+            answer: "Better team collaboration tools",
+          },
         ],
       },
     ],
@@ -294,7 +316,7 @@ export const surveyResults = {
       { date: "Jun 20", responses: 72 },
     ],
   },
-}
+};
 
 // Add audience data generation at the end of the file
 
@@ -351,7 +373,7 @@ const generateAudienceData = () => {
     "Deborah",
     "Timothy",
     "Dorothy",
-  ]
+  ];
 
   const lastNames = [
     "Smith",
@@ -404,7 +426,7 @@ const generateAudienceData = () => {
     "Mitchell",
     "Carter",
     "Roberts",
-  ]
+  ];
 
   const cities = [
     { name: "New York", state: "NY", country: "United States" },
@@ -427,7 +449,7 @@ const generateAudienceData = () => {
     { name: "Munich", state: "", country: "Germany" },
     { name: "Hamburg", state: "", country: "Germany" },
     { name: "Sydney", state: "NSW", country: "Australia" },
-  ]
+  ];
 
   const industries = [
     "IT Sector",
@@ -445,7 +467,7 @@ const generateAudienceData = () => {
     "Media",
     "Sports",
     "Technology",
-  ]
+  ];
 
   const jobTitles = [
     "Software Engineer",
@@ -468,25 +490,41 @@ const generateAudienceData = () => {
     "Coordinator",
     "Specialist",
     "Director",
-  ]
+  ];
 
-  const ageGroups = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
-  const genders = ["Male", "Female", "Non-binary", "Prefer not to say"]
-  const educationLevels = ["High School", "Bachelor's", "Master's", "PhD", "Associate", "Trade School"]
-  const incomeRanges = ["$25k-$35k", "$35k-$50k", "$50k-$75k", "$75k-$100k", "$100k-$150k", "$150k+"]
+  const ageGroups = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+  const genders = ["Male", "Female", "Non-binary", "Prefer not to say"];
+  const educationLevels = [
+    "High School",
+    "Bachelor's",
+    "Master's",
+    "PhD",
+    "Associate",
+    "Trade School",
+  ];
+  const incomeRanges = [
+    "$25k-$35k",
+    "$35k-$50k",
+    "$50k-$75k",
+    "$75k-$100k",
+    "$100k-$150k",
+    "$150k+",
+  ];
 
-  const audienceData = []
+  const audienceData = [];
 
   for (let i = 1; i <= 10000; i++) {
-    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)]
-    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)]
-    const city = cities[Math.floor(Math.random() * cities.length)]
-    const industry = industries[Math.floor(Math.random() * industries.length)]
-    const jobTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)]
-    const ageGroup = ageGroups[Math.floor(Math.random() * ageGroups.length)]
-    const gender = genders[Math.floor(Math.random() * genders.length)]
-    const education = educationLevels[Math.floor(Math.random() * educationLevels.length)]
-    const income = incomeRanges[Math.floor(Math.random() * incomeRanges.length)]
+    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const city = cities[Math.floor(Math.random() * cities.length)];
+    const industry = industries[Math.floor(Math.random() * industries.length)];
+    const jobTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)];
+    const ageGroup = ageGroups[Math.floor(Math.random() * ageGroups.length)];
+    const gender = genders[Math.floor(Math.random() * genders.length)];
+    const education =
+      educationLevels[Math.floor(Math.random() * educationLevels.length)];
+    const income =
+      incomeRanges[Math.floor(Math.random() * incomeRanges.length)];
 
     audienceData.push({
       id: `AUD${i.toString().padStart(5, "0")}`,
@@ -511,37 +549,51 @@ const generateAudienceData = () => {
         .toISOString()
         .split("T")[0],
       isActive: Math.random() > 0.1, // 90% active
-      lastActivity: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000)
+      lastActivity: new Date(
+        Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000,
+      )
         .toISOString()
         .split("T")[0],
       tags: [industry, ageGroup, gender].filter(Boolean),
-    })
+    });
   }
 
-  return audienceData
-}
+  return audienceData;
+};
 
 // Export the audience data
-export const audienceData = generateAudienceData()
+export const audienceData = generateAudienceData();
 
 // Audience statistics
 export const audienceStats = {
   total: audienceData.length,
   active: audienceData.filter((person) => person.isActive).length,
-  byAgeGroup: audienceData.reduce((acc, person) => {
-    acc[person.ageGroup] = (acc[person.ageGroup] || 0) + 1
-    return acc
-  }, {}),
-  byGender: audienceData.reduce((acc, person) => {
-    acc[person.gender] = (acc[person.gender] || 0) + 1
-    return acc
-  }, {}),
-  byCountry: audienceData.reduce((acc, person) => {
-    acc[person.country] = (acc[person.country] || 0) + 1
-    return acc
-  }, {}),
-  byIndustry: audienceData.reduce((acc, person) => {
-    acc[person.industry] = (acc[person.industry] || 0) + 1
-    return acc
-  }, {}),
-}
+  byAgeGroup: audienceData.reduce(
+    (acc, person) => {
+      acc[person.ageGroup] = (acc[person.ageGroup] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  ),
+  byGender: audienceData.reduce(
+    (acc, person) => {
+      acc[person.gender] = (acc[person.gender] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  ),
+  byCountry: audienceData.reduce(
+    (acc, person) => {
+      acc[person.country] = (acc[person.country] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  ),
+  byIndustry: audienceData.reduce(
+    (acc, person) => {
+      acc[person.industry] = (acc[person.industry] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  ),
+};

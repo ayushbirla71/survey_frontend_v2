@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -70,7 +70,7 @@ export default function AudiencePage() {
     error: statsError,
     refetch: refetchStats,
   } = useApi(() =>
-    apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats)
+    apiWithFallback(() => audienceApi.getAudienceStats(), audienceStats),
   );
 
   const {
@@ -81,10 +81,10 @@ export default function AudiencePage() {
 
   // Mutations
   const { mutate: importAudience, loading: importLoading } = useMutation(
-    audienceApi.importAudience
+    audienceApi.importAudience,
   );
   const { mutate: createSegment, loading: createSegmentLoading } = useMutation(
-    audienceApi.createSegment
+    audienceApi.createSegment,
   );
 
   // Fallback to local data if API fails
@@ -136,7 +136,22 @@ export default function AudiencePage() {
   ];
 
   // Update API params when filters change
-  useState(() => {
+  // useState(() => {
+  //   const timeoutId = setTimeout(() => {
+  //     updateParams({
+  //       page: 1,
+  //       search: searchQuery || undefined,
+  //       ageGroup: ageFilter === "all" ? undefined : ageFilter,
+  //       gender: genderFilter === "all" ? undefined : genderFilter,
+  //       country: countryFilter === "all" ? undefined : countryFilter,
+  //       industry: industryFilter === "all" ? undefined : industryFilter,
+  //     });
+  //   }, 500);
+
+  //   return () => clearTimeout(timeoutId);
+  // }, [searchQuery, ageFilter, genderFilter, countryFilter, industryFilter]);
+
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
       updateParams({
         page: 1,
@@ -172,21 +187,21 @@ export default function AudiencePage() {
     ([age, count]) => ({
       ageGroup: age,
       count: count as number,
-    })
+    }),
   );
 
   const genderChartData = Object.entries(displayStats.byGender || {}).map(
     ([gender, count]) => ({
       gender,
       count: count as number,
-    })
+    }),
   );
 
   const countryChartData = Object.entries(displayStats.byCountry || {}).map(
     ([country, count]) => ({
       country,
       count: count as number,
-    })
+    }),
   );
 
   const industryChartData = Object.entries(displayStats.byIndustry || {})
@@ -208,14 +223,21 @@ export default function AudiencePage() {
 
   const handleExport = async () => {
     try {
+      // const blob = await audienceApi.exportAudience({
+      //   format: "csv",
+      //   filters: {
+      //     ageGroup: ageFilter === "all" ? undefined : ageFilter,
+      //     gender: genderFilter === "all" ? undefined : genderFilter,
+      //     country: countryFilter === "all" ? undefined : countryFilter,
+      //     industry: industryFilter === "all" ? undefined : industryFilter,
+      //   },
+      // });
       const blob = await audienceApi.exportAudience({
         format: "csv",
-        filters: {
-          ageGroup: ageFilter === "all" ? undefined : ageFilter,
-          gender: genderFilter === "all" ? undefined : genderFilter,
-          country: countryFilter === "all" ? undefined : countryFilter,
-          industry: industryFilter === "all" ? undefined : industryFilter,
-        },
+        ageGroup: ageFilter === "all" ? undefined : ageFilter,
+        gender: genderFilter === "all" ? undefined : genderFilter,
+        country: countryFilter === "all" ? undefined : countryFilter,
+        industry: industryFilter === "all" ? undefined : industryFilter,
       });
 
       const url = URL.createObjectURL(blob);
@@ -251,7 +273,7 @@ export default function AudiencePage() {
               `"${person.city}, ${person.country}"`,
               person.industry,
               person.jobTitle,
-            ].join(",")
+            ].join(","),
           ),
       ].join("\n");
 

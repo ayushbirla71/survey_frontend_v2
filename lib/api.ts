@@ -990,7 +990,8 @@ export const surveyApi = {
 
       const data = await response.json();
       console.log("data is", data);
-      return { data };
+      return { data } as any;
+      // return data;
     } catch (error) {
       console.error("API request failed:", error);
       throw error;
@@ -1712,16 +1713,18 @@ export const surveyResultsApi = {
       limit?: number;
     },
   ): Promise<
-    PaginatedResponse<{
-      id: string;
-      submittedAt: string;
-      completionTime: number;
-      answers: Array<{
-        questionId: string;
-        question: string;
-        answer: string;
-      }>;
-    }>
+    ApiResponse<
+      PaginatedResponse<{
+        id: string;
+        submittedAt: string;
+        completionTime: number;
+        answers: Array<{
+          questionId: string;
+          question: string;
+          answer: string;
+        }>;
+      }>
+    >
   > => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
@@ -1758,6 +1761,27 @@ export const surveyResultsApi = {
 
     return response.blob();
   },
+};
+
+type AudienceItem = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  ageGroup: string;
+  gender: string;
+  city: string;
+  state: string;
+  country: string;
+  industry: string;
+  jobTitle: string;
+  education: string;
+  income: string;
+  joinedDate: string;
+  isActive: boolean;
+  lastActivity: string;
+  tags: string[];
 };
 
 // Audience APIs
@@ -1805,7 +1829,11 @@ export const audienceApi = {
     const endpoint = `/api/audience${
       queryParams.toString() ? `?${queryParams.toString()}` : ""
     }`;
-    return apiRequest(endpoint);
+    // return apiRequest(endpoint);
+    const response =
+      await apiRequest<PaginatedResponse<AudienceItem>>(endpoint);
+
+    return response.data!;
   },
 
   // GET /api/audience/stats
@@ -2371,6 +2399,10 @@ export const demoData = {
       Finance: 1200,
       Education: 1000,
       Retail: 800,
+    },
+    byState: {
+      California: 1200,
+      Texas: 900,
     },
   },
 

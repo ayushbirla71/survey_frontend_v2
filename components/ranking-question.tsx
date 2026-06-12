@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { OptionMediaDisplay } from "@/app/survey/[id]/page";
+import { OptionMediaDisplay } from "@/app/survey/[id]/optionMediaDisplay";
+// import { OptionMediaDisplay } from "@/app/survey/[id]/page";
 
 type RankingOption = {
   id: string;

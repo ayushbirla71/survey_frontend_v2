@@ -25,8 +25,11 @@ export default function FacebookLiveEmbed({
 
       // Parse after SDK loads
       script.onload = () => {
-        if (window.FB) {
-          window.FB.XFBML.parse();
+        // if (window.FB) {
+        //   window.FB.XFBML.parse();
+        // }
+        if ((window as any).FB) {
+          (window as any).FB.XFBML.parse();
         }
       };
     }

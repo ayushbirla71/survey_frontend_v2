@@ -35,7 +35,8 @@ import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
 import { toast } from "react-toastify";
 import { ImageIcon, Video as VideoIcon, Mic } from "lucide-react";
-import { OptionMediaDisplay } from "@/app/survey/[id]/page";
+import { OptionMediaDisplay } from "@/app/survey/[id]/optionMediaDisplay";
+// import { OptionMediaDisplay } from "@/app/survey/[id]/page";
 
 // Media types for questions and options
 interface QuestionMedia {
@@ -205,7 +206,7 @@ export default function SurveyResults() {
   } else if (resultsData) {
     console.log(
       ">>>>>>>>>>>>>>>>>>>>>>>>>>>> the value of the SURVEY DATA is >: ",
-      resultsData
+      resultsData,
     );
     // Transform new API response to match old format
     survey = {
@@ -235,7 +236,7 @@ export default function SurveyResults() {
             ([date, responses]) => ({
               date,
               responses: responses as number,
-            })
+            }),
           )
         : [],
       individualResponses: resultsData.individualResponses || [],
@@ -298,7 +299,7 @@ export default function SurveyResults() {
             result.data.title,
             result.data.questionResults,
             result.data.individualResponses,
-            result.data.stats
+            result.data.stats,
           );
         }
       } catch (error) {
@@ -333,7 +334,7 @@ export default function SurveyResults() {
     rows: Array<{
       row: string;
       cells: Array<{ column: string; count: number; percentage: number }>;
-    }>
+    }>,
   ) => {
     const set = new Set<string>();
     rows?.forEach((r) => r?.cells?.forEach((c) => set.add(c.column)));
@@ -651,7 +652,7 @@ export default function SurveyResults() {
                           >
                             "{response}"
                           </div>
-                        )
+                        ),
                       )}
                     </div>
                   )}
@@ -750,7 +751,7 @@ export default function SurveyResults() {
                         .sort(
                           (a: any, b: any) =>
                             (a.averageRank ?? Infinity) -
-                            (b.averageRank ?? Infinity)
+                            (b.averageRank ?? Infinity),
                         )
                         .map((item: any, i: number) => (
                           <div
@@ -785,7 +786,7 @@ export default function SurveyResults() {
                                       <Badge key={rank} variant="secondary">
                                         Rank {rank}: {count}
                                       </Badge>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               )}
@@ -844,7 +845,7 @@ export default function SurveyResults() {
                                     </td>
                                     {columns.map((col, ci) => {
                                       const cell = r.cells.find(
-                                        (c) => c.column === col
+                                        (c) => c.column === col,
                                       ) || { count: 0, percentage: 0 };
                                       return (
                                         <td key={ci} className="px-3 py-2">
@@ -923,7 +924,7 @@ export default function SurveyResults() {
                           ))}
                         </div>
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               )}

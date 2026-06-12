@@ -58,7 +58,7 @@ export default function AudienceSelector({
   console.log(">>>>>> the value of the SURVEY SETTINGS is : ", surveySettings);
 
   const [customTarget, setCustomTarget] = useState(
-    audience.targetCount.toString()
+    audience.targetCount.toString(),
   );
   const [file, setFile] = useState<File | null>(null);
 
@@ -71,8 +71,8 @@ export default function AudienceSelector({
   } = useApi(() =>
     apiWithFallback(
       () => audienceApi.getAudienceStats(),
-      demoData.audienceStats
-    )
+      demoData.audienceStats,
+    ),
   );
 
   const stats = audienceStats || demoData.audienceStats;
@@ -85,7 +85,10 @@ export default function AudienceSelector({
     // Calculate based on age groups
     if (audience.ageGroups.length > 0) {
       const ageReach = audience.ageGroups.reduce((sum, ageGroup) => {
-        return sum + (stats.byAgeGroup[ageGroup] || 0);
+        // return sum + (stats.byAgeGroup[ageGroup] || 0);
+        return (
+          sum + ((stats.byAgeGroup as Record<string, number>)[ageGroup] || 0)
+        );
       }, 0);
       estimatedReach = Math.max(estimatedReach, ageReach);
     }
@@ -93,7 +96,10 @@ export default function AudienceSelector({
     // Calculate based on industries
     if (audience.industries.length > 0) {
       const industryReach = audience.industries.reduce((sum, industry) => {
-        return sum + (stats.byIndustry[industry] || 0);
+        // return sum + (stats.byIndustry[industry] || 0);
+        return (
+          sum + ((stats.byIndustry as Record<string, number>)[industry] || 0)
+        );
       }, 0);
       estimatedReach = Math.max(estimatedReach, industryReach);
     }
@@ -101,7 +107,10 @@ export default function AudienceSelector({
     // Calculate based on locations (countries)
     if (audience.locations.length > 0) {
       const locationReach = audience.locations.reduce((sum, location) => {
-        return sum + (stats.byCountry[location] || 0);
+        // return sum + (stats.byCountry[location] || 0);
+        return (
+          sum + ((stats.byCountry as Record<string, number>)[location] || 0)
+        );
       }, 0);
       estimatedReach = Math.max(estimatedReach, locationReach);
     }
@@ -190,7 +199,7 @@ export default function AudienceSelector({
             !jsonData[0].hasOwnProperty("userUniqueIds")
           ) {
             toast.error(
-              'Excel file must contain a column named "userUniqueIds"'
+              'Excel file must contain a column named "userUniqueIds"',
             );
             // setError('Excel file must contain a column named "userId"');
             setFile(null);
@@ -345,9 +354,14 @@ export default function AudienceSelector({
                             {statsLoading ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
                             ) : (
-                              `${(
-                                stats?.byAgeGroup[ageGroup] || 0
-                              ).toLocaleString()} people`
+                              `${
+                                // stats?.byAgeGroup[ageGroup] || 0
+                                (
+                                  (
+                                    stats?.byAgeGroup as Record<string, number>
+                                  )?.[ageGroup] || 0
+                                ).toLocaleString()
+                              } people`
                             )}
                           </div>
                         </div>
@@ -381,9 +395,14 @@ export default function AudienceSelector({
                             {statsLoading ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
                             ) : (
-                              `${(
-                                stats?.byGender[gender] || 0
-                              ).toLocaleString()} people`
+                              `${
+                                // stats?.byGender[gender] || 0
+                                (
+                                  (stats?.byGender as Record<string, number>)?.[
+                                    gender
+                                  ] || 0
+                                ).toLocaleString()
+                              } people`
                             )}
                           </div>
                         </div>
@@ -417,9 +436,14 @@ export default function AudienceSelector({
                             {statsLoading ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
                             ) : (
-                              `${(
-                                stats?.byCountry[location] || 0
-                              ).toLocaleString()} people`
+                              `${
+                                // stats?.byCountry[location] || 0
+                                (
+                                  (
+                                    stats?.byCountry as Record<string, number>
+                                  )?.[location] || 0
+                                ).toLocaleString()
+                              } people`
                             )}
                           </div>
                         </div>
@@ -455,9 +479,14 @@ export default function AudienceSelector({
                             {statsLoading ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
                             ) : (
-                              `${(
-                                stats?.byIndustry[industry] || 0
-                              ).toLocaleString()} people`
+                              `${
+                                // stats?.byIndustry[industry] || 0
+                                (
+                                  (
+                                    stats?.byIndustry as Record<string, number>
+                                  )?.[industry] || 0
+                                ).toLocaleString()
+                              } people`
                             )}
                           </div>
                         </div>
@@ -642,7 +671,7 @@ export default function AudienceSelector({
                       <span className="font-medium">
                         {estimatedReach > 0
                           ? Math.round(
-                              (audience.targetCount / estimatedReach) * 100
+                              (audience.targetCount / estimatedReach) * 100,
                             )
                           : 0}
                         %

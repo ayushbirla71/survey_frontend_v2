@@ -104,7 +104,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
 
     initializeAuth();
-  }, [router, isPublicRoute]);
+  }, []);
+
+  // }, [router, isPublicRoute]);
 
   // ✅ Redirect authenticated users away from AUTH pages only
   //    (do NOT include /survey/... here)
