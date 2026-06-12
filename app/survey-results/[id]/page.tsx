@@ -760,7 +760,19 @@ export default function SurveyResults() {
                 <CardHeader>
                   <CardTitle className="text-lg">{question.question}</CardTitle>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{question.type}</Badge>
+                    <Badge variant="secondary">
+                      {/* {question.type} */}
+                      {question.type === "multiple choice"
+                        ? "Single Choice"
+                        : question.type === "checkboxes"
+                          ? "Multi Choice"
+                          : question.type === "multi-choice grid"
+                            ? "Single Choice Grid"
+                            : question.type === "checkbox grid"
+                              ? "Multi Choice Grid"
+                              : question.type}
+                    </Badge>
+
                     <span className="text-sm text-slate-500">
                       {question.responses} responses
                     </span>

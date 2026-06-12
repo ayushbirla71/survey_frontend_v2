@@ -1159,7 +1159,7 @@ export default function GenerateSurvey() {
           title: title,
           description: description,
           flow_type: surveySettings.flow_type,
-          
+
           survey_send_by: surveySettings.survey_send_by,
           surveyCategoryId: surveyCategoryId,
           autoGenerateQuestions: autoGenerateQuestions,
@@ -1295,6 +1295,85 @@ export default function GenerateSurvey() {
         const { validate, message } = validateRankingQuestion(q);
         if (!validate) {
           toast.error(`${message} for question - "${q.question_text}"`);
+          return;
+        }
+      }
+
+      const validateQuestion = (q: any) => {
+        const categoryName = getQuestionCategoryName(
+          q.categoryId,
+        ).toLowerCase();
+
+        // Categories that require options
+        const optionRequiredCategories = [
+          "multiple choice",
+          "checkboxes",
+          "dropdown",
+          "ranking",
+        ];
+
+        // Grid categories
+        const gridCategories = ["multi-choice grid", "checkbox grid"];
+
+        // Option-based questions
+        if (optionRequiredCategories.includes(categoryName)) {
+          const validOptions =
+            q.options?.filter(
+              (opt: any) => (opt.text || "").trim() !== "" || opt.mediaId,
+            ) || [];
+
+          if (validOptions.length === 0) {
+            return {
+              valid: false,
+              message: `Question "${q.question_text}" requires at least one option`,
+            };
+          }
+        }
+
+        // Grid questions
+        if (gridCategories.includes(categoryName)) {
+          const validRows =
+            q.rowOptions?.filter((r: any) => (r.text || "").trim() !== "") ||
+            [];
+
+          const validColumns =
+            q.columnOptions?.filter((c: any) => (c.text || "").trim() !== "") ||
+            [];
+
+          if (validRows.length === 0) {
+            return {
+              valid: false,
+              message: `Question "${q.question_text}" requires at least one row`,
+            };
+          }
+
+          if (validColumns.length === 0) {
+            return {
+              valid: false,
+              message: `Question "${q.question_text}" requires at least one column`,
+            };
+          }
+        }
+
+        return { valid: true };
+      };
+
+      for (const q of questions) {
+        // Existing ranking validation
+        const rankingValidation = validateRankingQuestion(q);
+
+        if (!rankingValidation.validate) {
+          toast.error(
+            `${rankingValidation.message} for question "${q.question_text}"`,
+          );
+          return;
+        }
+
+        // New option validation
+        const questionValidation = validateQuestion(q);
+
+        if (!questionValidation.valid) {
+          toast.error(questionValidation.message);
           return;
         }
       }
@@ -1473,7 +1552,7 @@ export default function GenerateSurvey() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="container mx-auto max-w-6xl py-6 px-4">
+      <div className="container mx-auto max-w-7xl py-6 px-6">
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-6">
             <Button variant="outline" size="icon" asChild>

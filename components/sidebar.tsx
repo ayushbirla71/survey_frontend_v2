@@ -58,7 +58,8 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="hidden w-64 flex-col bg-slate-50 shadow-sm md:flex border-r border-slate-200">
+    // <div className="hidden w-64 flex-col bg-slate-50 shadow-sm md:flex border-r border-slate-200">
+    <div className="hidden md:flex w-64 flex-col bg-slate-50 shadow-sm border-r border-slate-200 sticky top-0 h-screen overflow-y-auto">
       <div className="p-6 border-b border-slate-200 bg-white">
         <Link href={`/`}>
           <h2 className="text-2xl font-bold text-slate-800">Survey.AI</h2>

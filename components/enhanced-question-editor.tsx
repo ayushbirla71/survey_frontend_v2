@@ -135,12 +135,12 @@ const isOptionsCat = (n: string) =>
 
 const isScaleCat = (n: string) =>
   [CATEGORY.LINEAR_SCALE, CATEGORY.RATING, CATEGORY.NPS].includes(
-    n.toLowerCase() as any
+    n.toLowerCase() as any,
   );
 
 const isGridCat = (n: string) =>
   [CATEGORY.MULTI_CHOICE_GRID, CATEGORY.CHECKBOX_GRID].includes(
-    n.toLowerCase() as any
+    n.toLowerCase() as any,
   );
 
 const isNumberCat = (n: string) =>
@@ -206,7 +206,7 @@ export default function EnhancedQuestionEditor({
 
   const byId = useMemo(
     () => new Map(questions.map((q) => [q.id, q] as const)),
-    [questions]
+    [questions],
   );
 
   const reindex = (items: QuestionVM[]) =>
@@ -228,7 +228,7 @@ export default function EnhancedQuestionEditor({
     }
     const min = Math.max(
       1,
-      Math.min(q.min_rank_required ?? 1, optionCount || 1)
+      Math.min(q.min_rank_required ?? 1, optionCount || 1),
     );
 
     if (q.max_rank_allowed && q.max_rank_allowed > optionCount) {
@@ -248,7 +248,7 @@ export default function EnhancedQuestionEditor({
   const handleQuestionChange = <K extends keyof QuestionVM>(
     id: string,
     field: K,
-    value: QuestionVM[K]
+    value: QuestionVM[K],
   ) => {
     const updated = questions.map((q) => {
       if (q.id !== id) return q;
@@ -311,7 +311,7 @@ export default function EnhancedQuestionEditor({
   // Batch update multiple fields at once to avoid stale closure issues
   const handleQuestionBatchUpdate = (
     id: string,
-    updates: Partial<QuestionVM>
+    updates: Partial<QuestionVM>,
   ) => {
     const updated = questions.map((q) => {
       if (q.id !== id) return q;
@@ -330,7 +330,7 @@ export default function EnhancedQuestionEditor({
     };
 
     onQuestionsUpdate(
-      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x))
+      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x)),
     );
   };
 
@@ -344,7 +344,7 @@ export default function EnhancedQuestionEditor({
     };
 
     onQuestionsUpdate(
-      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x))
+      questions.map((x) => (x.id === qid ? normalizeRanking(updated) : x)),
     );
   };
 
@@ -352,7 +352,7 @@ export default function EnhancedQuestionEditor({
     const q = byId.get(qid);
     if (!q) return;
     const next = (q.options || []).map((opt, i) =>
-      i === idx ? { ...opt, text } : opt
+      i === idx ? { ...opt, text } : opt,
     );
     handleQuestionChange(qid, "options", next);
   };
@@ -361,7 +361,7 @@ export default function EnhancedQuestionEditor({
   const handleOptionFileSelected = async (
     qid: string,
     optIdx: number,
-    file: File
+    file: File,
   ) => {
     const q = byId.get(qid);
     if (!q) return;
@@ -405,7 +405,7 @@ export default function EnhancedQuestionEditor({
                 },
               },
             }
-          : opt
+          : opt,
       );
       handleQuestionChange(qid, "options", next);
       toast.success("Option media uploaded successfully!");
@@ -426,7 +426,7 @@ export default function EnhancedQuestionEditor({
       deleteMedia(optionMediaId);
     }
     const next = (q.options || []).map((opt, i) =>
-      i === optIdx ? { ...opt, mediaId: null, mediaAsset: null } : opt
+      i === optIdx ? { ...opt, mediaId: null, mediaAsset: null } : opt,
     );
     handleQuestionChange(qid, "options", next);
   };
@@ -474,7 +474,7 @@ export default function EnhancedQuestionEditor({
     const q = byId.get(qid);
     if (!q) return;
     const rows = (q.rowOptions || []).map((r: any, i: number) =>
-      i === idx ? { ...r, text } : r
+      i === idx ? { ...r, text } : r,
     );
     handleQuestionChange(qid, "rowOptions", rows);
   };
@@ -483,7 +483,7 @@ export default function EnhancedQuestionEditor({
     const q = byId.get(qid);
     if (!q) return;
     const cols = (q.columnOptions || []).map((c: any, i: number) =>
-      i === idx ? { ...c, text } : c
+      i === idx ? { ...c, text } : c,
     );
     handleQuestionChange(qid, "columnOptions", cols);
   };
@@ -499,7 +499,7 @@ export default function EnhancedQuestionEditor({
     const q = byId.get(qid);
     if (!q) return;
     const cols = (q.columnOptions || []).filter(
-      (_: any, i: number) => i !== idx
+      (_: any, i: number) => i !== idx,
     );
     handleQuestionChange(qid, "columnOptions", cols);
   };
@@ -572,7 +572,7 @@ export default function EnhancedQuestionEditor({
   // helper to reset file input by id
   const resetFileInput = (qid: string) => {
     const input = document.getElementById(
-      `media-input-${qid}`
+      `media-input-${qid}`,
     ) as HTMLInputElement | null;
     if (input) {
       input.value = "";
@@ -756,7 +756,7 @@ export default function EnhancedQuestionEditor({
                                     handleQuestionChange(
                                       q.id,
                                       "question_text",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Question"
@@ -782,11 +782,36 @@ export default function EnhancedQuestionEditor({
                                     />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {(categories as any[])?.map((cat) => (
+                                    {/* {(categories as any[])?.map((cat) => (
                                       <SelectItem key={cat.id} value={cat.id}>
                                         {cat.type_name}
                                       </SelectItem>
-                                    ))}
+                                    ))} */}
+                                    {(categories as any[])?.map((cat) => {
+                                      let displayName = cat.type_name;
+
+                                      if (cat.type_name === "multiple choice") {
+                                        displayName = "single choice";
+                                      } else if (
+                                        cat.type_name === "checkboxes"
+                                      ) {
+                                        displayName = "multi choice";
+                                      } else if (
+                                        cat.type_name === "multi-choice grid"
+                                      ) {
+                                        displayName = "single choice grid";
+                                      } else if (
+                                        cat.type_name === "checkbox grid"
+                                      ) {
+                                        displayName = "multi choice grid";
+                                      }
+
+                                      return (
+                                        <SelectItem key={cat.id} value={cat.id}>
+                                          {displayName}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -799,7 +824,7 @@ export default function EnhancedQuestionEditor({
                                     handleQuestionChange(
                                       q.id,
                                       "required",
-                                      checked
+                                      checked,
                                     )
                                   }
                                 />
@@ -956,7 +981,7 @@ export default function EnhancedQuestionEditor({
                                               setOptionText(
                                                 q.id,
                                                 idx,
-                                                e.target.value
+                                                e.target.value,
                                               )
                                             }
                                             placeholder={`Option ${idx + 1}`}
@@ -974,7 +999,7 @@ export default function EnhancedQuestionEditor({
                                                 handleOptionFileSelected(
                                                   q.id,
                                                   idx,
-                                                  file
+                                                  file,
                                                 );
                                               }
                                               e.target.value = "";
@@ -987,7 +1012,7 @@ export default function EnhancedQuestionEditor({
                                             onClick={() => {
                                               document
                                                 .getElementById(
-                                                  `option-media-${q.id}-${idx}`
+                                                  `option-media-${q.id}-${idx}`,
                                                 )
                                                 ?.click();
                                             }}
@@ -1089,24 +1114,24 @@ export default function EnhancedQuestionEditor({
                                 <div className="space-y-2">
                                   <Label>
                                     {getCategoryName(
-                                      q.categoryId
+                                      q.categoryId,
                                     ).toLowerCase() === "nps"
                                       ? "NPS Scale (0-10)"
                                       : getCategoryName(
-                                          q.categoryId
-                                        ).toLowerCase() === "rating"
-                                      ? "Rating scale"
-                                      : "Linear scale"}
+                                            q.categoryId,
+                                          ).toLowerCase() === "rating"
+                                        ? "Rating scale"
+                                        : "Linear scale"}
                                   </Label>
 
                                   {getCategoryName(
-                                    q.categoryId
+                                    q.categoryId,
                                   ).toLowerCase() === "nps" ? (
                                     <div className="space-y-2">
                                       <div className="flex gap-2 flex-wrap">
                                         {Array.from(
                                           { length: 11 },
-                                          (_, i) => i
+                                          (_, i) => i,
                                         ).map((val) => (
                                           <button
                                             key={val}
@@ -1142,7 +1167,7 @@ export default function EnhancedQuestionEditor({
                                               setScaleField(
                                                 q.id,
                                                 "rangeFrom",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1157,7 +1182,7 @@ export default function EnhancedQuestionEditor({
                                               setScaleField(
                                                 q.id,
                                                 "rangeTo",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1176,7 +1201,7 @@ export default function EnhancedQuestionEditor({
                                                 setScaleField(
                                                   q.id,
                                                   "fromLabel",
-                                                  e.target.value || null
+                                                  e.target.value || null,
                                                 )
                                               }
                                             />
@@ -1189,7 +1214,7 @@ export default function EnhancedQuestionEditor({
                                                 setScaleField(
                                                   q.id,
                                                   "toLabel",
-                                                  e.target.value || null
+                                                  e.target.value || null,
                                                 )
                                               }
                                             />
@@ -1236,7 +1261,7 @@ export default function EnhancedQuestionEditor({
                                                   setGridRowText(
                                                     q.id,
                                                     idx,
-                                                    e.target.value
+                                                    e.target.value,
                                                   )
                                                 }
                                                 placeholder={`Row ${idx + 1}`}
@@ -1252,7 +1277,7 @@ export default function EnhancedQuestionEditor({
                                                 <Trash2 className="h-4 w-4 text-red-600" />
                                               </Button>
                                             </div>
-                                          )
+                                          ),
                                         )}
                                         {(q.rowOptions || []).length === 0 && (
                                           <div className="text-slate-500 text-sm">
@@ -1288,7 +1313,7 @@ export default function EnhancedQuestionEditor({
                                                   setGridColumnText(
                                                     q.id,
                                                     idx,
-                                                    e.target.value
+                                                    e.target.value,
                                                   )
                                                 }
                                                 placeholder={`Column ${
@@ -1306,7 +1331,7 @@ export default function EnhancedQuestionEditor({
                                                 <Trash2 className="h-4 w-4 text-red-600" />
                                               </Button>
                                             </div>
-                                          )
+                                          ),
                                         )}
                                         {(q.columnOptions || []).length ===
                                           0 && (
@@ -1345,7 +1370,7 @@ export default function EnhancedQuestionEditor({
 
                                         handleQuestionBatchUpdate(
                                           q.id,
-                                          updated
+                                          updated,
                                         );
                                       }}
                                     />
@@ -1363,12 +1388,12 @@ export default function EnhancedQuestionEditor({
                                           const updated = normalizeRanking({
                                             ...q,
                                             min_rank_required: Number(
-                                              e.target.value
+                                              e.target.value,
                                             ),
                                           });
                                           handleQuestionBatchUpdate(
                                             q.id,
-                                            updated
+                                            updated,
                                           );
                                         }}
                                       />
@@ -1384,12 +1409,12 @@ export default function EnhancedQuestionEditor({
                                           const updated = normalizeRanking({
                                             ...q,
                                             max_rank_allowed: Number(
-                                              e.target.value
+                                              e.target.value,
                                             ),
                                           });
                                           handleQuestionBatchUpdate(
                                             q.id,
-                                            updated
+                                            updated,
                                           );
                                         }}
                                       />
