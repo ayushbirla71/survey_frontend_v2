@@ -24,11 +24,11 @@ export default function FacebookLiveEmbed({
       document.head.appendChild(script);
 
       // Parse after SDK loads
-      script.onload = () => {
-        if (window.FB) {
-          window.FB.XFBML.parse();
-        }
-      };
+      // script.onload = () => {
+      //   if (window.FB) {
+      //     window.FB.XFBML.parse();
+      //   }
+      // };
     }
   }, []);
 

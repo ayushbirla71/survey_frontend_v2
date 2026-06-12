@@ -990,7 +990,7 @@ export const surveyApi = {
 
       const data = await response.json();
       console.log("data is", data);
-      return { data };
+      return data;
     } catch (error) {
       console.error("API request failed:", error);
       throw error;
@@ -1730,7 +1730,22 @@ export const surveyResultsApi = {
     const endpoint = `/api/surveys/${id}/responses${
       queryParams.toString() ? `?${queryParams.toString()}` : ""
     }`;
-    return apiRequest(endpoint);
+
+    const res = await apiRequest<any>(endpoint);
+
+    // If the response already includes pagination, return as-is.
+    if (res && (res as any).pagination) return res as any;
+
+    // Otherwise, wrap the array response into a PaginatedResponse.
+    const dataArray = Array.isArray(res) ? res : res?.data ?? [];
+    return {
+      data: dataArray,
+      pagination: {
+        page: params?.page ?? 1,
+        limit: params?.limit ?? dataArray.length,
+        total: dataArray.length,
+      },
+    } as any;
   },
 
   // GET /api/surveys/:id/export
@@ -1772,7 +1787,7 @@ export const audienceApi = {
     country?: string;
     industry?: string;
   }): Promise<
-    PaginatedResponse<{
+    ApiResponse<PaginatedResponse<{
       id: string;
       firstName: string;
       lastName: string;
@@ -1791,7 +1806,7 @@ export const audienceApi = {
       isActive: boolean;
       lastActivity: string;
       tags: string[];
-    }>
+    }>>
   > => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
@@ -2372,6 +2387,13 @@ export const demoData = {
       Education: 1000,
       Retail: 800,
     },
+
+  byState: {
+    California: 1800,
+    Texas: 1200,
+    Florida: 900,
+    NewYork: 1100,
+  },
   },
 
   generatedQuestions: {

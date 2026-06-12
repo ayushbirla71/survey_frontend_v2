@@ -523,25 +523,28 @@ const generateAudienceData = () => {
 
 // Export the audience data
 export const audienceData = generateAudienceData()
-
 // Audience statistics
 export const audienceStats = {
   total: audienceData.length,
   active: audienceData.filter((person) => person.isActive).length,
-  byAgeGroup: audienceData.reduce((acc, person) => {
-    acc[person.ageGroup] = (acc[person.ageGroup] || 0) + 1
-    return acc
+
+  byAgeGroup: audienceData.reduce<Record<string, number>>((acc, person) => {
+    acc[person.ageGroup] = (acc[person.ageGroup] || 0) + 1;
+    return acc;
   }, {}),
-  byGender: audienceData.reduce((acc, person) => {
-    acc[person.gender] = (acc[person.gender] || 0) + 1
-    return acc
+
+  byGender: audienceData.reduce<Record<string, number>>((acc, person) => {
+    acc[person.gender] = (acc[person.gender] || 0) + 1;
+    return acc;
   }, {}),
-  byCountry: audienceData.reduce((acc, person) => {
-    acc[person.country] = (acc[person.country] || 0) + 1
-    return acc
+
+  byCountry: audienceData.reduce<Record<string, number>>((acc, person) => {
+    acc[person.country] = (acc[person.country] || 0) + 1;
+    return acc;
   }, {}),
-  byIndustry: audienceData.reduce((acc, person) => {
-    acc[person.industry] = (acc[person.industry] || 0) + 1
-    return acc
+
+  byIndustry: audienceData.reduce<Record<string, number>>((acc, person) => {
+    acc[person.industry] = (acc[person.industry] || 0) + 1;
+    return acc;
   }, {}),
-}
+};

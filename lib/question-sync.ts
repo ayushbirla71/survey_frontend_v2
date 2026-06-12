@@ -158,7 +158,7 @@ export async function syncSurveyQuestions(
   const idMap = new Map(
     createdPairs
       .filter((p) => p.server?.id)
-      .map((p) => [p.localId, p.server.id] as const)
+      .map((p) => [p.localId, p.server!.id] as const)
   );
 
   const merged = (current || []).map((q) => {

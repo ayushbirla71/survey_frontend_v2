@@ -35,7 +35,7 @@ import { useEffect, useState } from "react";
 import { exportResponsesToExcel } from "@/lib/exportExcel";
 import { toast } from "react-toastify";
 import { ImageIcon, Video as VideoIcon, Mic } from "lucide-react";
-import { OptionMediaDisplay } from "@/app/survey/[id]/page";
+import OptionMediaDisplay from "@/app/survey/[id]/components/OptionMediaDisplay";
 
 // Media types for questions and options
 interface QuestionMedia {

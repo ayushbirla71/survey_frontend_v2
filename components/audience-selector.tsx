@@ -75,7 +75,17 @@ export default function AudienceSelector({
     )
   );
 
-  const stats = audienceStats || demoData.audienceStats;
+interface AudienceStats {
+  total: number;
+  active: number;
+  byAgeGroup: Record<string, number>;
+  byGender: Record<string, number>;
+  byCountry: Record<string, number>;
+  byState: Record<string, number>;
+  byIndustry: Record<string, number>;
+}
+
+const stats = (audienceStats || demoData.audienceStats) as AudienceStats;
 
   // Calculate estimated reach based on selected criteria
   const calculateEstimatedReach = () => {
@@ -85,7 +95,10 @@ export default function AudienceSelector({
     // Calculate based on age groups
     if (audience.ageGroups.length > 0) {
       const ageReach = audience.ageGroups.reduce((sum, ageGroup) => {
-        return sum + (stats.byAgeGroup[ageGroup] || 0);
+        return (
+  sum +
+  ((stats.byAgeGroup as Record<string, number>)[ageGroup] || 0)
+);
       }, 0);
       estimatedReach = Math.max(estimatedReach, ageReach);
     }
@@ -93,7 +106,10 @@ export default function AudienceSelector({
     // Calculate based on industries
     if (audience.industries.length > 0) {
       const industryReach = audience.industries.reduce((sum, industry) => {
-        return sum + (stats.byIndustry[industry] || 0);
+        return (
+    sum +
+    ((stats.byIndustry as Record<string, number>)[industry] || 0)
+  );
       }, 0);
       estimatedReach = Math.max(estimatedReach, industryReach);
     }
@@ -101,7 +117,10 @@ export default function AudienceSelector({
     // Calculate based on locations (countries)
     if (audience.locations.length > 0) {
       const locationReach = audience.locations.reduce((sum, location) => {
-        return sum + (stats.byCountry[location] || 0);
+       return (
+    sum +
+    ((stats.byCountry as Record<string, number>)[location] || 0)
+  );
       }, 0);
       estimatedReach = Math.max(estimatedReach, locationReach);
     }
@@ -346,8 +365,8 @@ export default function AudienceSelector({
                               <RefreshCw className="h-3 w-3 animate-spin" />
                             ) : (
                               `${(
-                                stats?.byAgeGroup[ageGroup] || 0
-                              ).toLocaleString()} people`
+  (stats?.byAgeGroup as Record<string, number>)?.[ageGroup] || 0
+).toLocaleString()} people`
                             )}
                           </div>
                         </div>

@@ -44,6 +44,7 @@ import {
 } from "@/lib/api";
 import RankingQuestion from "@/components/ranking-question";
 import { cn } from "@/lib/utils";
+import OptionMediaDisplay from "./components/OptionMediaDisplay";
 
 // Animated Start Button Component
 interface AnimatedStartButtonProps {
@@ -322,57 +323,7 @@ function QuestionMediaDisplay({ media }: { media: QuestionMedia | null }) {
   );
 }
 
-// Component to render option media preview (smaller version)
-export function OptionMediaDisplay({
-  media,
-  fullWidth = false,
-}: {
-  media: OptionMedia | null | undefined;
-  fullWidth?: boolean;
-}) {
-  if (!media || !media.url) return null;
 
-  const mediaType = (media.type || "").toUpperCase();
-
-  return (
-    <div
-      className={cn(
-        "mt-1 rounded-md overflow-hidden border border-slate-200 bg-slate-50",
-        fullWidth ? "w-full" : "max-w-[200px]",
-      )}
-    >
-      {mediaType === "IMAGE" && (
-        <img
-          src={media.url}
-          alt={media.meta?.originalname || "Option image"}
-          className={cn(
-            "object-contain mx-auto",
-            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]",
-          )}
-        />
-      )}
-      {mediaType === "VIDEO" && (
-        <video
-          src={media.url}
-          controls
-          className={cn(
-            "mx-auto",
-            fullWidth ? "w-full max-h-[300px]" : "max-h-[100px]",
-          )}
-        />
-      )}
-      {mediaType === "AUDIO" && (
-        <div className="p-2">
-          <audio
-            src={media.url}
-            controls
-            className="w-full h-8 min-w-[200px]"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 type GKind =
   | "short answer"
@@ -1108,10 +1059,12 @@ export default function PublicSurveyPage() {
     // Arrays (checkboxes, some multi-selects)
     if (Array.isArray(value)) {
       if (question.category?.type_name.toLowerCase() === "ranking") {
-        if (value.length < question?.min_rank_required) {
-          toast.error(
-            `Please rank at least ${question.min_rank_required} options`,
-          );
+        const minRankRequired = typeof question?.min_rank_required === "number"
+          ? question!.min_rank_required
+          : 0;
+
+        if (minRankRequired > 0 && value.length < minRankRequired) {
+          toast.error(`Please rank at least ${minRankRequired} options`);
           return false;
         }
         return value.length > 0;

@@ -1,5 +1,6 @@
 import {
   BarChart as RechartsBarChart,
+  Bar,
   LineChart as RechartsLineChart,
   PieChart as RechartsPieChart,
   XAxis,
@@ -30,7 +31,7 @@ export function BarChart({ data, index, categories, colors, valueFormatter, clas
       <Tooltip formatter={valueFormatter ? (value) => [valueFormatter(value)] : undefined} />
       <Legend />
       {categories.map((category, i) => (
-        <RechartsBarChart dataKey={category} fill={colors[i % colors.length]} key={category} />
+        <Bar dataKey={category} fill={colors[i % colors.length]} key={category} />
       ))}
     </RechartsBarChart>
   )

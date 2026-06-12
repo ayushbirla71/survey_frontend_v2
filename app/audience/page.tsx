@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,17 @@ export default function AudiencePage() {
     error: audienceError,
     updateParams,
     refetch: refetchAudience,
-  } = usePaginatedApi((params) => audienceApi.getAudience(params), {
+} = usePaginatedApi(
+  async (params) => {
+    const response = await audienceApi.getAudience(params);
+
+    if (!response.data) {
+      throw new Error("No audience data returned");
+    }
+
+    return response.data;
+  },
+  {
     page: 1,
     limit: 50,
     search: searchQuery || undefined,
@@ -62,7 +72,8 @@ export default function AudiencePage() {
     gender: genderFilter === "all" ? undefined : genderFilter,
     country: countryFilter === "all" ? undefined : countryFilter,
     industry: industryFilter === "all" ? undefined : industryFilter,
-  });
+  }
+);
 
   const {
     data: stats,
@@ -136,7 +147,7 @@ export default function AudiencePage() {
   ];
 
   // Update API params when filters change
-  useState(() => {
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
       updateParams({
         page: 1,
@@ -210,12 +221,12 @@ export default function AudiencePage() {
     try {
       const blob = await audienceApi.exportAudience({
         format: "csv",
-        filters: {
-          ageGroup: ageFilter === "all" ? undefined : ageFilter,
-          gender: genderFilter === "all" ? undefined : genderFilter,
-          country: countryFilter === "all" ? undefined : countryFilter,
-          industry: industryFilter === "all" ? undefined : industryFilter,
-        },
+        // filters: {
+        //   ageGroup: ageFilter === "all" ? undefined : ageFilter,
+        //   gender: genderFilter === "all" ? undefined : genderFilter,
+        //   country: countryFilter === "all" ? undefined : countryFilter,
+        //   industry: industryFilter === "all" ? undefined : industryFilter,
+        // },
       });
 
       const url = URL.createObjectURL(blob);
