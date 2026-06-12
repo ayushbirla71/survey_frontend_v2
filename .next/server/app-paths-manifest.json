@@ -1,5 +1,20 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/categories/route": "app/api/categories/route.js",
   "/auth/login/page": "app/auth/login/page.js",
-  "/page": "app/page.js"
+  "/auth/admin-signup/page": "app/auth/admin-signup/page.js",
+  "/audience/page": "app/audience/page.js",
+  "/sent-surveys/page": "app/sent-surveys/page.js",
+  "/generate-survey/page": "app/generate-survey/page.js",
+  "/thank-you/page": "app/thank-you/page.js",
+  "/page": "app/page.js",
+  "/survey/terminated/page": "app/survey/terminated/page.js",
+  "/survey/[id]/page": "app/survey/[id]/page.js",
+  "/survey-results/[id]/page": "app/survey-results/[id]/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/facebook-live/page": "app/admin/facebook-live/page.js",
+  "/admin/vendors/page": "app/admin/vendors/page.js",
+  "/admin/youtube-live/page": "app/admin/youtube-live/page.js",
+  "/admin/screening-questions/page": "app/admin/screening-questions/page.js",
+  "/admin/manage-users/page": "app/admin/manage-users/page.js"
 }

@@ -1,1 +1,29 @@
-{}
+{
+  "app/survey-results/[id]/page.tsx -> @/lib/exportPDF": {
+    "id": 81485,
+    "files": [
+      "static/chunks/2f0b94e8.452a2d27023d71da.js",
+      "static/chunks/164f4fb6.11ccea70949da69c.js",
+      "static/chunks/ad2866b8.df424f64adfa702a.js",
+      "static/chunks/8758.6d2e237b08163e73.js",
+      "static/chunks/1485.9051e9b7e4df3c7e.js"
+    ]
+  },
+  "node_modules/jspdf/dist/jspdf.es.min.js -> canvg": {
+    "id": 12396,
+    "files": [
+      "static/chunks/bc98253f.5b0f4fe717c5b99c.js",
+      "static/chunks/3969.2edd225a48b13e20.js"
+    ]
+  },
+  "node_modules/jspdf/dist/jspdf.es.min.js -> dompurify": {
+    "id": 18848,
+    "files": [
+      "static/chunks/8848.604d673e614d3feb.js"
+    ]
+  },
+  "node_modules/jspdf/dist/jspdf.es.min.js -> html2canvas": {
+    "id": 6807,
+    "files": []
+  }
+}
