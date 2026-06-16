@@ -948,18 +948,18 @@ export default function PublicSurveyPage() {
     setCheckingQualification(true);
     try {
       // Bypassing the CheckQuota API call for test URL
-      if (isTestUrl) {
-        console.log(
-          ">>>> Skipping Checking the quota Qualification for the TEST Survey.",
-        );
-        setRespondentId(null);
-        SetIsSurveyInProgress(true);
-        setIsQualified(true);
-        setScreeningPhase(false);
-        // toast.success("You qualify for this survey!");
+      // if (isTestUrl) {
+      //   console.log(
+      //     ">>>> Skipping Checking the quota Qualification for the TEST Survey.",
+      //   );
+      //   setRespondentId(null);
+      //   SetIsSurveyInProgress(true);
+      //   setIsQualified(true);
+      //   setScreeningPhase(false);
+      //   // toast.success("You qualify for this survey!");
 
-        return true;
-      }
+      //   return true;
+      // }
 
       // Otherwise have to check the Qualification
 
